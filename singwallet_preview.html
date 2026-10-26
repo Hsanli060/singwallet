@@ -1655,6 +1655,233 @@
   </div>
 
   <script>
+    // ================= PERSISTENT ELEGANT / FAITHFUL SVG ICON SYSTEM =================
+    window.FAITHFUL_CAT_SVGS = {
+    '餐饮美食': `
+      <svg class="w-full h-full" viewBox="0 0 48 48" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Wine Glass Left -->
+        <path d="M10 14h10v6a5 5 0 0 1-10 0v-6z" stroke="#c7d2fe"/>
+        <line x1="10" y1="18" x2="20" y2="18" stroke="#fde68a"/>
+        <line x1="15" y1="25" x2="15" y2="34" stroke="#c7d2fe"/>
+        <line x1="11" y1="34" x2="19" y2="34" stroke="#c7d2fe"/>
+        <!-- Cloche Dome Right -->
+        <path d="M23 34h17" stroke="#c7d2fe"/>
+        <path d="M24 34a7.5 7.5 0 0 1 15 0" stroke="#fde68a" stroke-width="2"/>
+        <circle cx="31.5" cy="24.5" r="1.5" stroke="#fde68a" fill="#fde68a"/>
+      </svg>
+    `,
+    '交通出行': `
+      <svg class="w-full h-full" viewBox="0 0 48 48" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Exact Streamlined Bullet Train Side Profile from Reference -->
+        <path d="M8 20h19c4.5 0 9 2 12.5 5.5-1 2-3 2.5-5.5 2.5H8v-8z" stroke="#c7d2fe"/>
+        <!-- Cab Slanted Windshield (Gold) -->
+        <path d="M29 21.5h3.5c2 1 4 2.5 5 4h-7l-1.5-4z" stroke="#fde68a" fill="#fde68a" fill-opacity="0.25"/>
+        <!-- Passenger Door -->
+        <rect x="22" y="21.5" width="3.8" height="6.5" stroke="#c7d2fe"/>
+        <!-- Gold Speed Lines -->
+        <line x1="8" y1="21.5" x2="19" y2="21.5" stroke="#fde68a" stroke-width="2"/>
+        <line x1="8" y1="24.5" x2="19" y2="24.5" stroke="#fde68a" stroke-width="1.6"/>
+        <!-- Track Rail Below -->
+        <line x1="6" y1="31" x2="42" y2="31" stroke="#c7d2fe" stroke-width="2"/>
+      </svg>
+    `,
+    '日常购物': `
+      <svg class="w-full h-full" viewBox="0 0 48 48" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Trapezoidal Bag Body -->
+        <path d="M12 19h24l-2 16a3 3 0 0 1-3 3H17a3 3 0 0 1-3-3L12 19z" stroke="#c7d2fe"/>
+        <!-- Inner Loop Handle (Warm Gold) -->
+        <path d="M19 19v-4.5a5 5 0 0 1 10 0V19" stroke="#fde68a" stroke-width="2"/>
+        <!-- Outer Loop Handle Behind -->
+        <path d="M17 19v-5.5a7 7 0 0 1 14 0V19" stroke="#c7d2fe" stroke-opacity="0.6"/>
+        <!-- Handle attachment rivets -->
+        <circle cx="19" cy="20" r="1" fill="#fde68a"/>
+        <circle cx="29" cy="20" r="1" fill="#fde68a"/>
+      </svg>
+    `,
+    '休闲娱乐': `
+      <svg class="w-full h-full" viewBox="0 0 48 48" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Gamepad Body -->
+        <path d="M13 24c-3 3-3.5 8.5-1 11 2 2 4.5 1.5 6-1.5l2-4.5h8l2 4.5c1.5 3 4 3.5 6 1.5 2.5-2.5 2-8-1-11l-3.5-3.5a5 5 0 0 0-4-1.5h-7a5 5 0 0 0-4 1.5L13 24z" stroke="#c7d2fe"/>
+        <!-- D-Pad Cross on Left (Gold) -->
+        <path d="M17 25v5m-2.5-2.5h5" stroke="#fde68a" stroke-width="2"/>
+        <!-- 4 Action Buttons on Right -->
+        <circle cx="31" cy="25" r="0.9" fill="#fde68a"/>
+        <circle cx="33" cy="27" r="0.9" fill="#fde68a"/>
+        <circle cx="29" cy="27" r="0.9" fill="#c7d2fe"/>
+        <circle cx="31" cy="29" r="0.9" fill="#c7d2fe"/>
+        <!-- Curving Cord & Beamed Musical Notes -->
+        <path d="M24 19c-1-4 2-5 3-7" stroke="#c7d2fe"/>
+        <path d="M34 11v6m4-8v6m-4-6h4" stroke="#fde68a" stroke-width="1.8"/>
+        <ellipse cx="32.5" cy="17" rx="1.5" ry="1.2" fill="#fde68a"/>
+        <ellipse cx="36.5" cy="15" rx="1.5" ry="1.2" fill="#fde68a"/>
+      </svg>
+    `,
+    '生活缴费': `
+      <svg class="w-full h-full" viewBox="0 0 48 48" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Left Wire -->
+        <line x1="7" y1="24" x2="16" y2="24" stroke="#c7d2fe"/>
+        <!-- Lightning Bolt (Gold) -->
+        <path d="M23 12L16 25h6l-3 12 11-15h-6l4-10z" stroke="#fde68a" stroke-width="2" fill="#fde68a" fill-opacity="0.15"/>
+        <!-- Right Wire & Power Plug (Silver/Indigo) -->
+        <line x1="26" y1="24" x2="33" y2="24" stroke="#c7d2fe"/>
+        <path d="M33 20v8a2 2 0 0 0 2 2h2v-12h-2a2 2 0 0 0-2 2z" stroke="#c7d2fe"/>
+        <line x1="37" y1="21.5" x2="41" y2="21.5" stroke="#fde68a" stroke-width="1.8"/>
+        <line x1="37" y1="26.5" x2="41" y2="26.5" stroke="#fde68a" stroke-width="1.8"/>
+      </svg>
+    `,
+    '医疗健康': `
+      <svg class="w-full h-full" viewBox="0 0 48 48" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Rounded Medical Cross (Left & Center) -->
+        <path d="M19 12h6v6h6v6h-6v6h-6v-6h-6v-6h6v-6z" stroke="#c7d2fe" stroke-linejoin="round"/>
+        <!-- Elegant Botanical Leaf overlaying on the right (Gold) -->
+        <path d="M25 31c6-2 11-7 12-14-6 1-12 6-12 14z" stroke="#fde68a" stroke-width="2" fill="#fde68a" fill-opacity="0.15"/>
+        <path d="M25 31c4-5 8-9 12-14" stroke="#fde68a" stroke-width="1.5"/>
+      </svg>
+    `,
+    '其他支出': `
+      <svg class="w-full h-full" viewBox="0 0 48 48" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Isometric 3D Box Outer Hexagon Contour -->
+        <path d="M24 10l13 7.5v15L24 40l-13-7.5v-15L24 10z" stroke="#c7d2fe"/>
+        <!-- Three Inner Crease Edges meeting at center -->
+        <line x1="24" y1="25" x2="37" y2="17.5" stroke="#c7d2fe"/>
+        <line x1="24" y1="25" x2="11" y2="17.5" stroke="#c7d2fe"/>
+        <line x1="24" y1="25" x2="24" y2="40" stroke="#c7d2fe"/>
+        <!-- Sealing Tape on Top Face (Gold) -->
+        <line x1="17.5" y1="13.7" x2="30.5" y2="21.3" stroke="#fde68a" stroke-width="2"/>
+        <line x1="24" y1="25" x2="24" y2="33" stroke="#fde68a" stroke-width="1.8"/>
+      </svg>
+    `,
+    '工资收入': `
+      <svg class="w-full h-full" viewBox="0 0 48 48" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Left Lower Coin Stack (Silver/Indigo) -->
+        <ellipse cx="16" cy="30" rx="6" ry="2.2" stroke="#c7d2fe"/>
+        <path d="M10 30v4c0 1.2 2.7 2.2 6 2.2s6-1 6-2.2v-4" stroke="#c7d2fe"/>
+        <path d="M10 34v4c0 1.2 2.7 2.2 6 2.2s6-1 6-2.2v-4" stroke="#c7d2fe"/>
+        <!-- Right Higher Coin Stack (Gold) -->
+        <ellipse cx="30" cy="24" rx="6.5" ry="2.2" stroke="#fde68a" stroke-width="2"/>
+        <path d="M23.5 24v3.5c0 1.2 2.9 2.2 6.5 2.2s6.5-1 6.5-2.2v-3.5" stroke="#fde68a"/>
+        <path d="M23.5 27.5v3.5c0 1.2 2.9 2.2 6.5 2.2s6.5-1 6.5-2.2v-3.5" stroke="#fde68a"/>
+        <path d="M23.5 31v3.5c0 1.2 2.9 2.2 6.5 2.2s6.5-1 6.5-2.2v-3.5" stroke="#fde68a"/>
+        <path d="M23.5 34.5v3.5c0 1.2 2.9 2.2 6.5 2.2s6.5-1 6.5-2.2v-3.5" stroke="#fde68a"/>
+        <!-- Upward Trend Growth Arrow -->
+        <path d="M12 22c6-5 14-6 23-4" stroke="#fde68a" stroke-width="2"/>
+        <path d="M31 16l5 2-2 5" stroke="#fde68a" stroke-width="2" stroke-linejoin="round"/>
+      </svg>
+    `
+  };
+
+    window.FAITHFUL_CAT_SVGS['收入'] = window.FAITHFUL_CAT_SVGS['工资收入'];
+    window.FAITHFUL_CAT_SVGS['收入/退款'] = window.FAITHFUL_CAT_SVGS['工资收入'];
+    window.ELEGANT_CAT_SVGS = window.FAITHFUL_CAT_SVGS;
+
+    window.SYSTEM_SVGS = {
+    // 1. Ledger Transactions (Receipt with jagged cut bottom and text lines)
+    'ledger': `
+      <svg class="w-full h-full" viewBox="0 0 48 48" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 10h15l6 6v18l-3-2.5-3 2.5-3-2.5-3 2.5-3-2.5-3 2.5-3-2.5V10z" stroke="#c7d2fe"/>
+        <path d="M29 10v6h6" stroke="#c7d2fe"/>
+        <line x1="18" y1="18" x2="26" y2="18" stroke="#fde68a" stroke-width="2.2"/>
+        <line x1="18" y1="23" x2="23" y2="23" stroke="#c7d2fe"/>
+        <line x1="26" y1="23" x2="30" y2="23" stroke="#fde68a"/>
+        <line x1="18" y1="27" x2="25" y2="27" stroke="#c7d2fe"/>
+        <line x1="28" y1="27" x2="31" y2="27" stroke="#fde68a"/>
+      </svg>
+    `,
+    // 2. Drafts Inbox (Document tray with papers inside)
+    'drafts_inbox': `
+      <svg class="w-full h-full" viewBox="0 0 48 48" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Paper sheets inside -->
+        <path d="M16 16h16" stroke="#fde68a" stroke-width="2"/>
+        <path d="M18 20h12" stroke="#fde68a" stroke-width="1.8"/>
+        <!-- Inbox Tray Body -->
+        <path d="M11 22h26l-2 12a2 2 0 0 1-2 2H15a2 2 0 0 1-2-2L11 22z" stroke="#c7d2fe"/>
+        <!-- Front Grab Notch -->
+        <path d="M11 24h8l2.5 5h5l2.5-5h8" stroke="#c7d2fe" stroke-width="2"/>
+      </svg>
+    `,
+    // 3. Rules & Control Center (Equalizer sliders + toggle switch)
+    'rules_control': `
+      <svg class="w-full h-full" viewBox="0 0 48 48" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Slider 1 -->
+        <line x1="14" y1="14" x2="14" y2="34" stroke="#c7d2fe"/>
+        <circle cx="14" cy="27" r="2.5" stroke="#fde68a" stroke-width="2" fill="#0f172a"/>
+        <!-- Slider 2 -->
+        <line x1="21" y1="14" x2="21" y2="34" stroke="#c7d2fe"/>
+        <circle cx="21" cy="20" r="2.5" stroke="#fde68a" stroke-width="2" fill="#0f172a"/>
+        <!-- Slider 3 -->
+        <line x1="28" y1="22" x2="28" y2="34" stroke="#c7d2fe"/>
+        <circle cx="28" cy="29" r="2.5" stroke="#fde68a" stroke-width="2" fill="#0f172a"/>
+        <!-- Toggle Switch Capsule Top Right -->
+        <rect x="25" y="13" width="13" height="7" rx="3.5" stroke="#c7d2fe"/>
+        <circle cx="34" cy="16.5" r="2" stroke="#fde68a" fill="#fde68a"/>
+      </svg>
+    `,
+    // 4. Advanced Filter (Funnel with gold top rim)
+    'filter': `
+      <svg class="w-full h-full" viewBox="0 0 48 48" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="11" y1="14" x2="37" y2="14" stroke="#fde68a" stroke-width="2.5"/>
+        <path d="M12 15l10 12v9h4v-9l10-12" stroke="#c7d2fe" stroke-width="2"/>
+        <line x1="17" y1="20" x2="31" y2="20" stroke="#fde68a" stroke-width="1.8"/>
+      </svg>
+    `,
+    // 5. Recycling Bin (Fluted wastebasket with lid handle)
+    'trash': `
+      <svg class="w-full h-full" viewBox="0 0 48 48" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 13h8v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v2z" stroke="#c7d2fe"/>
+        <line x1="11" y1="15" x2="37" y2="15" stroke="#c7d2fe" stroke-width="2.2"/>
+        <path d="M14 17l2.5 17a3 3 0 0 0 3 2.5h9a3 3 0 0 0 3-2.5L34 17" stroke="#c7d2fe"/>
+        <line x1="20" y1="20" x2="21" y2="31" stroke="#fde68a" stroke-width="1.8"/>
+        <line x1="24" y1="20" x2="24" y2="31" stroke="#fde68a" stroke-width="1.8"/>
+        <line x1="28" y1="20" x2="27" y2="31" stroke="#fde68a" stroke-width="1.8"/>
+      </svg>
+    `,
+    // 6. Quick Record (Glowing circle with warm gold plus)
+    'quick_add': `
+      <svg class="w-full h-full" viewBox="0 0 48 48" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="24" cy="24" r="16" stroke="#c7d2fe" stroke-width="2"/>
+        <line x1="24" y1="16" x2="24" y2="32" stroke="#fde68a" stroke-width="2.5"/>
+        <line x1="16" y1="24" x2="32" y2="24" stroke="#fde68a" stroke-width="2.5"/>
+      </svg>
+    `,
+    // 7. Receipt Camera (Camera body with aperture blades)
+    'camera': `
+      <svg class="w-full h-full" viewBox="0 0 48 48" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 14l2-3h6l2 3" stroke="#c7d2fe"/>
+        <rect x="10" y="14" width="28" height="21" rx="4" stroke="#c7d2fe" stroke-width="2"/>
+        <circle cx="33" cy="18" r="1.3" fill="#fde68a"/>
+        <circle cx="24" cy="25" r="7.5" stroke="#c7d2fe"/>
+        <!-- Aperture Blades -->
+        <path d="M24 18l3.5 4-1 5-4.5 1-2.5-4 1.5-4.5" stroke="#fde68a" stroke-width="1.6"/>
+      </svg>
+    `,
+    // 8. Privacy & Offline Security (Shield with padlock)
+    'offline_security': `
+      <svg class="w-full h-full" viewBox="0 0 48 48" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M24 10c7 0 12 2 12 9 0 8-6 15-12 19-6-4-12-11-12-19 0-7 5-9 12-9z" stroke="#c7d2fe" stroke-width="2"/>
+        <path d="M21 23v-3a3 3 0 0 1 6 0v3" stroke="#fde68a" stroke-width="1.8"/>
+        <rect x="19" y="23" width="10" height="7.5" rx="1.5" stroke="#fde68a" stroke-width="1.8"/>
+        <circle cx="24" cy="26.5" r="1" fill="#fde68a"/>
+      </svg>
+    `
+  };
+
+    window.renderSquircleIcon = function(catName, size = 'w-10 h-10', iconPadding = 'p-1.5') {
+      const parent = typeof resolveParentCategory === 'function' ? resolveParentCategory(catName) : catName;
+      const svgContent = (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[parent]) || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || '📦';
+      return `
+        <div class="${size} rounded-2xl bg-gradient-to-br from-indigo-500/20 via-slate-800/90 to-purple-500/10 border border-indigo-400/30 flex items-center justify-center shadow-lg shadow-indigo-500/15 backdrop-blur-md shrink-0 ${iconPadding}">
+          ${svgContent}
+        </div>
+      `;
+    };
+
+    window.getSmallCatSvg = function(catName) {
+      const parent = typeof resolveParentCategory === 'function' ? resolveParentCategory(catName) : catName;
+      const svg = (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[parent]) || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || '📦';
+      return `<span class="w-full h-full flex items-center justify-center">${svg}</span>`;
+    };
+    // ==============================================================================
+
     // Global DOM element alias shim for view-rules <-> view-rules-accounts
     const origGetElementById = document.getElementById.bind(document);
     document.getElementById = function(id) {
@@ -2112,7 +2339,7 @@
       const labelDraftCat = document.getElementById('label-select-draft-category');
       const inputDraftCat = document.getElementById('select-draft-category');
 
-      if (sugIcon) sugIcon.innerText = catIcon;
+      if (sugIcon) { sugIcon.className = 'w-4 h-4 inline-block shrink-0'; sugIcon.innerHTML = catIcon; }
       if (sugName) sugName.innerText = `推荐分类：${catName}`;
       if (labelDraftCat) labelDraftCat.innerText = catName;
       if (inputDraftCat) inputDraftCat.value = catName;
@@ -2335,20 +2562,27 @@
     }
 
     
-    const CATEGORY_ICON_MAP = {
-      '餐饮美食': '🍔',
-      '交通出行': '🚗',
-      '日常购物': '🛒',
-      '休闲娱乐': '🎮',
-      '生活缴费': '⚡',
-      '医疗健康': '💊',
-      '其他支出': '📦',
-      '工资收入': '💰'
-    };
+    const CATEGORY_ICON_MAP = window.FAITHFUL_CAT_SVGS;
 
-    function onDraftCategorySelect(icon, name, event) {
+        function onDraftCategorySelect(dummyIcon, name, event) {
       if (event) event.stopPropagation();
-      selectCategory(icon, name, '下拉选择');
+      selectCategory('', name, '下拉选择');
+      const sug = document.getElementById('suggested-icon');
+      if (sug) {
+        sug.className = "w-4 h-4 inline-block shrink-0";
+        sug.innerHTML = (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[name]) || '📦';
+      }
+      const label = document.getElementById('label-select-draft-category');
+      if (label) label.innerText = name;
+      const inp = document.getElementById('select-draft-category');
+      if (inp) inp.value = name;
+
+      const opts = document.querySelectorAll('#menu-select-draft-category .custom-dropdown-option');
+      opts.forEach(opt => {
+        if (opt.getAttribute('data-value') === name) opt.classList.add('selected');
+        else opt.classList.remove('selected');
+      });
+
       if (typeof selectCustomDropdownOption === 'function') {
         selectCustomDropdownOption('select-draft-category', name, event);
       }
@@ -2481,16 +2715,7 @@
       '收入': '工资收入'
     };
 
-    const parentCategoryIcons = {
-      '餐饮美食': '🍔',
-      '日常购物': '🛒',
-      '交通出行': '🚗',
-      '休闲娱乐': '🎮',
-      '生活缴费': '⚡',
-      '医疗健康': '💊',
-      '其他支出': '📦',
-      '工资收入': '💰'
-    };
+    const parentCategoryIcons = window.FAITHFUL_CAT_SVGS;
 
     const CORE_PARENT_CATEGORIES = ['餐饮美食', '交通出行', '日常购物', '休闲娱乐', '生活缴费', '医疗健康', '其他支出', '工资收入'];
 
@@ -3413,27 +3638,29 @@
       newTx.id = txData.id;
       newTx.onclick = () => viewTransactionDetail(txData.merchant, txData.amount.toFixed(2), `${txData.parentCat}（${txData.catName}）`, txData.account || txData.channel, txTime, txData.orderId);
       const timeShort = timeOnly && timeOnly.includes(':') ? timeOnly.split(':').slice(0, 2).join(':') : timeOnly;
-      const cleanAcc = (txData.account || txData.channel || '钱包').replace('支付 · ', '');
+      const cleanAcc = (txData.account || txData.channel || '微信钱包').replace('支付 · ', '');
+      const parentCat = resolveParentCategory(txData.catName);
+      const iconSquircle = window.renderSquircleIcon ? window.renderSquircleIcon(parentCat, 'w-10 h-10', 'p-1.5') : `<div class="w-10 h-10 rounded-2xl bg-slate-700/50 flex items-center justify-center p-1.5">${(window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[parentCat]) || '📦'}</div>`;
+
       newTx.innerHTML = `
         <div class="flex items-center space-x-3 min-w-0 flex-1 mr-2.5">
-          <div class="w-10 h-10 rounded-2xl bg-slate-700/50 flex items-center justify-center text-lg shrink-0 border border-slate-600/40 shadow-sm">${txData.catIcon}</div>
+          ${iconSquircle}
           <div class="min-w-0 flex-1">
             <div class="flex items-center">
               <span class="font-semibold text-sm text-slate-100 truncate">${txData.merchant}</span>
             </div>
-            <div class="text-xs text-slate-400 mt-1 flex items-center space-x-1.5 truncate">
+            <div class="text-xs text-slate-400 mt-1 flex items-center space-x-1.5">
               <span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 shrink-0">${txData.catName}</span>
               <span class="text-slate-400 font-mono text-[11px] shrink-0">${timeShort}</span>
               <span class="text-slate-600 shrink-0">•</span>
-              <span class="text-slate-400 truncate text-[11px]">${cleanAcc}</span>
-              ${txData.badge ? `<span class="text-slate-600 shrink-0">•</span><span class="text-emerald-400 text-[10px] shrink-0">${txData.badge}</span>` : ''}
+              <span class="text-slate-400 text-[11px] whitespace-nowrap">${cleanAcc}</span>
             </div>
           </div>
         </div>
         <div class="text-right shrink-0">
           <div class="font-bold text-base text-white font-mono tracking-tight whitespace-nowrap">-¥ ${txData.amount.toFixed(2)}</div>
-          <div class="flex items-center justify-end mt-0.5">
-            <button onclick="event.stopPropagation(); deleteTransaction('${newTx.id}', '${txData.merchant}', ${txData.amount})" class="text-[11px] text-slate-500 hover:text-rose-400 transition-colors tap-highlight px-1 py-0.5 rounded hover:bg-rose-500/10">删除</button>
+          <div class="flex items-center justify-end mt-0.5 min-h-[18px]">
+            ${txData.badge ? `<span class="text-emerald-400 text-[11px] font-medium leading-none">${txData.badge}</span>` : `<span class="text-emerald-400/80 text-[10px] font-medium">已入账</span>`}
           </div>
         </div>
       `;
@@ -5682,7 +5909,175 @@
         setTimeout(() => t.remove(), 250);
       }, 2000);
     }
-  </script>
+  
+    // ================= DOM SVG UPGRADE INITIALIZER =================
+    function initSvgUI() {
+      // 1. Bottom Nav Icons
+      const navBtns = document.querySelectorAll('button[onclick*="switchTab"]');
+      navBtns.forEach(btn => {
+        const text = btn.innerText.trim();
+        if (text.includes('流水明细')) {
+          btn.innerHTML = `
+            <div class="w-5 h-5 mx-auto mb-0.5">${window.SYSTEM_SVGS['ledger']}</div>
+            <span class="text-[11px]">流水明细</span>
+          `;
+        } else if (text.includes('草稿箱')) {
+          const dot = btn.querySelector('#draft-nav-dot');
+          const hasDot = dot && dot.style.display !== 'none';
+          btn.innerHTML = `
+            <span id="draft-nav-dot" class="absolute top-2 right-8 w-2 h-2 rounded-full bg-red-500 animate-pulse" style="display: ${hasDot ? 'block' : 'none'};"></span>
+            <div class="w-5 h-5 mx-auto mb-0.5">${window.SYSTEM_SVGS['drafts_inbox']}</div>
+            <span class="text-[11px]">草稿箱</span>
+          `;
+        } else if (text.includes('规则账户')) {
+          btn.innerHTML = `
+            <div class="w-5 h-5 mx-auto mb-0.5">${window.SYSTEM_SVGS['rules_control']}</div>
+            <span class="text-[11px]">规则账户</span>
+          `;
+        }
+      });
+
+      // 2. Top App Bar Filter and Trash Buttons
+      const filterBtn = document.querySelector('button[onclick*="openFilterModal"]');
+      if (filterBtn && window.SYSTEM_SVGS) {
+        filterBtn.innerHTML = `<div class="w-4 h-4">${window.SYSTEM_SVGS['filter']}</div>`;
+      }
+      const trashBtn = document.querySelector('button[onclick*="openTrashDialog"]');
+      if (trashBtn && window.SYSTEM_SVGS) {
+        const hasBadge = document.getElementById('trash-badge') && !document.getElementById('trash-badge').classList.contains('hidden');
+        trashBtn.innerHTML = `
+          <div class="w-4 h-4">${window.SYSTEM_SVGS['trash']}</div>
+          <span id="trash-badge" class="${hasBadge ? '' : 'hidden'} absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400"></span>
+        `;
+      }
+
+      // 3. Status Bar Offline Security Badge
+      const secContainers = document.querySelectorAll('.h-11 div');
+      secContainers.forEach(container => {
+        if (container.children.length === 0 && container.textContent.includes('离线安全')) {
+          container.innerHTML = `
+            <span class="text-[11px] font-mono text-emerald-400">离线安全</span>
+            <div class="w-3.5 h-3.5 inline-block">${window.SYSTEM_SVGS['offline_security']}</div>
+          `;
+        }
+      });
+
+      // 4. Floating Quick Add Button
+      const quickRecordBtn = document.querySelector('button[onclick*="openManualAddModal"]');
+      if (quickRecordBtn && window.SYSTEM_SVGS) {
+        quickRecordBtn.innerHTML = `
+          <div class="w-5 h-5 mr-1.5">${window.SYSTEM_SVGS['quick_add']}</div>
+          <span>快记一手</span>
+        `;
+      }
+
+      // 5. Discard button in Drafts
+      const discardBtn = document.getElementById('btn-discard-draft');
+      if (discardBtn && window.SYSTEM_SVGS) {
+        discardBtn.innerHTML = `
+          <div class="w-3.5 h-3.5 mr-1.5">${window.SYSTEM_SVGS['trash']}</div>
+          <span>丢弃</span>
+        `;
+      }
+
+      // 6. Camera Box in Manual Add
+      const cameraBox = document.querySelector('#manual-add-modal .w-16.h-16, #manual-add-modal .w-12.h-12, #manual-add-modal .w-10.h-10');
+      if (cameraBox && window.SYSTEM_SVGS) {
+        cameraBox.innerHTML = window.SYSTEM_SVGS['camera'];
+      }
+
+      // 7. Draft Category Dropdown Options (#menu-select-draft-category)
+      const draftCatMenu = document.getElementById('menu-select-draft-category');
+      if (draftCatMenu && window.FAITHFUL_CAT_SVGS) {
+        const catList = ['餐饮美食', '交通出行', '日常购物', '休闲娱乐', '生活缴费', '医疗健康', '其他支出', '工资收入'];
+        let menuHtml = '';
+        const currentSelected = document.getElementById('select-draft-category')?.value || '餐饮美食';
+        catList.forEach(name => {
+          const isSelected = (currentSelected === name);
+          menuHtml += `
+            <div class="custom-dropdown-option rounded-xl ${isSelected ? 'selected' : ''}" tabindex="0" data-value="${name}" onclick="onDraftCategorySelect('', '${name}', event)">
+              <div class="flex items-center space-x-2.5">
+                <div class="w-4 h-4 shrink-0">${window.FAITHFUL_CAT_SVGS[name]}</div>
+                <span class="opt-text truncate font-medium text-xs">${name}</span>
+              </div>
+              <span class="opt-check">✓</span>
+            </div>
+          `;
+        });
+        draftCatMenu.innerHTML = menuHtml;
+      }
+
+      // 8. Category Modal Grid (#category-modal-grid)
+      const catModalGrid = document.getElementById('category-modal-grid');
+      if (catModalGrid && window.FAITHFUL_CAT_SVGS) {
+        const pickerCats = ['餐饮美食', '交通出行', '日常购物', '休闲娱乐', '生活缴费', '医疗健康', '其他支出', '工资收入'];
+        let gridHtml = '';
+        pickerCats.forEach(name => {
+          gridHtml += `
+            <div data-category-name="${name}" onclick="selectCategory('', '${name}', '快捷网格选择')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
+              <div class="w-9 h-9 rounded-xl bg-slate-900/80 border border-indigo-400/20 flex items-center justify-center p-1 mb-1.5 shadow-inner">
+                ${window.FAITHFUL_CAT_SVGS[name]}
+              </div>
+              <span class="font-medium text-slate-200 text-[11px] block whitespace-nowrap">${name}</span>
+            </div>
+          `;
+        });
+        catModalGrid.innerHTML = gridHtml;
+      }
+
+      // 9. Filter Modal Categories (#filter-modal-cats)
+      const filterModalCats = document.getElementById('filter-modal-cats');
+      if (filterModalCats && window.FAITHFUL_CAT_SVGS) {
+        const catNames = ['餐饮美食', '日常购物', '交通出行', '休闲娱乐', '生活缴费', '医疗健康', '其他支出'];
+        let catsHtml = `
+          <span onclick="toggleModalCat(this, 'all')" class="modal-cat-tag active-tag px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight">全部</span>
+        `;
+        catNames.forEach(c => {
+          catsHtml += `
+            <span onclick="toggleModalCat(this, '${c}')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1.5">
+              <span class="w-3.5 h-3.5 inline-block">${window.FAITHFUL_CAT_SVGS[c]}</span>
+              <span>${c}</span>
+            </span>
+          `;
+        });
+        filterModalCats.innerHTML = catsHtml;
+      }
+
+      // 10. Suggested Icon in Draft View
+      const curCat = document.getElementById('select-draft-category')?.value || '餐饮美食';
+      const sugIcon = document.getElementById('suggested-icon');
+      if (sugIcon && window.FAITHFUL_CAT_SVGS) {
+        sugIcon.className = "w-4 h-4 inline-block shrink-0";
+        sugIcon.innerHTML = window.FAITHFUL_CAT_SVGS[curCat] || window.FAITHFUL_CAT_SVGS['餐饮美食'];
+      }
+
+      // 11. Insert Demo Transaction (China Railway) if list is empty
+      const txList = document.getElementById('transactions-list');
+      if (txList && txList.querySelectorAll('.tx-item').length === 0) {
+        insertTransactionToList({
+          id: "item-tx-cr-demo",
+          merchant: "中国铁路网络有限公司",
+          amount: 333.50,
+          amountInCents: 33350,
+          catName: "交通出行",
+          parentCat: "交通出行",
+          category: "交通出行",
+          channel: "微信",
+          account: "微信钱包",
+          txTime: "2026-10-23 20:08:00",
+          orderTime: "2026-10-23 20:08:00",
+          txDate: "2026-10-23",
+          timeOnly: "20:08",
+          orderId: "CR420000314320261023200800",
+          badge: "手动录入"
+        });
+      }
+    }
+
+    // Auto-run initSvgUI on DOM ready and load
+    document.addEventListener('DOMContentLoaded', () => { setTimeout(initSvgUI, 30); });
+    window.addEventListener('load', () => { setTimeout(initSvgUI, 50); });
+</script>
 
 
 
