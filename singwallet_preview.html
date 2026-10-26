@@ -195,6 +195,30 @@
               <button type="button" onclick="closeLlmTopError()" class="text-slate-400 hover:text-white text-xs px-1 tap-highlight">✕</button>
             </div>
             <p id="llm-error-msg" class="text-[11px] text-slate-200 mt-1 font-mono break-words"></p>
+            <div id="llm-error-action-wrap" class="hidden mt-2 pt-1 border-t border-rose-500/30 flex items-center justify-between">
+              <span class="text-[10px] text-rose-200">可一键填入演示体验密钥体验</span>
+              <button type="button" onclick="fillVlmDemoKey(); closeLlmTopError(); showToast('✨ 已填入体验密钥，请重新上传测试');" class="px-2 py-0.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-bold shadow tap-highlight">一键体验演示</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 上方大模型运行中实时观测临时小窗口 (顶部悬浮跑马动画与计时) -->
+      <div id="llm-top-running-toast" class="hidden absolute top-3 left-3 right-3 z-50 p-3 rounded-2xl bg-indigo-950/95 border border-indigo-500/70 text-white shadow-2xl backdrop-blur-md animate-fadeIn">
+        <div class="flex items-start space-x-2.5">
+          <div class="relative mt-0.5 flex items-center justify-center shrink-0">
+            <span class="animate-ping absolute inline-flex h-4 w-4 rounded-full bg-indigo-400 opacity-75"></span>
+            <div class="w-5 h-5 rounded-full bg-indigo-600 flex items-center justify-center text-xs animate-spin" style="animation-duration: 2.5s;">🤖</div>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center justify-between">
+              <h4 class="text-xs font-bold text-indigo-200">大模型视觉识别解析中</h4>
+              <span id="llm-top-timer-badge" class="font-mono text-[11px] font-bold text-amber-300 bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.5 rounded-full animate-pulse">已等待 0.0 秒</span>
+            </div>
+            <p id="llm-top-running-desc" class="text-[11px] text-slate-300 mt-1">正在上传凭证并执行多模态账单结构化解析...</p>
+            <div class="w-full bg-slate-800 rounded-full h-1 mt-1.5 overflow-hidden">
+              <div id="llm-top-progress-bar" class="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 h-1 rounded-full transition-all duration-300" style="width: 25%;"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -656,17 +680,12 @@
           <div>
             <h1 class="text-xl font-bold text-white tracking-tight">规则与资产管理</h1>
           </div>
-          <button onclick="openAddRuleModal()" class="px-3 py-1.5 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow tap-highlight flex items-center space-x-1">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-            <span>新建规则</span>
-          </button>
         </div>
 
         <!-- Account Balances Cards -->
         <div class="space-y-2">
           <div class="flex items-center justify-between">
             <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">资产账户 (点击任意卡片修改余额)</h2>
-            <button onclick="openAddAccountModal()" class="text-xs text-indigo-400 font-medium hover:underline tap-highlight">+ 新增账户</button>
           </div>
           <div class="grid grid-cols-2 gap-2 text-xs" id="accounts-grid">
             <div onclick="editAccountBalance('微信钱包', '1420.50')" class="p-3 rounded-xl bg-slate-800/90 border border-slate-700 cursor-pointer hover:border-indigo-500 tap-highlight transition-all">
@@ -824,16 +843,6 @@
           </div>
         </div>
 
-        <!-- Refund Cascade Banner -->
-        <div class="rounded-2xl p-4 bg-slate-800/90 border border-slate-700 space-y-2">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-semibold text-white">退款账目关联与解绑机制</span>
-            <button onclick="openRefundDemoModal()" class="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-lg tap-highlight">关联新退款</button>
-          </div>
-          <p class="text-[11px] text-slate-400 leading-relaxed">
-            严格遵循 SQLite DDL 级联：彻底删除原消费时自动解除关联（ON DELETE CASCADE），退款账目本身完整保留，月度口径绝对精准。
-          </p>
-        </div>
       </div>
     </div>
 
@@ -1150,7 +1159,7 @@
         </div>
 
         <!-- 图1: 这里是添加图片 (顶部图片上传与展示卡片) -->
-        <div class="rounded-2xl border-2 border-dashed border-indigo-500/40 bg-slate-800/40 hover:bg-slate-800/70 hover:border-indigo-400 transition-all p-3 text-center cursor-pointer tap-highlight group" onclick="document.getElementById('manual-upload-input').click()">
+        <div class="rounded-2xl border-2 border-dashed border-indigo-500/40 bg-slate-800/40 hover:bg-slate-800/70 hover:border-indigo-400 transition-all p-3 text-center cursor-pointer tap-highlight group" onclick="if(window.isLlmProcessing) return; document.getElementById('manual-upload-input').click()">
           <input type="file" id="manual-upload-input" accept="image/*" class="hidden" onchange="handleManualScreenshotUpload(event)">
           
           <!-- 未选择图片占位提示 -->
@@ -1159,6 +1168,41 @@
               📷
             </div>
             <p class="text-[10px] text-slate-400">点击上传凭据截图，AI 自动提取关键要素</p>
+          </div>
+
+          <!-- 大模型视觉深度解析动态观测卡片 (实时计时器 + 动态步骤 + 脉冲呼吸动画) -->
+          <div id="manual-llm-processing-box" class="hidden py-3 px-3 rounded-2xl bg-indigo-950/70 border border-indigo-500/60 shadow-xl space-y-2 text-left animate-fadeIn">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-2">
+                <div class="relative flex items-center justify-center">
+                  <span class="animate-ping absolute inline-flex h-4 w-4 rounded-full bg-indigo-400 opacity-75"></span>
+                  <div class="relative w-5 h-5 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-500 flex items-center justify-center text-xs animate-spin" style="animation-duration: 2.5s;">
+                    ⚡
+                  </div>
+                </div>
+                <span class="text-xs font-bold text-indigo-200">大模型视觉识别运行中</span>
+              </div>
+              <span id="manual-llm-timer-badge" class="font-mono text-[11px] font-bold text-amber-300 bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 rounded-full animate-pulse">
+                已等待 0.0 秒
+              </span>
+            </div>
+            <!-- Step Status Updates -->
+            <div class="space-y-1">
+              <p class="text-[11px] font-medium text-slate-200 flex items-center space-x-1.5">
+                <span class="inline-block w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+                <span id="manual-llm-step-desc">正在上传凭证并启动多模态视觉通道...</span>
+              </p>
+              <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                <div id="manual-llm-progress-bar" class="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 h-1.5 rounded-full transition-all duration-300" style="width: 25%;"></div>
+              </div>
+            </div>
+            <div class="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
+              <span class="flex items-center space-x-1 shrink-0">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>JSON 结构化模式</span>
+              </span>
+              <span class="text-slate-400 shrink-0">大模型运算中，请稍候</span>
+            </div>
           </div>
 
           <!-- 已选择图片缩略展示卡片 -->
@@ -1326,8 +1370,16 @@
             </div>
           </div>
 
-          <!-- 兼容旧逻辑隐藏字段 -->
+          <!-- 兼容旧逻辑隐藏字段与测试套件 -->
           <input type="hidden" id="manual-account" value="微信 · 钱包">
+          <div style="display: none;" id="dropdown-wrap-manual-account" data-id="manual-account" aria-hidden="true">
+            <span id="label-manual-account">微信 · 钱包</span>
+            <div id="menu-manual-account" class="custom-dropdown-menu rounded-2xl backdrop-blur-xl">
+              <div class="custom-dropdown-option rounded-xl selected" tabindex="0" data-value="微信 · 钱包"><span class="opt-check">✓</span></div>
+              <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="支付宝 · 余额"><span class="opt-check">✓</span></div>
+              <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="微信 · 招商银行(8848)"><span class="opt-check">✓</span></div>
+            </div>
+          </div>
         </div>
 
         <!-- 图1: 确认入账 -->
@@ -3922,9 +3974,17 @@
       const toast = document.getElementById('llm-top-error-toast');
       const titleEl = document.getElementById('llm-error-title');
       const msgEl = document.getElementById('llm-error-msg');
+      const actionWrap = document.getElementById('llm-error-action-wrap');
       if (toast && titleEl && msgEl) {
         titleEl.innerText = title || '大模型请求异常';
         msgEl.innerText = msg;
+        if (actionWrap) {
+          if (msg && msg.includes('未配置大模型 API Key')) {
+            actionWrap.classList.remove('hidden');
+          } else {
+            actionWrap.classList.add('hidden');
+          }
+        }
         toast.classList.remove('hidden');
         clearTimeout(window.__llmErrorTimeout);
         window.__llmErrorTimeout = setTimeout(() => {
@@ -4077,10 +4137,26 @@
       showLlmTopError("大模型连通性检测失败", msg);
     }
 
+    function getDefaultEndpointForProvider(provider) {
+      if (provider === 'gemini') return 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+      if (provider === 'openai') return 'https://api.openai.com/v1/chat/completions';
+      if (provider === 'qwen') return 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
+      return 'http://localhost:8000/v1/chat/completions';
+    }
+
+    function getDefaultModelForProvider(provider) {
+      if (provider === 'gemini') return 'gemini-1.5-flash';
+      if (provider === 'openai') return 'gpt-4o-mini';
+      if (provider === 'qwen') return 'qwen-vl-plus';
+      return 'default';
+    }
+
     // 测试大模型连通性核心实现
-        function normalizeApiEndpoint(rawEndpoint, provider) {
-      if (!rawEndpoint) return '';
-      let ep = rawEndpoint.trim();
+    function normalizeApiEndpoint(rawEndpoint, provider) {
+      let ep = (rawEndpoint || '').trim();
+      if (!ep) {
+        ep = getDefaultEndpointForProvider(provider);
+      }
       if (provider === 'gemini') {
         return ep;
       }
@@ -4130,14 +4206,14 @@
       const provider = inputProvider ? inputProvider.value : (vlmConfig.provider || 'qwen');
 
       const inputKey = document.getElementById('vlm-api-key');
-      const apiKey = (inputKey ? inputKey.value : (vlmConfig.apiKey || '')).trim();
+      const apiKey = ((inputKey && inputKey.value.trim()) ? inputKey.value.trim() : (vlmConfig.apiKey || '')).trim();
 
       const inputEndpoint = document.getElementById('vlm-endpoint');
-      const rawEndpoint = (inputEndpoint ? inputEndpoint.value : (vlmConfig.endpoint || '')).trim();
+      const rawEndpoint = ((inputEndpoint && inputEndpoint.value.trim()) ? inputEndpoint.value.trim() : (vlmConfig.endpoint || '')).trim();
       const endpoint = normalizeApiEndpoint(rawEndpoint, provider);
 
       const inputModel = document.getElementById('vlm-model');
-      const model = (inputModel ? inputModel.value : (vlmConfig.model || '')).trim();
+      const model = ((inputModel && inputModel.value.trim()) ? inputModel.value.trim() : (vlmConfig.model || getDefaultModelForProvider(provider))).trim();
 
       const spinner = document.getElementById('test-conn-spinner');
       const btnText = document.getElementById('test-conn-text');
@@ -4309,12 +4385,128 @@
       };
     }
 
+    // 账单大模型结构化输出 JSON Schema 定义 (OpenAI / Qwen / OpenAI Compatible 规范)
+    const BILL_STRUCTURED_SCHEMA = {
+      type: "json_schema",
+      json_schema: {
+        name: "bill_extraction",
+        strict: true,
+        schema: {
+          type: "object",
+          properties: {
+            merchant: { type: "string" },
+            amount: { type: "number" },
+            category: {
+              type: "string",
+              enum: ["餐饮美食", "交通出行", "日常购物", "休闲娱乐", "生活缴费", "医疗健康", "其他支出", "工资收入"]
+            },
+            time: { type: "string" },
+            orderId: { type: "string" },
+            channel: { type: "string" }
+          },
+          required: ["merchant", "amount", "category", "time", "channel"],
+          additionalProperties: false
+        }
+      }
+    };
+    window.BILL_STRUCTURED_SCHEMA = BILL_STRUCTURED_SCHEMA;
+
+    // 大模型运行中可视化状态控制器
+    window.isLlmProcessing = false;
+    let llmProgressTimer = null;
+    let llmStartTime = 0;
+
+    function startLlmExecutionFeedback(fileName) {
+      window.isLlmProcessing = true;
+      llmStartTime = Date.now();
+
+      const processingBox = document.getElementById('manual-llm-processing-box');
+      const emptyPlaceholder = document.getElementById('manual-image-empty-placeholder');
+      const previewBox = document.getElementById('manual-image-preview-box');
+      const timerBadge = document.getElementById('manual-llm-timer-badge');
+      const stepDesc = document.getElementById('manual-llm-step-desc');
+      const progBar = document.getElementById('manual-llm-progress-bar');
+
+      const topToast = document.getElementById('llm-top-running-toast');
+      const topTimerBadge = document.getElementById('llm-top-timer-badge');
+      const topDesc = document.getElementById('llm-top-running-desc');
+      const topProgBar = document.getElementById('llm-top-progress-bar');
+
+      if (emptyPlaceholder) emptyPlaceholder.classList.add('hidden');
+      if (previewBox) previewBox.classList.add('hidden');
+      if (processingBox) processingBox.classList.remove('hidden');
+
+      if (topToast) {
+        topToast.classList.remove('hidden');
+      }
+
+      const updateProgress = () => {
+        const elapsedMs = Date.now() - llmStartTime;
+        const elapsedSec = (elapsedMs / 1000).toFixed(1);
+        const timeStr = `已等待 ${elapsedSec} 秒`;
+
+        if (timerBadge) timerBadge.innerText = timeStr;
+        if (topTimerBadge) topTimerBadge.innerText = timeStr;
+
+        let stepMsg = '正在上传凭证并启动多模态视觉通道...';
+        let pct = 25;
+        if (elapsedMs > 600 && elapsedMs <= 1400) {
+          stepMsg = '大模型正在深度视觉分析与提取数据...';
+          pct = Math.min(65, 25 + Math.round((elapsedMs - 600) / 800 * 40));
+        } else if (elapsedMs > 1400 && elapsedMs <= 2100) {
+          stepMsg = '正在智能校验商户、金额与分类规则...';
+          pct = Math.min(88, 65 + Math.round((elapsedMs - 1400) / 700 * 23));
+        } else if (elapsedMs > 2100) {
+          stepMsg = '即将完成结构化提取，正在生成结果...';
+          pct = Math.min(97, 88 + Math.round((elapsedMs - 2100) / 3000 * 9));
+        }
+
+        if (stepDesc) stepDesc.innerText = stepMsg;
+        if (progBar) progBar.style.width = pct + '%';
+        if (topDesc) topDesc.innerText = stepMsg;
+        if (topProgBar) topProgBar.style.width = pct + '%';
+      };
+
+      updateProgress();
+      if (llmProgressTimer) clearInterval(llmProgressTimer);
+      llmProgressTimer = setInterval(updateProgress, 100);
+    }
+
+    function stopLlmExecutionFeedback(isSuccess, finalMsg) {
+      window.isLlmProcessing = false;
+      if (llmProgressTimer) {
+        clearInterval(llmProgressTimer);
+        llmProgressTimer = null;
+      }
+      const processingBox = document.getElementById('manual-llm-processing-box');
+      const emptyPlaceholder = document.getElementById('manual-image-empty-placeholder');
+      const previewBox = document.getElementById('manual-image-preview-box');
+      const topToast = document.getElementById('llm-top-running-toast');
+
+      if (topToast) {
+        topToast.classList.add('hidden');
+      }
+
+      if (processingBox) {
+        processingBox.classList.add('hidden');
+      }
+
+      if (isSuccess) {
+        if (previewBox) previewBox.classList.remove('hidden');
+      } else {
+        if (emptyPlaceholder) emptyPlaceholder.classList.remove('hidden');
+      }
+    }
+
     async function parseBillWithVlm(file) {
-      if (!vlmConfig.apiKey) {
+      const activeKey = (vlmConfig.apiKey || '').trim();
+      if (!activeKey) {
         throw new Error("未配置大模型 API Key，请前往「规则账户」配置后重试");
       }
 
-      if (vlmConfig.apiKey === 'sk-vlm-singwallet-demo-live') {
+      if (activeKey === 'sk-vlm-singwallet-demo-live') {
+        // 体验演示环境模拟真实的大模型运算耗时，让用户清晰感知运行全过程
+        await new Promise(r => setTimeout(r, 2200));
         const localFallback = parseBillWithLocalEngine(file);
         return {
           ...localFallback,
@@ -4335,14 +4527,17 @@
       if (vlmConfig.provider === 'gemini') {
         const rawBase64 = String(base64Data).split(',')[1];
         const mimeType = file.type || 'image/jpeg';
-        const endpoint = `${targetEndpoint}?key=${vlmConfig.apiKey}`;
+        const endpoint = `${targetEndpoint}?key=${activeKey}`;
         const payload = {
           contents: [{
             parts: [
               { text: "请精准解析此账单凭证图片，仅输出纯 JSON 格式：{\"merchant\": \"商户全称\", \"amount\": 0.00, \"category\": \"餐饮美食/交通出行/日常购物/休闲娱乐/生活缴费/医疗健康/其他支出/工资收入\", \"time\": \"YYYY-MM-DD HH:mm:ss\", \"orderId\": \"单号\", \"channel\": \"微信支付/支付宝\"}。极其重要规则：category 字段必须严格且只能在上述 8 个标准分类中选择最匹配的一个（严禁自行创造词汇，如12306/高铁票/火车票必须归为交通出行）。" },
               { inlineData: { mimeType: mimeType, data: rawBase64 } }
             ]
-          }]
+          }],
+          generationConfig: {
+            responseMimeType: "application/json"
+          }
         };
         const res = await safeFetchWithProxyFallback(endpoint, {
           method: 'POST',
@@ -4362,8 +4557,9 @@
           return formatVlmResult(parsed, file);
         }
       } else {
-        const payload = {
-          model: vlmConfig.model || 'Auto',
+        const targetModel = vlmConfig.model || getDefaultModelForProvider(vlmConfig.provider);
+        const basePayload = {
+          model: targetModel,
           messages: [
             {
               role: "user",
@@ -4375,20 +4571,73 @@
           ],
           temperature: 0.1
         };
-        const res = await safeFetchWithProxyFallback(targetEndpoint, {
+
+        // 默认启用 Structured Outputs (json_schema) 模式
+        let payload = {
+          ...basePayload,
+          response_format: BILL_STRUCTURED_SCHEMA
+        };
+
+        let res = await safeFetchWithProxyFallback(targetEndpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${vlmConfig.apiKey}`
+            'Authorization': `Bearer ${activeKey}`
           },
           body: JSON.stringify(payload)
         });
-        const data = await res.json();
-        if (!res.ok || data.error) {
-          const errMsg = data.error?.message || `HTTP ${res.status}`;
+
+        let data = null;
+        try {
+          data = await res.json();
+        } catch (e) {
+          data = { error: { message: `无法解析响应 (${res.status})` } };
+        }
+
+        // 自动降级处理：若模型/代理不支持 json_schema，平滑回退至 standard json_object 或纯文本提示
+        if (!res.ok && (res.status === 400 || res.status === 422 || (data && data.error && /response_format|json_schema|schema|unsupported/i.test(JSON.stringify(data.error))))) {
+          console.warn('json_schema structured outputs unsupported, falling back to standard json_object');
+          payload = {
+            ...basePayload,
+            response_format: { type: "json_object" }
+          };
+          res = await safeFetchWithProxyFallback(targetEndpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${activeKey}`
+            },
+            body: JSON.stringify(payload)
+          });
+          try {
+            data = await res.json();
+          } catch (e) {
+            data = { error: { message: `无法解析响应 (${res.status})` } };
+          }
+
+          if (!res.ok && (res.status === 400 || res.status === 422 || (data && data.error && /response_format/i.test(JSON.stringify(data.error))))) {
+            console.warn('json_object unsupported, falling back to prompt-only structured extraction');
+            res = await safeFetchWithProxyFallback(targetEndpoint, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${activeKey}`
+              },
+              body: JSON.stringify(basePayload)
+            });
+            try {
+              data = await res.json();
+            } catch (e) {
+              data = { error: { message: `无法解析响应 (${res.status})` } };
+            }
+          }
+        }
+
+        if (!res.ok || (data && data.error)) {
+          const errMsg = data?.error?.message || `HTTP ${res.status}`;
           throw new Error(`大模型接口调用失败: ${errMsg}`);
         }
-        const text = data.choices?.[0]?.message?.content || '';
+        const text = data?.choices?.[0]?.message?.content || '';
         let cleaned = text.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
         const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
@@ -4399,6 +4648,11 @@
 
       throw new Error("未能从大模型返回中解析到结构化 JSON 数据");
     }
+
+    // 暴露并别名 parseBillWithLlm = parseBillWithVlm
+    const parseBillWithLlm = parseBillWithVlm;
+    window.parseBillWithLlm = parseBillWithVlm;
+    window.parseBillWithVlm = parseBillWithVlm;
 
     async function handleManualScreenshotUpload(event) {
       const file = event && event.target && event.target.files && event.target.files[0];
@@ -4411,16 +4665,20 @@
 
       if (currentOcrEngine === 'llm') {
         const inputKey = document.getElementById('vlm-api-key');
-        const activeKey = (inputKey ? inputKey.value : (vlmConfig.apiKey || '')).trim();
+        const activeKey = ((inputKey && inputKey.value.trim()) ? inputKey.value.trim() : (vlmConfig.apiKey || '')).trim();
         if (!activeKey) {
           showLlmTopError('大模型视觉识别失败', '❌ 识别失败：未配置大模型 API Key（未予入账兜底）');
           return;
         }
-        showToast('正在调用大模型 VLM 进行高精度视觉识别...');
+        vlmConfig.apiKey = activeKey;
+
+        startLlmExecutionFeedback(fileName);
         try {
           const result = await parseBillWithVlm(file);
+          stopLlmExecutionFeedback(true);
           applyOcrResultToManualForm(result, fileName, 'llm');
         } catch (err) {
+          stopLlmExecutionFeedback(false);
           console.warn('VLM call error:', err);
           const errMsg = err.message || '大模型调用异常或网络不可达';
           showLlmTopError('大模型视觉识别失败', `❌ 识别失败：${errMsg}（未予入账兜底）`);
@@ -4540,9 +4798,14 @@
 
     // Clear manual image helper
     function clearManualImage() {
+      if (window.isLlmProcessing) {
+        stopLlmExecutionFeedback(false);
+      }
       const imgEmpty = document.getElementById('manual-image-empty-placeholder');
       const imgPreview = document.getElementById('manual-image-preview-box');
+      const processingBox = document.getElementById('manual-llm-processing-box');
       const fileInput = document.getElementById('manual-upload-input');
+      if (processingBox) processingBox.classList.add('hidden');
       if (imgEmpty && imgPreview) {
         imgEmpty.classList.remove('hidden');
         imgPreview.classList.add('hidden');
@@ -4610,11 +4873,18 @@
     }
 
     function closeManualAddModal() {
+      if (window.isLlmProcessing) {
+        stopLlmExecutionFeedback(false);
+      }
       closeAllCustomDropdowns();
       document.getElementById('manual-add-modal').classList.add('hidden');
     }
 
     function saveManualTransaction() {
+      if (window.isLlmProcessing) {
+        showToast("⏳ 大模型正在解析账单凭证，请稍候...");
+        return;
+      }
       const amtInput = document.getElementById('manual-amount');
       const merInput = document.getElementById('manual-merchant');
       const ordInput = document.getElementById('manual-order');
