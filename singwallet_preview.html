@@ -4037,6 +4037,53 @@
     }
 
     // 测试大模型连通性核心实现
+        function normalizeApiEndpoint(rawEndpoint, provider) {
+      if (!rawEndpoint) return '';
+      let ep = rawEndpoint.trim();
+      if (provider === 'gemini') {
+        return ep;
+      }
+      ep = ep.replace(/\/+$/, '');
+      if (!ep.endsWith('/chat/completions')) {
+        if (ep.endsWith('/v1')) {
+          ep += '/chat/completions';
+        } else {
+          ep += '/v1/chat/completions';
+        }
+      }
+      return ep;
+    }
+
+    async function safeFetchWithProxyFallback(url, options) {
+      try {
+        const res = await fetch(url, options);
+        return res;
+      } catch (err) {
+        if (err.name === 'AbortError') throw err;
+        // If direct fetch is blocked by CORS (Failed to fetch / NetworkError), relay via local proxy
+        try {
+          let bodyObj = {};
+          if (options.body) {
+            bodyObj = typeof options.body === 'string' ? JSON.parse(options.body) : options.body;
+          }
+          const proxyPayload = {
+            url: url,
+            headers: options.headers || {},
+            body: bodyObj
+          };
+          const proxyRes = await fetch('/api/proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(proxyPayload),
+            signal: options.signal
+          });
+          return proxyRes;
+        } catch (proxyErr) {
+          throw err;
+        }
+      }
+    }
+
     async function testVlmConnection() {
       const inputProvider = document.getElementById('vlm-provider-select');
       const provider = inputProvider ? inputProvider.value : (vlmConfig.provider || 'qwen');
@@ -4045,7 +4092,8 @@
       const apiKey = (inputKey ? inputKey.value : (vlmConfig.apiKey || '')).trim();
 
       const inputEndpoint = document.getElementById('vlm-endpoint');
-      const endpoint = (inputEndpoint ? inputEndpoint.value : (vlmConfig.endpoint || '')).trim();
+      const rawEndpoint = (inputEndpoint ? inputEndpoint.value : (vlmConfig.endpoint || '')).trim();
+      const endpoint = normalizeApiEndpoint(rawEndpoint, provider);
 
       const inputModel = document.getElementById('vlm-model');
       const model = (inputModel ? inputModel.value : (vlmConfig.model || '')).trim();
@@ -4127,7 +4175,7 @@
         let res;
         if (provider === 'gemini') {
           const url = endpoint.includes('?') ? `${endpoint}&key=${apiKey}` : `${endpoint}?key=${apiKey}`;
-          res = await fetch(url, {
+          res = await safeFetchWithProxyFallback(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -4136,14 +4184,14 @@
             signal: controller.signal
           });
         } else {
-          res = await fetch(endpoint, {
+          res = await safeFetchWithProxyFallback(endpoint, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${apiKey}`
             },
             body: JSON.stringify({
-              model: model,
+              model: model || 'default',
               messages: [{ role: "user", content: "ping" }],
               max_tokens: 3
             }),
@@ -4242,10 +4290,11 @@
         reader.readAsDataURL(file);
       });
 
+      const targetEndpoint = normalizeApiEndpoint(vlmConfig.endpoint, vlmConfig.provider);
       if (vlmConfig.provider === 'gemini') {
         const rawBase64 = String(base64Data).split(',')[1];
         const mimeType = file.type || 'image/jpeg';
-        const endpoint = `${vlmConfig.endpoint}?key=${vlmConfig.apiKey}`;
+        const endpoint = `${targetEndpoint}?key=${vlmConfig.apiKey}`;
         const payload = {
           contents: [{
             parts: [
@@ -4254,7 +4303,7 @@
             ]
           }]
         };
-        const res = await fetch(endpoint, {
+        const res = await safeFetchWithProxyFallback(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -4273,7 +4322,7 @@
         }
       } else {
         const payload = {
-          model: vlmConfig.model,
+          model: vlmConfig.model || 'Auto',
           messages: [
             {
               role: "user",
@@ -4285,7 +4334,7 @@
           ],
           temperature: 0.1
         };
-        const res = await fetch(vlmConfig.endpoint, {
+        const res = await safeFetchWithProxyFallback(targetEndpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
