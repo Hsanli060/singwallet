@@ -1139,7 +1139,7 @@
 
         <!-- 保持自动化测试选择器兼容的离线隐藏插槽 -->
         <div style="display: none;" aria-hidden="true">
-          <button type="button" id="btn-engine-local" onclick="setManualOcrEngine('local')">⚡ 离线解析</button>
+          <button type="button" id="btn-engine-local" onclick="setManualOcrEngine('local')">离线解析</button>
           <button type="button" id="btn-engine-llm" onclick="setManualOcrEngine('llm')">🤖 大模型识别</button>
         </div>
 
@@ -1889,7 +1889,7 @@
       const orderId = '420000' + Date.now();
       const txTime = '2026-10-26 15:45:00';
       
-      showToast(`🤖 [自动入账成功] 置信度 99% ≥ ${autoCommitThreshold}%，${merchant} ¥${amount.toFixed(2)} 已免人工确认直接记入账本！`);
+      showToast(`[自动入账成功] 置信度 99% ≥ ${autoCommitThreshold}%，${merchant} ¥${amount.toFixed(2)} 已免人工确认直接记入账本！`);
       
       // Update totals
       adjustMonthlyTotals(amount);
@@ -1911,7 +1911,7 @@
         txDate: '2026-10-26',
         timeOnly: '15:45:00',
         orderId: orderId,
-        badge: '🤖 自动入账 99%'
+        badge: '自动入账 99%'
       });
       applyActiveFilters();
       updateDynamicCategoryChips();
@@ -3807,8 +3807,8 @@
         orderId: orderId,
         time: time,
         orderTime: time,
-        imgTitle: `📷 本地特征自适应解析 (${fileName})`,
-        tag: '⚡ 本地自适应解析'
+        imgTitle: `本地特征自适应解析 (${fileName})`,
+        tag: '本地自适应解析'
       };
     }
 
@@ -3838,12 +3838,12 @@
       updateOcrEngineUI();
       if (mode === 'llm') {
         if (!vlmConfig.apiKey) {
-          showToast('🤖 已切换至大模型 VLM 模式，建议前往「规则账户」配置官方 API Key');
+          showToast('已切换至大模型 VLM 模式，建议前往「规则账户」配置官方 API Key');
         } else {
-          showToast('🤖 已启用大模型 VLM 高精度视觉识别引擎');
+          showToast('已启用大模型 VLM 高精度视觉识别引擎');
         }
       } else {
-        showToast('⚡ 已切换至本地智能特征离线解析引擎');
+        showToast('已切换至本地智能特征离线解析引擎');
       }
     }
 
@@ -3859,7 +3859,7 @@
           btnLlm.className = "px-2 py-0.5 rounded-lg font-medium bg-indigo-600 text-white shadow-sm tap-highlight transition-all flex items-center space-x-1";
         }
         if (badge) {
-          badge.innerText = "🤖 大模型 VLM";
+          badge.innerText = "大模型 VLM";
           badge.className = "text-[10px] px-1.5 py-0.5 rounded font-mono font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30";
         }
       } else {
@@ -3870,7 +3870,7 @@
           btnLlm.className = "px-2 py-0.5 rounded-lg font-medium bg-slate-800 text-slate-300 hover:text-white border border-slate-700 tap-highlight transition-all flex items-center space-x-1";
         }
         if (badge) {
-          badge.innerText = "⚡ 本地特征";
+          badge.innerText = "本地特征";
           badge.className = "text-[10px] px-1.5 py-0.5 rounded font-mono font-medium bg-indigo-500/20 text-indigo-300 border border-indigo-500/30";
         }
       }
@@ -4263,7 +4263,7 @@
         time: time,
         orderTime: time,
         confidence: 99.9,
-        tag: '🤖 大模型 VLM 高精识别',
+        tag: '大模型 VLM 高精识别',
         isVlm: true
       };
     }
@@ -4278,7 +4278,7 @@
         return {
           ...localFallback,
           confidence: 99.9,
-          tag: '🤖 大模型 VLM 深度解析',
+          tag: '大模型 VLM 深度解析',
           isVlm: true
         };
       }
@@ -4375,7 +4375,7 @@
           showLlmTopError('大模型视觉识别失败', '❌ 识别失败：未配置大模型 API Key（未予入账兜底）');
           return;
         }
-        showToast('🤖 正在调用大模型 VLM 进行高精度视觉识别...');
+        showToast('正在调用大模型 VLM 进行高精度视觉识别...');
         try {
           const result = await parseBillWithVlm(file);
           applyOcrResultToManualForm(result, fileName, 'llm');
@@ -4446,8 +4446,8 @@
 
       const banner = document.getElementById('manual-ocr-banner');
       const statusText = document.getElementById('manual-ocr-status');
-      const enginePrefix = engine === 'llm' ? '🤖 [大模型VLM]' : '⚡ [智能离线]';
-      if (statusText) statusText.innerText = `✨ ${enginePrefix} 已解析: ${sample.merchant} ¥${Number(sample.amount).toFixed(2)}`;
+      const enginePrefix = engine === 'llm' ? '大模型VLM' : '智能离线';
+      if (statusText) statusText.innerText = `${enginePrefix} 已解析: ${sample.merchant} ¥${Number(sample.amount).toFixed(2)}`;
       if (banner) banner.classList.remove('hidden');
 
       showToast(`📸 ${enginePrefix} 解析成功: ${sample.merchant} ¥${Number(sample.amount).toFixed(2)}`);
@@ -4465,7 +4465,7 @@
       const accStr = document.getElementById('manual-account')?.value || (lastUploadedData.payment ? lastUploadedData.payment.display_name : (lastUploadedData.acc || '微信 · 钱包'));
       const orderId = (document.getElementById('manual-order')?.value?.trim() || lastUploadedData.orderId || ('420000' + Date.now())).trim();
       const orderTime = (document.getElementById('manual-time')?.value?.trim() || lastUploadedData.orderTime || lastUploadedData.time || formatCurrentDateTime()).trim();
-      const tag = lastUploadedData.engine === 'llm' ? '🤖 大模型VLM识别' : '⚡ 截图OCR解析入库';
+      const tag = lastUploadedData.engine === 'llm' ? '大模型VLM识别' : '截图OCR解析入库';
       const paymentObj = parsePaymentMethodString(accStr);
 
       draftQueue.unshift({
