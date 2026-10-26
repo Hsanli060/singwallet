@@ -1,0 +1,34 @@
+name: singwallet
+description: "SingWallet - Production-Ready Personal Expense & Transaction Ledger"
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.2.0 <4.0.0"
+  flutter: ">=3.16.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.5.1
+  sqflite: ^2.3.3+1
+  sqflite_common_ffi: ^2.3.3
+  crypto: ^3.0.3
+  intl: ^0.19.0
+  path: ^1.9.0
+  path_provider: ^2.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  pigeon: ^22.7.0
+
+flutter:
+  uses-material-design: true
+
+hooks:
+  user_defines:
+    sqlite3:
+      source: system
+      name: winsqlite3
