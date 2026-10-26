@@ -3326,22 +3326,29 @@
       newTx.dataset.order = txData.orderId || '';
       newTx.id = txData.id;
       newTx.onclick = () => viewTransactionDetail(txData.merchant, txData.amount.toFixed(2), `${txData.parentCat}（${txData.catName}）`, txData.account || txData.channel, txTime, txData.orderId);
+      const timeShort = timeOnly && timeOnly.includes(':') ? timeOnly.split(':').slice(0, 2).join(':') : timeOnly;
+      const cleanAcc = (txData.account || txData.channel || '钱包').replace('支付 · ', '');
       newTx.innerHTML = `
-        <div class="flex items-center space-x-3">
-          <div class="w-10 h-10 rounded-xl bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold text-lg shrink-0 border border-orange-500/30">${txData.catIcon}</div>
-          <div>
-            <div class="flex items-center space-x-1.5">
-              <span class="font-semibold text-sm text-white">${txData.merchant}</span>
-              <span class="text-[11px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-medium">${txData.catName}</span>
+        <div class="flex items-center space-x-3 min-w-0 flex-1 mr-2.5">
+          <div class="w-10 h-10 rounded-2xl bg-slate-700/50 flex items-center justify-center text-lg shrink-0 border border-slate-600/40 shadow-sm">${txData.catIcon}</div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center">
+              <span class="font-semibold text-sm text-slate-100 truncate">${txData.merchant}</span>
             </div>
-            <div class="text-xs text-slate-400 mt-0.5 flex items-center space-x-1.5">
-              <span>${timeOnly}</span><span>•</span><span>${txData.account || txData.channel}</span><span>•</span><span class="text-emerald-400">${txData.badge || '已入账'}</span>
+            <div class="text-xs text-slate-400 mt-1 flex items-center space-x-1.5 truncate">
+              <span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 shrink-0">${txData.catName}</span>
+              <span class="text-slate-400 font-mono text-[11px] shrink-0">${timeShort}</span>
+              <span class="text-slate-600 shrink-0">•</span>
+              <span class="text-slate-400 truncate text-[11px]">${cleanAcc}</span>
+              ${txData.badge ? `<span class="text-slate-600 shrink-0">•</span><span class="text-emerald-400 text-[10px] shrink-0">${txData.badge}</span>` : ''}
             </div>
           </div>
         </div>
-        <div class="text-right">
-          <span class="font-bold text-base text-white">-¥ ${txData.amount.toFixed(2)}</span>
-          <button onclick="event.stopPropagation(); deleteTransaction('${newTx.id}', '${txData.merchant}', ${txData.amount})" class="block text-[11px] text-red-400 hover:text-red-300 hover:underline mt-0.5 ml-auto">滑动删除</button>
+        <div class="text-right shrink-0">
+          <div class="font-bold text-base text-white font-mono tracking-tight whitespace-nowrap">-¥ ${txData.amount.toFixed(2)}</div>
+          <div class="flex items-center justify-end mt-0.5">
+            <button onclick="event.stopPropagation(); deleteTransaction('${newTx.id}', '${txData.merchant}', ${txData.amount})" class="text-[11px] text-slate-500 hover:text-rose-400 transition-colors tap-highlight px-1 py-0.5 rounded hover:bg-rose-500/10">删除</button>
+          </div>
         </div>
       `;
       if (dayGroup) {
@@ -4967,36 +4974,39 @@
             </div>
         `;
         items.forEach(tx => {
-          const parentCat = resolveParentCategory(tx.cat);
-          const icon = parentCategoryIcons[parentCat] || tx.icon || '📦';
-          html += `
+            const parentCat = resolveParentCategory(tx.cat);
+            const icon = parentCategoryIcons[parentCat] || tx.icon || '📦';
+            const timeShort = tx.time && tx.time.includes(':') ? tx.time.split(':').slice(0, 2).join(':') : (tx.time || '');
+            const cleanAcc = (tx.channel || '钱包').replace('支付 · ', '');
+            html += `
             <div data-cat="${tx.cat}" data-parent="${parentCat}" data-type="expense" data-date="${tx.date}" data-account="${tx.channel}" data-channel="${tx.channel}" class="tx-item flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 shadow-md hover:border-indigo-500 transition-all cursor-pointer tap-highlight animate-fadeIn" id="${tx.id}" onclick="viewTransactionDetail('${tx.name}', '${tx.amount.toFixed(2)}', '${parentCat}（${tx.cat}）', '${tx.channel}', '${groupName} ${tx.time}', '${tx.id}_ORDER')">
-              <div class="flex items-center space-x-3">
-                <div class="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-lg shrink-0 border border-indigo-500/30">
+              <div class="flex items-center space-x-3 min-w-0 flex-1 mr-2.5">
+                <div class="w-10 h-10 rounded-2xl bg-slate-700/50 flex items-center justify-center text-lg shrink-0 border border-slate-600/40 shadow-sm">
                   ${icon}
                 </div>
-                <div>
-                  <div class="flex items-center space-x-1.5">
-                    <span class="font-semibold text-sm text-white">${tx.name}</span>
-                    <span class="text-[11px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-medium">${parentCat}</span>
-                    ${tx.cat !== parentCat ? `<span class="text-[10px] text-slate-400">${tx.cat}</span>` : ''}
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center">
+                    <span class="font-semibold text-sm text-slate-100 truncate">${tx.name}</span>
                   </div>
-                  <div class="text-xs text-slate-400 mt-0.5 flex items-center space-x-1.5">
-                    <span>${tx.time}</span>
-                    <span>•</span>
-                    <span>${tx.channel}</span>
-                    ${tx.badge ? `<span>•</span><span class="text-emerald-400">${tx.badge}</span>` : ''}
-                    ${tx.refund ? `<span>•</span><span class="text-purple-300 font-medium bg-purple-500/20 px-1 rounded border border-purple-500/30">已挂载退款</span>` : ''}
+                  <div class="text-xs text-slate-400 mt-1 flex items-center space-x-1.5 truncate">
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 shrink-0">${parentCat}</span>
+                    <span class="text-slate-400 font-mono text-[11px] shrink-0">${timeShort}</span>
+                    <span class="text-slate-600 shrink-0">•</span>
+                    <span class="text-slate-400 truncate text-[11px]">${cleanAcc}</span>
+                    ${tx.badge ? `<span class="text-slate-600 shrink-0">•</span><span class="text-emerald-400 text-[10px] shrink-0">${tx.badge}</span>` : ''}
+                    ${tx.refund ? `<span class="text-slate-600 shrink-0">•</span><span class="text-purple-300 text-[10px] shrink-0 bg-purple-500/20 px-1 rounded">退款</span>` : ''}
                   </div>
                 </div>
               </div>
-              <div class="text-right">
-                <span class="font-bold text-base text-white">-¥ ${tx.amount.toFixed(2)}</span>
-                <button onclick="event.stopPropagation(); deleteTransaction('${tx.id}', '${tx.name}', ${tx.amount})" class="block text-[11px] text-red-400 hover:text-red-300 hover:underline mt-0.5 ml-auto">滑动删除</button>
+              <div class="text-right shrink-0">
+                <div class="font-bold text-base text-white font-mono tracking-tight whitespace-nowrap">-¥ ${tx.amount.toFixed(2)}</div>
+                <div class="flex items-center justify-end mt-0.5">
+                  <button onclick="event.stopPropagation(); deleteTransaction('${tx.id}', '${tx.name}', ${tx.amount})" class="text-[11px] text-slate-500 hover:text-rose-400 transition-colors tap-highlight px-1 py-0.5 rounded hover:bg-rose-500/10">删除</button>
+                </div>
               </div>
             </div>
-          `;
-        });
+            `;
+          });
         html += `</div>`;
       }
 
