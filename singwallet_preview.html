@@ -544,16 +544,76 @@
                   <span id="suggested-rule" class="text-[10px] text-slate-400 max-w-[130px] truncate" title="匹配规则">匹配规则</span>
                 </div>
               </div>
-              <button type="button" onclick="openCategoryPickerModal()" class="w-full flex items-center justify-between px-3.5 py-2 text-xs font-medium rounded-xl bg-slate-900 border border-slate-700 text-white hover:border-indigo-500/60 transition-all tap-highlight group">
-                <div class="flex items-center space-x-2">
-                  <span id="suggested-icon" class="text-sm">🍔</span>
-                  <span id="suggested-name" class="font-semibold text-slate-100">推荐分类：餐饮美食</span>
+              <!-- 草稿箱分类下拉框 -->
+              <div class="custom-dropdown-container" id="dropdown-wrap-select-draft-category" data-id="select-draft-category">
+                <input type="hidden" id="select-draft-category" value="餐饮美食">
+                <button type="button" class="custom-dropdown-trigger px-3.5 py-2 text-xs font-medium rounded-xl" onclick="toggleCustomDropdown('select-draft-category', event)">
+                  <div class="flex items-center space-x-2 truncate">
+                    <span id="suggested-icon" class="text-sm">🍔</span>
+                    <span class="custom-dropdown-label truncate font-semibold text-slate-100" id="label-select-draft-category">餐饮美食</span>
+                    <span id="suggested-name" class="hidden">推荐分类：餐饮美食</span>
+                  </div>
+                  <svg class="w-4 h-4 dropdown-chevron ml-1 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M19 9l-7 7-7-7"/></svg>
+                </button>
+                <div class="custom-dropdown-menu rounded-2xl backdrop-blur-xl shadow-2xl" id="menu-select-draft-category" style="min-width: 100%; max-height: 220px;">
+                  <div class="custom-dropdown-option rounded-xl selected" tabindex="0" data-value="餐饮美食" onclick="onDraftCategorySelect('🍔', '餐饮美食', event)">
+                    <div class="flex items-center space-x-2">
+                      <span class="shrink-0 text-sm">🍔</span>
+                      <span class="opt-text truncate font-medium">餐饮美食</span>
+                    </div>
+                    <span class="opt-check">✓</span>
+                  </div>
+                  <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="交通出行" onclick="onDraftCategorySelect('🚗', '交通出行', event)">
+                    <div class="flex items-center space-x-2">
+                      <span class="shrink-0 text-sm">🚗</span>
+                      <span class="opt-text truncate font-medium">交通出行</span>
+                    </div>
+                    <span class="opt-check">✓</span>
+                  </div>
+                  <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="日常购物" onclick="onDraftCategorySelect('🛒', '日常购物', event)">
+                    <div class="flex items-center space-x-2">
+                      <span class="shrink-0 text-sm">🛒</span>
+                      <span class="opt-text truncate font-medium">日常购物</span>
+                    </div>
+                    <span class="opt-check">✓</span>
+                  </div>
+                  <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="休闲娱乐" onclick="onDraftCategorySelect('🎮', '休闲娱乐', event)">
+                    <div class="flex items-center space-x-2">
+                      <span class="shrink-0 text-sm">🎮</span>
+                      <span class="opt-text truncate font-medium">休闲娱乐</span>
+                    </div>
+                    <span class="opt-check">✓</span>
+                  </div>
+                  <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="生活缴费" onclick="onDraftCategorySelect('⚡', '生活缴费', event)">
+                    <div class="flex items-center space-x-2">
+                      <span class="shrink-0 text-sm">⚡</span>
+                      <span class="opt-text truncate font-medium">生活缴费</span>
+                    </div>
+                    <span class="opt-check">✓</span>
+                  </div>
+                  <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="医疗健康" onclick="onDraftCategorySelect('💊', '医疗健康', event)">
+                    <div class="flex items-center space-x-2">
+                      <span class="shrink-0 text-sm">💊</span>
+                      <span class="opt-text truncate font-medium">医疗健康</span>
+                    </div>
+                    <span class="opt-check">✓</span>
+                  </div>
+                  <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="其他支出" onclick="onDraftCategorySelect('📦', '其他支出', event)">
+                    <div class="flex items-center space-x-2">
+                      <span class="shrink-0 text-sm">📦</span>
+                      <span class="opt-text truncate font-medium">其他支出</span>
+                    </div>
+                    <span class="opt-check">✓</span>
+                  </div>
+                  <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="工资收入" onclick="onDraftCategorySelect('💰', '工资收入', event)">
+                    <div class="flex items-center space-x-2">
+                      <span class="shrink-0 text-sm">💰</span>
+                      <span class="opt-text truncate font-medium">工资收入</span>
+                    </div>
+                    <span class="opt-check">✓</span>
+                  </div>
                 </div>
-                <div class="flex items-center space-x-1 text-slate-400 group-hover:text-indigo-400 transition-colors">
-                  <span class="text-xs">更换分类</span>
-                  <svg class="w-4 h-4 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                </div>
-              </button>
+              </div>
             </div>
 
             <!-- Action Buttons (Dedup auto-integrated into Confirm button) -->
@@ -647,7 +707,7 @@
               <div class="custom-dropdown-container" id="dropdown-wrap-vlm-provider-select" data-id="vlm-provider-select">
                 <input type="hidden" id="vlm-provider-select" value="qwen">
                 <button type="button" class="custom-dropdown-trigger px-2.5 py-1.5 text-xs font-medium rounded-xl" onclick="toggleCustomDropdown('vlm-provider-select', event)">
-                  <span class="custom-dropdown-label truncate" id="label-vlm-provider-select">通义千问 (Qwen-VL-Plus) [国内直连]</span>
+                  <span class="custom-dropdown-label truncate" id="label-vlm-provider-select">通义千问</span>
                   <svg class="w-4 h-4 dropdown-chevron ml-1 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M19 9l-7 7-7-7"/></svg>
                 </button>
                 <div class="custom-dropdown-menu rounded-2xl backdrop-blur-xl shadow-2xl" id="menu-vlm-provider-select" style="min-width: 220px; max-height: 200px;">
@@ -1115,17 +1175,7 @@
             <button type="button" onclick="event.stopPropagation(); clearManualImage();" class="text-[11px] text-slate-400 hover:text-rose-300 px-2 py-0.5 rounded bg-slate-800 border border-slate-700 shrink-0 tap-highlight">更换</button>
           </div>
 
-          <!-- 快捷样本栏 (方便快速体验与测试) -->
-          <div class="mt-2 pt-2 border-t border-slate-700/50 flex items-center space-x-1.5 overflow-x-auto pb-0.5 scrollbar-none text-[10px]" onclick="event.stopPropagation()">
-            <span class="text-slate-400 shrink-0 font-medium">样本:</span>
-            <button type="button" onclick="loadSampleScreenshot('bill_1')" class="px-2 py-0.5 rounded-lg bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 tap-highlight shrink-0 font-mono">🛒 华购 ¥70</button>
-            <button type="button" onclick="loadSampleScreenshot('bill_2')" class="px-2 py-0.5 rounded-lg bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 tap-highlight shrink-0 font-mono">🛍️ 淘宝 ¥15.77</button>
-            <button type="button" onclick="loadSampleScreenshot('bill_3')" class="px-2 py-0.5 rounded-lg bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 tap-highlight shrink-0 font-mono">🥐 辰市 ¥4</button>
-            <button type="button" onclick="loadSampleScreenshot('luckin')" class="px-2 py-0.5 rounded-lg bg-indigo-900/60 hover:bg-indigo-800 text-indigo-300 tap-highlight shrink-0 font-mono">☕ 瑞幸 ¥26.8</button>
-          </div>
-        </div>
-
-        <div class="space-y-2 text-xs">
+          </div><div class="space-y-2 text-xs">
           <!-- 图1: 这里是金额 -->
           <div>
             <label class="block font-medium text-slate-400 mb-0.5 text-[11px]">金额</label>
@@ -1996,12 +2046,27 @@
       if (selAcc) selAcc.value = accountVal;
 
       // Category card
+      const catName = draft.categoryName || draft.category || '餐饮美食';
+      const catIcon = draft.categoryIcon || CATEGORY_ICON_MAP[catName] || '🍔';
+      currentDraftCategory = {
+        name: catName,
+        icon: catIcon,
+        tag: catName === '餐饮美食' ? '餐饮' : (catName === '日常购物' ? '购物' : (catName === '生活缴费' ? '缴费' : catName.slice(0, 2)))
+      };
       const sugIcon = document.getElementById('suggested-icon');
       const sugName = document.getElementById('suggested-name');
       const sugConf = document.getElementById('suggested-confidence-badge');
       const sugRule = document.getElementById('suggested-rule');
-      if (sugIcon) sugIcon.innerText = draft.categoryIcon;
-      if (sugName) sugName.innerText = `推荐账单类型：${draft.categoryName || draft.category}`;
+      const labelDraftCat = document.getElementById('label-select-draft-category');
+      const inputDraftCat = document.getElementById('select-draft-category');
+
+      if (sugIcon) sugIcon.innerText = catIcon;
+      if (sugName) sugName.innerText = `推荐分类：${catName}`;
+      if (labelDraftCat) labelDraftCat.innerText = catName;
+      if (inputDraftCat) inputDraftCat.value = catName;
+      if (typeof selectCustomDropdownOption === 'function') {
+        selectCustomDropdownOption('select-draft-category', catName);
+      }
       if (sugConf) {
         sugConf.innerText = `置信度 ${draft.confidence}%`;
         sugConf.className = draft.confidence >= 95
@@ -2217,6 +2282,27 @@
       showToast('🔄 已重置为 4 笔真实离线识别账单草稿');
     }
 
+    
+    const CATEGORY_ICON_MAP = {
+      '餐饮美食': '🍔',
+      '交通出行': '🚗',
+      '日常购物': '🛒',
+      '休闲娱乐': '🎮',
+      '生活缴费': '⚡',
+      '医疗健康': '💊',
+      '其他支出': '📦',
+      '工资收入': '💰'
+    };
+
+    function onDraftCategorySelect(icon, name, event) {
+      if (event) event.stopPropagation();
+      selectCategory(icon, name, '下拉选择');
+      if (typeof selectCustomDropdownOption === 'function') {
+        selectCustomDropdownOption('select-draft-category', name, event);
+      }
+      closeAllCustomDropdowns();
+    }
+
     let currentDraftCategory = {
       name: '餐饮美食',
       icon: '🍔',
@@ -2246,20 +2332,28 @@
       document.getElementById('category-modal').classList.add('hidden');
     }
 
-    function selectCategory(icon, name, ruleText) {
+    function selectCategory(icon, name, ruleText = '下拉选择') {
+      const catIcon = icon || CATEGORY_ICON_MAP[name] || '🍔';
       currentDraftCategory = {
         name: name,
-        icon: icon,
+        icon: catIcon,
         tag: name === '餐饮美食' ? '餐饮' : (name === '日常购物' ? '购物' : (name === '生活缴费' ? '缴费' : name.slice(0, 2)))
       };
       if (draftQueue[currentDraftIndex]) {
         draftQueue[currentDraftIndex].categoryName = name;
-        draftQueue[currentDraftIndex].categoryIcon = icon;
+        draftQueue[currentDraftIndex].categoryIcon = catIcon;
         draftQueue[currentDraftIndex].rule = `用户指定分类: ${name}`;
       }
-      document.getElementById('suggested-icon').innerText = icon;
-      document.getElementById('suggested-name').innerText = `推荐分类：${name}`;
-      document.getElementById('suggested-rule').innerText = `已手动指定：${name} (${ruleText})`;
+      const iconEl = document.getElementById('suggested-icon');
+      if (iconEl) iconEl.innerText = catIcon;
+      const nameEl = document.getElementById('suggested-name');
+      if (nameEl) nameEl.innerText = `推荐分类：${name}`;
+      const labelEl = document.getElementById('label-select-draft-category');
+      if (labelEl) labelEl.innerText = name;
+      const inputEl = document.getElementById('select-draft-category');
+      if (inputEl) inputEl.value = name;
+      const ruleEl = document.getElementById('suggested-rule');
+      if (ruleEl) ruleEl.innerText = `已手动指定：${name}`;
       closeCategoryModal();
       showToast(`已更换分类为：${name}`);
       renderDraftQueue();
@@ -3519,8 +3613,8 @@
     let vlmConfig = {
       provider: 'qwen',
       apiKey: '',
-      endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
-      model: 'qwen-vl-plus'
+      endpoint: '',
+      model: ''
     };
 
     try {
@@ -3530,7 +3624,14 @@
       }
       const savedConfig = localStorage.getItem('singwallet_vlm_config');
       if (savedConfig) {
-        vlmConfig = { ...vlmConfig, ...JSON.parse(savedConfig) };
+        const parsed = JSON.parse(savedConfig);
+        if (parsed.endpoint === 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions') {
+          parsed.endpoint = '';
+        }
+        if (parsed.model === 'qwen-vl-plus') {
+          parsed.model = '';
+        }
+        vlmConfig = { ...vlmConfig, ...parsed };
       }
     } catch (e) {
       console.warn('localStorage init warning:', e);
@@ -3809,8 +3910,16 @@
         }
       }
       if (apiKeyIn) apiKeyIn.value = vlmConfig.apiKey || '';
-      if (endpointIn) endpointIn.value = vlmConfig.endpoint || 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
-      if (modelIn) modelIn.value = vlmConfig.model || 'qwen-vl-plus';
+      const safeEndpoint = (vlmConfig.endpoint && vlmConfig.endpoint !== 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions') ? vlmConfig.endpoint : '';
+      const safeModel = (vlmConfig.model && vlmConfig.model !== 'qwen-vl-plus') ? vlmConfig.model : '';
+      if (endpointIn) {
+        endpointIn.value = safeEndpoint;
+        if (!endpointIn.placeholder) endpointIn.placeholder = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
+      }
+      if (modelIn) {
+        modelIn.value = safeModel;
+        if (!modelIn.placeholder) modelIn.placeholder = 'qwen-vl-plus';
+      }
     }
 
     function openLlmConfigModal() {
@@ -3842,18 +3951,19 @@
       const endpointIn = document.getElementById('vlm-endpoint');
       const modelIn = document.getElementById('vlm-model');
       if (provider === 'gemini') {
-        if (endpointIn) endpointIn.value = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
-        if (modelIn) modelIn.value = 'gemini-1.5-flash';
+        if (endpointIn) endpointIn.placeholder = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+        if (modelIn) modelIn.placeholder = 'gemini-1.5-flash';
       } else if (provider === 'openai') {
-        if (endpointIn) endpointIn.value = 'https://api.openai.com/v1/chat/completions';
-        if (modelIn) modelIn.value = 'gpt-4o-mini';
+        if (endpointIn) endpointIn.placeholder = 'https://api.openai.com/v1/chat/completions';
+        if (modelIn) modelIn.placeholder = 'gpt-4o-mini';
       } else if (provider === 'qwen') {
-        if (endpointIn) endpointIn.value = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
-        if (modelIn) modelIn.value = 'qwen-vl-plus';
+        if (endpointIn) endpointIn.placeholder = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
+        if (modelIn) modelIn.placeholder = 'qwen-vl-plus';
       } else {
-        if (endpointIn) endpointIn.value = 'http://localhost:8000/v1/chat/completions';
-        if (modelIn) modelIn.value = 'default';
+        if (endpointIn) endpointIn.placeholder = 'http://localhost:8000/v1/chat/completions';
+        if (modelIn) modelIn.placeholder = 'default';
       }
+      // Keep input boxes clean without forcing default strings
       saveLlmConfigFromInputs(false);
     }
 
@@ -4397,7 +4507,7 @@
       if (amtInput) amtInput.value = '';
       if (merInput) merInput.value = '';
       if (ordInput) ordInput.value = '';
-      if (timeInput) timeInput.value = formatCurrentDateTime();
+      if (timeInput) timeInput.value = '';
       selectCustomDropdownOption('manual-category', '餐饮美食');
       selectCustomDropdownOption('manual-pay-channel', '微信');
       onManualChannelChange('微信');
@@ -5050,7 +5160,7 @@
         const optVal = opt.getAttribute('data-value');
         if (isOptionMatch(id, optVal, value)) {
           opt.classList.add('selected');
-          const span = opt.querySelector('.truncate') || opt.querySelector('span');
+          const span = opt.querySelector('.opt-text') || opt.querySelector('.truncate') || opt.querySelector('span');
           if (span) {
             displayLabel = (span.textContent || span.innerText || '').trim();
           }
