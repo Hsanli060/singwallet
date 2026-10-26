@@ -2440,9 +2440,43 @@
       '工资收入': '💰'
     };
 
-    function resolveParentCategory(cat) {
-      if (!cat) return '其他支出';
-      return subToParentCategoryMap[cat] || cat;
+    const CORE_PARENT_CATEGORIES = ['餐饮美食', '交通出行', '日常购物', '休闲娱乐', '生活缴费', '医疗健康', '其他支出', '工资收入'];
+
+    function resolveParentCategory(cat, merchantName = '') {
+      if (!cat && !merchantName) return '其他支出';
+      const cleanCat = (cat || '').trim();
+      if (CORE_PARENT_CATEGORIES.includes(cleanCat)) {
+        return cleanCat;
+      }
+      if (subToParentCategoryMap[cleanCat]) {
+        return subToParentCategoryMap[cleanCat];
+      }
+
+      // Keyword semantic mapping against category string and merchant name
+      const textToTest = `${cleanCat} ${merchantName || ''}`.toLowerCase();
+      if (/12306|铁路|高铁|火车|机票|航班|客运|打车|滴滴|曹操|t3|地铁|公交|出行|加油|中石化|中石油|停车|etc|过路费|高速|高德|车费|租车|飞猪/.test(textToTest)) {
+        return '交通出行';
+      }
+      if (/餐饮|美食|饭|餐|吃|外卖|美团|饿了么|咖啡|奶茶|麦当劳|肯德基|瑞幸|星巴克|喜茶|奈雪|小吃|火锅|米线|面馆|汉堡|烧烤|酒楼|食堂|早餐|午餐|晚餐/.test(textToTest)) {
+        return '餐饮美食';
+      }
+      if (/购物|超市|商超|便利店|沃尔玛|家乐福|大润发|华润|永辉|世纪华购|淘宝|天猫|京东|拼多多|唯品会|苏宁|百货|生鲜|水果|菜场|衣服|服饰|数码|专卖店|买/.test(textToTest)) {
+        return '日常购物';
+      }
+      if (/娱乐|游戏|手游|网游|点券|皮肤|抽卡|王者|吃鸡|原神|崩铁|网易|腾讯|米哈游|steam|playstation|xbox|任天堂|电影|影城|影院|剧场|演出|大麦|ktv|酒吧|会员|爱奇艺|优酷|哔哩哔哩|b站|网易云|qq音乐|门票|景区|网吧|网咖/.test(textToTest)) {
+        return '休闲娱乐';
+      }
+      if (/缴费|生活|水费|电费|国家电网|燃气|天然气|暖气|话费|宽带|移动|联通|电信|物业|房租|充值/.test(textToTest)) {
+        return '生活缴费';
+      }
+      if (/医疗|健康|医院|门诊|诊所|挂号|药品|大药房|药店|体检|牙科|口腔|同仁堂|益丰|老百姓/.test(textToTest)) {
+        return '医疗健康';
+      }
+      if (/工资|薪资|兼职|劳务|代发|奖金|年终奖|分红|理财收益|利息/.test(textToTest)) {
+        return '工资收入';
+      }
+
+      return '其他支出';
     }
 
     // Dynamic Filter Chips based strictly on PARENT Categories
@@ -4250,7 +4284,7 @@
     function formatVlmResult(parsed, file) {
       const amt = parseFloat(parsed.amount) || 0.00;
       const merchant = (parsed.merchant || '已识别商户').trim();
-      const category = parsed.category || '日常购物';
+      const category = resolveParentCategory(parsed.category || '', merchant);
       const rawChannel = (parsed.channel || parsed.payment_channel || '微信').trim();
       const orderId = (parsed.orderId || ('VLM_' + Date.now())).trim();
       const time = parsed.time || parsed.orderTime || formatCurrentDateTime();
@@ -4305,7 +4339,7 @@
         const payload = {
           contents: [{
             parts: [
-              { text: "请精准解析此账单凭证图片，仅输出纯 JSON 格式：{\"merchant\": \"商户全称\", \"amount\": 0.00, \"category\": \"餐饮美食/交通出行/日常购物/休闲娱乐/生活缴费/医疗健康/其他支出\", \"time\": \"YYYY-MM-DD HH:mm:ss\", \"orderId\": \"单号\", \"channel\": \"微信支付/支付宝\"}" },
+              { text: "请精准解析此账单凭证图片，仅输出纯 JSON 格式：{\"merchant\": \"商户全称\", \"amount\": 0.00, \"category\": \"餐饮美食/交通出行/日常购物/休闲娱乐/生活缴费/医疗健康/其他支出/工资收入\", \"time\": \"YYYY-MM-DD HH:mm:ss\", \"orderId\": \"单号\", \"channel\": \"微信支付/支付宝\"}。极其重要规则：category 字段必须严格且只能在上述 8 个标准分类中选择最匹配的一个（严禁自行创造词汇，如12306/高铁票/火车票必须归为交通出行）。" },
               { inlineData: { mimeType: mimeType, data: rawBase64 } }
             ]
           }]
@@ -4334,7 +4368,7 @@
             {
               role: "user",
               content: [
-                { type: "text", text: "你是一个高精度智能账单识别专家。请提取图片中的账单信息，必须且仅返回如下严格的 JSON 对象：{\"merchant\": \"商户全称\", \"amount\": 金额数字如26.80, \"category\": \"分类名称\", \"time\": \"交易时间如2026-10-26 12:00:00\", \"orderId\": \"交易单号\", \"channel\": \"微信支付或支付宝\"}" },
+                { type: "text", text: "你是一个高精度智能账单识别专家。请提取图片中的账单信息，必须且仅返回如下严格的 JSON 对象：{\"merchant\": \"商户全称\", \"amount\": 金额数字如26.80, \"category\": \"标准分类(八选一)\", \"time\": \"交易时间如2026-10-26 12:00:00\", \"orderId\": \"交易单号\", \"channel\": \"微信支付或支付宝\"}。极其重要规则：category 字段必须严格且只能在以下 8 个标准分类中选择最匹配的一个（严禁自行创造词汇，如12306/高铁票/火车票必须归为交通出行，外卖/咖啡归为餐饮美食，便利店超市归为日常购物）：餐饮美食、交通出行、日常购物、休闲娱乐、生活缴费、医疗健康、其他支出、工资收入。" },
                 { type: "image_url", image_url: { url: base64Data } }
               ]
             }
@@ -4421,7 +4455,8 @@
       if (orderInput) orderInput.value = sample.orderId;
       if (timeInput) timeInput.value = sample.orderTime || sample.time || formatCurrentDateTime();
 
-      selectCustomDropdownOption('manual-category', sample.category || sample.cat || '日常购物');
+      const normCat = resolveParentCategory(sample.category || sample.cat || '', sample.merchant || '');
+        selectCustomDropdownOption('manual-category', normCat);
       const accDisplay = sample.payment ? sample.payment.display_name : (sample.acc || '微信 · 钱包');
       selectCustomDropdownOption('manual-account', accDisplay);
       
