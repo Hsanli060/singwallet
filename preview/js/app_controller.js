@@ -91,19 +91,24 @@
     const btnDr = document.getElementById('nav-btn-drafts');
     const btnRu = document.getElementById('nav-btn-rules');
 
-    if (btnTx) btnTx.className = "flex flex-col items-center justify-center h-full text-slate-400 hover:text-white tap-highlight";
-    if (btnDr) btnDr.className = "relative flex flex-col items-center justify-center h-full text-slate-400 hover:text-white tap-highlight";
-    if (btnRu) btnRu.className = "flex flex-col items-center justify-center h-full text-slate-400 hover:text-white tap-highlight";
+    const navInactiveClass = "flex flex-col items-center justify-end h-full pb-0.5 text-slate-400 hover:text-white tap-highlight";
+    const navInactiveClassRel = "relative flex flex-col items-center justify-end h-full pb-0.5 text-slate-400 hover:text-white tap-highlight";
+    const navActiveClass = "flex flex-col items-center justify-end h-full pb-0.5 text-indigo-400 font-semibold tap-highlight";
+    const navActiveClassRel = "relative flex flex-col items-center justify-end h-full pb-0.5 text-indigo-400 font-semibold tap-highlight";
+
+    if (btnTx) btnTx.className = navInactiveClass;
+    if (btnDr) btnDr.className = navInactiveClassRel;
+    if (btnRu) btnRu.className = navInactiveClass;
 
     if (tabId === 'transactions' || tabId === 0 || tabId === '0') {
       if (txView) txView.classList.remove('hidden');
-      if (btnTx) btnTx.className = "flex flex-col items-center justify-center h-full text-indigo-400 font-semibold tap-highlight";
+      if (btnTx) btnTx.className = navActiveClass;
     } else if (tabId === 'drafts' || tabId === 1 || tabId === '1') {
       if (draftView) draftView.classList.remove('hidden');
-      if (btnDr) btnDr.className = "relative flex flex-col items-center justify-center h-full text-indigo-400 font-semibold tap-highlight";
+      if (btnDr) btnDr.className = navActiveClassRel;
     } else if (tabId === 'rules' || tabId === 'rules-accounts' || tabId === 2 || tabId === '2') {
       if (rulesView) rulesView.classList.remove('hidden');
-      if (btnRu) btnRu.className = "flex flex-col items-center justify-center h-full text-indigo-400 font-semibold tap-highlight";
+      if (btnRu) btnRu.className = navActiveClass;
       if (typeof syncVlmConfigToUI === 'function') syncVlmConfigToUI();
     }
   }
@@ -1644,10 +1649,49 @@
     confirmTransaction(true);
   }
 
+  // 智能推断与规范化分类字段 (容错自愈引擎)
+  function normalizeTxCategory(txData) {
+    if (!txData) return { catName: '其他支出', parentCat: '其他支出' };
+    let rawCat = txData.catName || txData.category || txData.cat || txData.parentCat || '';
+    if (typeof rawCat !== 'string' || rawCat.trim() === '' || rawCat === 'undefined' || rawCat === 'null') {
+      rawCat = '';
+    } else {
+      rawCat = rawCat.trim();
+    }
+    
+    if (!rawCat) {
+      const m = (txData.merchant || txData.name || '').toLowerCase();
+      if (/公交|地铁|一码通|出行|打车|滴滴|高铁|火车|停车|加油/.test(m)) {
+        rawCat = '交通出行';
+      } else if (/小吃|早餐|早点|餐饮|美食|饭|面|粉|火锅|烧烤|奶茶|咖啡|瑞幸|星巴克|美团|饿了么|餐厅|食堂/.test(m)) {
+        rawCat = '餐饮美食';
+      } else if (/超市|便利|百货|购物|淘宝|京东|拼多多/.test(m)) {
+        rawCat = '日常购物';
+      } else {
+        rawCat = '其他支出';
+      }
+    }
+    
+    let safeParentCat = (typeof resolveParentCategory === 'function' ? resolveParentCategory(rawCat) : rawCat) || '其他支出';
+    if (!safeParentCat || safeParentCat === 'undefined' || safeParentCat === 'null') {
+      safeParentCat = '其他支出';
+    }
+    const safeCatName = rawCat || safeParentCat;
+    return { catName: safeCatName, parentCat: safeParentCat };
+  }
+
   // Shared Transaction Insertion Engine with Dynamic Date Grouping & Exact Time Tracking
   function insertTransactionToList(txData) {
     const emptyState = document.getElementById('tx-empty-state');
     if (emptyState) emptyState.classList.add('hidden');
+
+    const norm = normalizeTxCategory(txData);
+    const catName = norm.catName;
+    const parentCat = norm.parentCat;
+    txData.catName = catName;
+    txData.parentCat = parentCat;
+    txData.category = catName;
+    txData.cat = catName;
 
     const txDate = txData.txDate || '2026-10-26';
     const txTime = txData.txTime || (txDate + ' 12:00:00');
@@ -1691,9 +1735,9 @@
 
     const newTx = document.createElement('div');
     newTx.className = "tx-item flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 shadow-md hover:border-indigo-500 transition-all cursor-pointer tap-highlight animate-fadeIn";
-    newTx.setAttribute('data-cat', txData.catName);
-    newTx.setAttribute('data-parent', txData.parentCat);
-    newTx.setAttribute('data-category', txData.parentCat || txData.catName);
+    newTx.setAttribute('data-cat', catName);
+    newTx.setAttribute('data-parent', parentCat);
+    newTx.setAttribute('data-category', parentCat);
     newTx.setAttribute('data-type', 'expense');
     newTx.setAttribute('data-date', txDate);
     newTx.setAttribute('data-account', txData.account || txData.channel);
@@ -1703,11 +1747,10 @@
     newTx.setAttribute('data-amount', txData.amount);
     newTx.dataset.amount = txData.amount;
     newTx.id = txData.id;
-    newTx.onclick = () => viewTransactionDetail(txData.merchant, txData.amount.toFixed(2), `${txData.parentCat}（${txData.catName}）`, txData.account || txData.channel, txTime, txData.orderId);
+    newTx.onclick = () => viewTransactionDetail(txData.merchant, txData.amount.toFixed(2), `${parentCat}（${catName}）`, txData.account || txData.channel, txTime, txData.orderId);
     
     const timeOnlyStr = timeOnly && timeOnly.includes(':') ? timeOnly.split(':').slice(0, 2).join(':') : timeOnly;
     const cleanAcc = (txData.account || txData.channel || '微信钱包').replace('支付 · ', '');
-    const parentCat = (typeof resolveParentCategory === 'function' ? resolveParentCategory(txData.catName) : txData.catName) || '其他支出';
     const icon = getAppCatIcon(parentCat, txData.catIcon || getAppStatusIcon('fallbackCategory'));
     
     let iconSquircle = window.renderSquircleIcon 
@@ -1726,7 +1769,7 @@
             <span class="font-semibold text-sm text-slate-100 truncate">${txData.merchant}</span>
           </div>
           <div class="text-xs text-slate-400 mt-1 flex items-center space-x-1.5 truncate">
-            <span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 shrink-0">${txData.catName}</span>
+            <span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 shrink-0">${catName}</span>
             <span class="text-slate-400 font-mono text-[11px] shrink-0">${timeOnly}</span>
             <span class="text-slate-600 shrink-0">•</span>
             <span class="text-slate-400 text-[11px] whitespace-nowrap">${cleanAcc}</span>
@@ -1736,6 +1779,10 @@
       <div class="text-right shrink-0 flex flex-col items-end justify-center">
         <div class="font-bold text-base text-white font-mono tracking-tight whitespace-nowrap">-¥ ${txData.amount.toFixed(2)}</div>
         <span class="tx-source-tag text-[10px] text-emerald-400 font-medium mt-1 block">${txData.badge || '自动识别'}</span>
+      </div>
+      <div role="button" class="tx-swipe-delete-btn" onclick="openTxDeleteConfirmModal(this.closest('.tx-item'), event)">
+        <svg class="w-4 h-4 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        <span>删除</span>
       </div>
     `;
 
@@ -1760,8 +1807,10 @@
       id: txData.id,
       name: txData.merchant,
       merchant: txData.merchant,
-      cat: txData.catName,
-      category: txData.category || txData.catName,
+      cat: catName,
+      category: catName,
+      catName: catName,
+      parentCat: parentCat,
       icon: txData.catIcon,
       channel: txData.channel,
       account: txData.account,
@@ -2190,6 +2239,15 @@
 
   // Transaction Detail Modal
   function viewTransactionDetail(merchant, amount, cat, channel, time, order) {
+    if (justSwiped) {
+      justSwiped = false;
+      return;
+    }
+    const hasSwiped = document.querySelector('.tx-item.swiped-left');
+    if (hasSwiped) {
+      closeAllSwipedTx();
+      return;
+    }
     const m = document.getElementById('detail-merchant');
     const a = document.getElementById('detail-amount');
     const c = document.getElementById('detail-cat');
@@ -2259,7 +2317,24 @@
       const raw = localStorage.getItem('singwallet_user_transactions');
       if (!raw) return [];
       const list = JSON.parse(raw);
-      return Array.isArray(list) ? list : [];
+      if (!Array.isArray(list)) return [];
+      let needsResave = false;
+      const repaired = list.map(item => {
+        if (!item) return item;
+        const norm = normalizeTxCategory(item);
+        if (!item.catName || !item.parentCat || item.catName === 'undefined' || item.cat === 'undefined' || item.category === 'undefined' || item.catName !== norm.catName || item.parentCat !== norm.parentCat) {
+          item.catName = norm.catName;
+          item.parentCat = norm.parentCat;
+          item.category = norm.catName;
+          item.cat = norm.catName;
+          needsResave = true;
+        }
+        return item;
+      });
+      if (needsResave) {
+        localStorage.setItem('singwallet_user_transactions', JSON.stringify(repaired));
+      }
+      return repaired;
     } catch (e) {
       return [];
     }
@@ -2438,7 +2513,9 @@
           </div>
       `;
       items.forEach(tx => {
-          const parentCat = (typeof resolveParentCategory === 'function' ? resolveParentCategory(tx.cat) : tx.cat) || '其他支出';
+          const norm = normalizeTxCategory(tx);
+          const catName = norm.catName;
+          const parentCat = norm.parentCat;
           const icon = getAppCatIcon(parentCat, tx.icon || getAppStatusIcon('fallbackCategory'));
           let iconSquircle = window.renderSquircleIcon 
             ? window.renderSquircleIcon(parentCat, 'w-10 h-10') 
@@ -2451,7 +2528,7 @@
           const timeShort = tx.time && tx.time.includes(':') ? tx.time.split(':').slice(0, 2).join(':') : (tx.time || '');
           const cleanAcc = (tx.channel || '钱包').replace('支付 · ', '');
           html += `
-          <div data-cat="${tx.cat}" data-parent="${parentCat}" data-category="${parentCat}" data-type="expense" data-date="${tx.date}" data-account="${tx.channel}" data-channel="${tx.channel}" data-amount="${tx.amount}" class="tx-item flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 shadow-md hover:border-indigo-500 transition-all cursor-pointer tap-highlight animate-fadeIn" id="${tx.id}" onclick="viewTransactionDetail('${tx.name}', '${tx.amount.toFixed(2)}', '${parentCat}（${tx.cat}）', '${tx.channel}', '${groupName} ${tx.time}', '${tx.id}_ORDER')">
+          <div data-cat="${catName}" data-parent="${parentCat}" data-category="${parentCat}" data-type="expense" data-date="${tx.date}" data-account="${tx.channel}" data-channel="${tx.channel}" data-amount="${tx.amount}" class="tx-item flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 shadow-md hover:border-indigo-500 transition-all cursor-pointer tap-highlight animate-fadeIn" id="${tx.id}" onclick="viewTransactionDetail('${tx.name}', '${tx.amount.toFixed(2)}', '${parentCat}（${catName}）', '${tx.channel}', '${groupName} ${tx.time}', '${tx.id}_ORDER')">
             <div class="flex items-center space-x-3 min-w-0 flex-1 mr-2.5">
               ${iconSquircle}
               <div class="min-w-0 flex-1">
@@ -2459,7 +2536,7 @@
                   <span class="font-semibold text-sm text-slate-100 truncate">${tx.name}</span>
                 </div>
                 <div class="text-xs text-slate-400 mt-1 flex items-center space-x-1.5 truncate">
-                  <span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 shrink-0">${parentCat}</span>
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 shrink-0">${catName}</span>
                   <span class="text-slate-400 font-mono text-[11px] shrink-0">${timeShort}</span>
                   <span class="text-slate-600 shrink-0">•</span>
                   <span class="text-slate-400 truncate text-[11px]">${cleanAcc}</span>
@@ -2470,6 +2547,10 @@
             <div class="text-right shrink-0 flex flex-col items-end justify-center">
               <div class="font-bold text-base text-white font-mono tracking-tight whitespace-nowrap">${tx.refund ? '+' : '-'}¥ ${tx.amount.toFixed(2)}</div>
               <span class="tx-source-tag text-[10px] ${tx.refund ? 'text-purple-300' : 'text-emerald-400'} font-medium mt-1 block">${tx.badge || (tx.refund ? '已退款' : '自动识别')}</span>
+            </div>
+            <div role="button" class="tx-swipe-delete-btn" onclick="openTxDeleteConfirmModal(this.closest('.tx-item'), event)">
+              <svg class="w-4 h-4 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              <span>删除</span>
             </div>
           </div>
           `;
@@ -2669,12 +2750,12 @@
       listEl.innerHTML = categories.map(cat => {
         const icon = getAppCatIcon(cat);
         return `
-          <div class="group flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-slate-900/75 hover:bg-slate-900 border border-slate-700/60 hover:border-slate-600 transition-all">
+          <div class="group flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-slate-900/75 hover:bg-slate-900 border border-slate-700/60 hover:border-slate-600 transition-all min-h-[36px]">
             <div class="flex items-center space-x-2 min-w-0">
-              <span class="w-6 h-6 rounded-lg bg-slate-800/90 border border-slate-700/50 inline-flex items-center justify-center p-1 shrink-0" data-cat-icon="${cat}">${icon}</span>
+              <span class="w-6 h-6 rounded-lg bg-slate-800/90 border border-slate-700/50 inline-flex items-center justify-center p-1 shrink-0 aspect-square" data-cat-icon="${cat}">${icon}</span>
               <span class="text-xs font-medium text-slate-200 truncate">${cat}</span>
             </div>
-            <button type="button" onclick="removeCustomCategory('${cat}')" class="w-5 h-5 rounded-lg inline-flex items-center justify-center text-slate-500 hover:text-rose-400 hover:bg-rose-500/15 transition-all shrink-0 tap-highlight" title="删除分类">
+            <button type="button" onclick="removeCustomCategory('${cat}')" class="w-5 h-5 rounded-lg inline-flex items-center justify-center text-slate-500 hover:text-rose-400 hover:bg-rose-500/15 transition-all shrink-0 tap-highlight aspect-square" title="删除分类">
               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
           </div>
@@ -3103,6 +3184,209 @@
     }
     deleteTransaction(id, name, amount);
   }
+
+  // ================= iOS 风格流水账单左滑删除交互引擎 =================
+  let pendingDeleteTxElement = null;
+  let activeSwipeItem = null;
+  let justSwiped = false;
+
+  function closeAllSwipedTx(exceptItem) {
+    document.querySelectorAll('.tx-item.swiped-left').forEach(el => {
+      if (el !== exceptItem) {
+        el.classList.remove('swiped-left');
+      }
+    });
+    if (!exceptItem) activeSwipeItem = null;
+  }
+
+  function openTxDeleteConfirmModal(txItemEl, event) {
+    if (event) {
+      if (typeof event.stopPropagation === 'function') event.stopPropagation();
+      if (typeof event.preventDefault === 'function') event.preventDefault();
+    }
+    let el = null;
+    if (typeof txItemEl === 'string') {
+      el = document.getElementById(txItemEl);
+    } else if (txItemEl && txItemEl.nodeType) {
+      el = txItemEl.classList.contains('tx-item') ? txItemEl : txItemEl.closest('.tx-item');
+    }
+    if (!el) return;
+    pendingDeleteTxElement = el;
+
+    const nameEl = el.querySelector('.truncate');
+    const merchantName = nameEl ? nameEl.innerText.trim() : '账单';
+    let amtVal = 0;
+    if (el.dataset.amount !== undefined && el.dataset.amount !== '') {
+      amtVal = parseFloat(el.dataset.amount) || 0;
+    } else {
+      const amtEl = el.querySelector('.text-base.font-mono') || el.querySelector('.font-mono');
+      if (amtEl) {
+        amtVal = parseFloat(amtEl.innerText.replace(/[^\d.]/g, '')) || 0;
+      }
+    }
+    const amountFormatted = '¥' + amtVal.toFixed(2);
+    const descEl = document.getElementById('tx-delete-confirm-desc');
+    if (descEl) {
+      descEl.innerText = `确定要删除「${merchantName} (${amountFormatted})」吗？删除后可在右上角回收站中还原。`;
+    }
+
+    const modal = document.getElementById('tx-delete-confirm-modal');
+    if (modal) {
+      modal.classList.remove('hidden');
+    }
+  }
+
+  function closeTxDeleteConfirmModal() {
+    const modal = document.getElementById('tx-delete-confirm-modal');
+    if (modal) {
+      modal.classList.add('hidden');
+    }
+    if (pendingDeleteTxElement) {
+      pendingDeleteTxElement.classList.remove('swiped-left');
+      pendingDeleteTxElement = null;
+    }
+    closeAllSwipedTx();
+  }
+
+  function confirmTxSwipeDelete() {
+    if (!pendingDeleteTxElement) {
+      closeTxDeleteConfirmModal();
+      return;
+    }
+    const target = pendingDeleteTxElement;
+    pendingDeleteTxElement = null;
+    const modal = document.getElementById('tx-delete-confirm-modal');
+    if (modal) {
+      modal.classList.add('hidden');
+    }
+    target.classList.remove('swiped-left');
+    deleteTxItem(target);
+    closeAllSwipedTx();
+  }
+
+  function initSwipeToDelete() {
+    const container = document.getElementById('tx-scroll-viewport') || document.getElementById('transactions-list') || document.body;
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let isTouchSwiping = false;
+
+    // Mobile Touch Gesture Support
+    container.addEventListener('touchstart', (e) => {
+      const item = e.target.closest('.tx-item');
+      if (!item || e.target.closest('.tx-swipe-delete-btn')) return;
+      if (activeSwipeItem && activeSwipeItem !== item) {
+        activeSwipeItem.classList.remove('swiped-left');
+        activeSwipeItem = null;
+      }
+      const touch = e.touches[0];
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+      isTouchSwiping = true;
+      activeSwipeItem = item;
+    }, { passive: true });
+
+    container.addEventListener('touchmove', (e) => {
+      if (!isTouchSwiping || !activeSwipeItem) return;
+      const touch = e.touches[0];
+      const dx = touch.clientX - touchStartX;
+      const dy = touch.clientY - touchStartY;
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10) {
+        if (e.cancelable) e.preventDefault();
+      }
+    }, { passive: false });
+
+    container.addEventListener('touchend', (e) => {
+      if (!isTouchSwiping || !activeSwipeItem) return;
+      isTouchSwiping = false;
+      const touch = e.changedTouches[0];
+      const dx = touch.clientX - touchStartX;
+      const dy = touch.clientY - touchStartY;
+
+      if (Math.abs(dx) > 35 && Math.abs(dx) > Math.abs(dy)) {
+        justSwiped = true;
+        setTimeout(() => { justSwiped = false; }, 320);
+        if (dx < -35) {
+          closeAllSwipedTx(activeSwipeItem);
+          activeSwipeItem.classList.add('swiped-left');
+        } else if (dx > 35) {
+          activeSwipeItem.classList.remove('swiped-left');
+          activeSwipeItem = null;
+        }
+      } else {
+        if (activeSwipeItem && activeSwipeItem.classList.contains('swiped-left')) {
+          justSwiped = true;
+          setTimeout(() => { justSwiped = false; }, 320);
+          activeSwipeItem.classList.remove('swiped-left');
+          activeSwipeItem = null;
+        }
+      }
+    }, { passive: true });
+
+    // PC / Mouse Drag Gesture Support
+    let isMouseDown = false;
+    let mouseStartX = 0;
+    let mouseStartY = 0;
+    let mouseTargetItem = null;
+
+    container.addEventListener('mousedown', (e) => {
+      const item = e.target.closest('.tx-item');
+      if (!item || e.target.closest('.tx-swipe-delete-btn')) return;
+      if (activeSwipeItem && activeSwipeItem !== item) {
+        activeSwipeItem.classList.remove('swiped-left');
+        activeSwipeItem = null;
+      }
+      isMouseDown = true;
+      mouseStartX = e.clientX;
+      mouseStartY = e.clientY;
+      mouseTargetItem = item;
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (!isMouseDown || !mouseTargetItem) return;
+      isMouseDown = false;
+      const dx = e.clientX - mouseStartX;
+      const dy = e.clientY - mouseStartY;
+
+      if (Math.abs(dx) > 35 && Math.abs(dx) > Math.abs(dy)) {
+        justSwiped = true;
+        setTimeout(() => { justSwiped = false; }, 320);
+        if (dx < -35) {
+          closeAllSwipedTx(mouseTargetItem);
+          mouseTargetItem.classList.add('swiped-left');
+          activeSwipeItem = mouseTargetItem;
+        } else if (dx > 35) {
+          mouseTargetItem.classList.remove('swiped-left');
+          activeSwipeItem = null;
+        }
+      } else if (mouseTargetItem && mouseTargetItem.classList.contains('swiped-left') && !e.target.closest('.tx-swipe-delete-btn')) {
+        justSwiped = true;
+        setTimeout(() => { justSwiped = false; }, 320);
+        mouseTargetItem.classList.remove('swiped-left');
+        activeSwipeItem = null;
+      }
+      mouseTargetItem = null;
+    });
+
+    // Dismiss on click outside
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('.tx-swipe-delete-btn') || e.target.closest('#tx-delete-confirm-modal')) return;
+      const swiped = document.querySelectorAll('.tx-item.swiped-left');
+      if (swiped.length > 0) {
+        const clickedItem = e.target.closest('.tx-item.swiped-left');
+        if (!clickedItem) {
+          closeAllSwipedTx();
+        }
+      }
+    }, true);
+  }
+
+  window.openTxDeleteConfirmModal = openTxDeleteConfirmModal;
+  window.closeTxDeleteConfirmModal = closeTxDeleteConfirmModal;
+  window.confirmTxSwipeDelete = confirmTxSwipeDelete;
+  window.closeAllSwipedTx = closeAllSwipedTx;
+  window.initSwipeToDelete = initSwipeToDelete;
+  window.normalizeTxCategory = normalizeTxCategory;
 
     window.isOrderIdDuplicate = isOrderIdDuplicate;
   window.showDedupTopToast = showDedupTopToast;
@@ -3659,7 +3943,150 @@
     if (typeof initSvgUI === 'function') {
       setTimeout(initSvgUI, 10);
     }
+
+    // 9. Initialize iOS-style swipe to delete
+    if (typeof initSwipeToDelete === 'function') {
+      initSwipeToDelete();
+    }
+
+    // 10. Start shortcut capture background polling
+    startShortcutPolling();
+
+    // 11. Support URL parameters for direct automation / state preview
+    try {
+      if (typeof window !== 'undefined' && window.location && window.location.search) {
+        const urlParams = new URLSearchParams(window.location.search);
+        const tabParam = urlParams.get('tab');
+        if (tabParam && typeof switchTab === 'function') {
+          setTimeout(() => switchTab(tabParam), 80);
+        }
+        const actionParam = urlParams.get('action');
+        if (actionParam === 'openManualModal' && typeof openManualAddModal === 'function') {
+          setTimeout(openManualAddModal, 150);
+        }
+      }
+    } catch (e) {}
   }
+
+  /* ================= 快捷指令后台无感抓屏与识别轮询 ================= */
+  let shortcutPollingStarted = false;
+
+  function dataURLtoFile(dataurl, filename) {
+    const arr = dataurl.split(',');
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new File([u8arr], filename, { type: mime });
+  }
+
+  async function handleShortcutCapturedItem(item) {
+    if (!item || !item.dataUrl) return;
+    try {
+      const file = dataURLtoFile(item.dataUrl, '快捷指令抓屏_' + Date.now() + '.png');
+      if (typeof window.handleManualScreenshotUpload === 'function') {
+        const fakeEvent = { target: { files: [file], value: '' } };
+        await window.handleManualScreenshotUpload(fakeEvent);
+      } else {
+        const localFallback = (typeof parseBillWithLocalEngine === 'function') ? parseBillWithLocalEngine(file) : {
+          merchant: '快捷抓屏商户',
+          amount: 25.8,
+          channel: '微信',
+          account: '钱包',
+          category: '餐饮美食',
+          time: new Date().toISOString().replace('T', ' ').slice(0, 19)
+        };
+        const taskId = 'draft-shortcut-' + Date.now();
+        const draft = {
+          id: taskId,
+          ...localFallback,
+          confidence: 99,
+          tag: '快捷指令智能识别'
+        };
+        if (!window.draftQueue) window.draftQueue = [];
+        window.draftQueue.unshift(draft);
+        if (typeof renderDraftQueue === 'function') renderDraftQueue();
+        if (typeof updateDraftBadge === 'function') updateDraftBadge();
+        if (typeof showToast === 'function') showToast('已自动识别快捷抓屏账单并存入草稿箱');
+      }
+    } catch (err) {
+      console.warn('handleShortcutCapturedItem error:', err);
+    }
+  }
+
+  function startShortcutPolling() {
+    if (shortcutPollingStarted) return;
+    if (typeof window === 'undefined' || !window.location || !window.location.protocol.startsWith('http')) {
+      return;
+    }
+    shortcutPollingStarted = true;
+    setInterval(async () => {
+      try {
+        const resp = await fetch('/api/shortcut/poll');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (data && Array.isArray(data.items) && data.items.length > 0) {
+          for (const item of data.items) {
+            await handleShortcutCapturedItem(item);
+          }
+        }
+      } catch (e) {
+        // Silent catch for local offline/network
+      }
+    }, 2500);
+  }
+
+  window.triggerDelayedPhoneCapture = async function (delaySec = 3) {
+    try {
+      if (typeof showToast === 'function') {
+        showToast(delaySec > 0 ? `已触发定时抓屏：${delaySec}秒后截屏，请立即切至支付完成页` : '已触发立即截屏识别');
+      }
+      const resp = await fetch(`/api/shortcut/adb-capture?delay=${delaySec}`);
+      const resData = await resp.json();
+      if (resData && resData.status === 'success') {
+        if (typeof showToast === 'function') {
+          showToast('抓屏成功，已排入后台识别队列');
+        }
+      }
+    } catch (e) {
+      if (typeof showToast === 'function') {
+        showToast('抓屏触发请求已发送');
+      }
+    }
+  };
+
+  window.copyShortcutApiUrl = function () {
+    const apiUrl = `${window.location.origin}/api/shortcut/adb-capture?delay=3`;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(apiUrl).then(() => {
+        if (typeof showToast === 'function') showToast('已复制快捷指令接口地址到剪贴板');
+      }).catch(() => {
+        fallbackCopyText(apiUrl);
+      });
+    } else {
+      fallbackCopyText(apiUrl);
+    }
+  };
+
+  function fallbackCopyText(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+      if (typeof showToast === 'function') showToast('已复制快捷指令接口地址到剪贴板');
+    } catch (e) {
+      if (typeof showToast === 'function') showToast('复制失败，请手动长按复制');
+    }
+    document.body.removeChild(ta);
+  }
+
+  window.startShortcutPolling = startShortcutPolling;
 
   if (document.readyState !== 'loading') {
     initAppController();

@@ -68,8 +68,18 @@
 .active-tag { background: #4f46e5 !important; color: #ffffff !important; border-color: #4f46e5 !important; }
 
 #tx-quick-record-bar {
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  pointer-events: none !important;
+}
+
+#tx-quick-record-bar > button,
+#tx-quick-record-bar button {
+  pointer-events: auto !important;
 }
 
 /* Pure HTML/CSS Custom Floating Select Components (100% Win32 Popups Free) */
@@ -144,8 +154,10 @@
   right: 0;
 }
 .custom-dropdown-menu.menu-dropup {
-  top: auto;
-  bottom: calc(100% + 6px);
+  top: auto !important;
+  bottom: calc(100% + 6px) !important;
+  margin-bottom: 0 !important;
+  margin-top: 0 !important;
   transform: translateY(6px) scale(0.97);
 }
 .custom-dropdown-menu.menu-dropup.open {
@@ -158,15 +170,39 @@
   visibility: visible;
 }
 
+/* 自定义下拉菜单：在非 inline 容器中，宽度 100% 严格对齐父触发器 */
+.custom-dropdown-container:not(.inline-dropdown) > .custom-dropdown-menu {
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* 全局弹窗层级强化，防止被底部导航栏穿透 */
+#confidence-modal,
+#filter-modal,
+#category-modal,
+#manual-add-modal,
+#tx-detail-modal,
+#order-security-modal,
+#month-modal,
+#dedup-modal,
+#trash-modal,
+#tx-delete-confirm-modal {
+  z-index: 50 !important;
+}
+
 /* Dropdown Option Items - rounded-xl */
 .custom-dropdown-option {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 8px 12px;
+  padding: 8px 10px;
   border-radius: 0.75rem; /* rounded-xl (12px) */
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: #f1f5f9;
   cursor: pointer;
@@ -229,4 +265,323 @@
 /* OTA Download Progress Bar Transition */
 #ota-download-progress-bar {
   transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+
+/* ================= iOS 风格流水账单左滑删除交互 ================= */
+.tx-item {
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.tx-item > *:not(.tx-swipe-delete-btn) {
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tx-item.swiped-left > *:not(.tx-swipe-delete-btn) {
+  transform: translateX(-76px);
+}
+
+.tx-swipe-delete-btn {
+  position: absolute !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  right: 0 !important;
+  width: 76px !important;
+  background-color: #e11d48 !important; /* rose-600 */
+  color: #ffffff !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 2px !important;
+  z-index: 10 !important;
+  cursor: pointer !important;
+  transform: translateX(101%) !important;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease !important;
+  user-select: none !important;
+}
+
+.tx-swipe-delete-btn:hover {
+  background-color: #f43f5e !important; /* rose-500 */
+}
+
+.tx-swipe-delete-btn:active {
+  background-color: #be123c !important; /* rose-700 */
+}
+
+.tx-item.swiped-left .tx-swipe-delete-btn {
+  transform: translateX(0) !important;
+}
+
+/* ================= API Key 密码圆点与眼睛图标防重叠隔离 ================= */
+#vlm-api-key,
+#view-rules-accounts #vlm-api-key {
+  padding-right: 2.5rem !important;
+}
+
+#vlm-eye-btn {
+  position: absolute !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  right: 4px !important;
+  width: 28px !important;
+  height: 26px !important;
+  padding: 5px !important;
+  background-color: #0f172a !important; /* 与 bg-slate-900 一致，彻底遮挡底层文字与密码圆点 */
+  border-radius: 0.5rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 5 !important;
+}
+
+#vlm-eye-btn svg {
+  width: 15px !important;
+  height: 15px !important;
+  display: block !important;
+}
+
+/* ================= 移动端真机全屏自适应与体验优化 (<= 520px) ================= */
+@media (max-width: 520px) {
+  body {
+    padding: 0 !important;
+    margin: 0 !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    overflow: hidden !important;
+  }
+
+  #mobile-device-shell,
+  .max-w-\[410px\] {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    --tw-ring-offset-shadow: 0 0 #0000 !important;
+    --tw-ring-shadow: 0 0 #0000 !important;
+    ring: none !important;
+  }
+
+  /* 隐藏模拟器假状态栏与假刘海，真机自带有原生系统状态栏 */
+  #simulator-status-bar,
+  .max-w-\[410px\] > .h-11 {
+    display: none !important;
+  }
+
+  /* 彻底隐藏模拟器底部的假 Home 指示条，消除真机黑边空隙 */
+  #simulator-home-indicator {
+    display: none !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* 沉浸式视口铺满 */
+  #screen-container {
+    height: 100dvh !important;
+  }
+
+  /* 底部导航栏紧贴屏幕最下方，超紧凑 38px，纯黑底色与全面屏手势条无缝融合 */
+  #bottom-nav-bar {
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    max-height: 38px !important;
+    background-color: #000000 !important;
+    border-top: 1px solid rgba(30, 41, 59, 0.75) !important;
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    align-items: end !important;
+    padding: 2px 0 0 0 !important;
+    margin: 0 !important;
+    z-index: 30 !important;
+  }
+
+  #bottom-nav-bar > button {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    line-height: 1 !important;
+    gap: 1px !important;
+  }
+
+  #bottom-nav-bar > button > div[id^="nav-icon-"] {
+    width: 17px !important;
+    height: 17px !important;
+    margin: 0 !important;
+  }
+
+  #bottom-nav-bar > button > span:last-child {
+    font-size: 10.5px !important;
+    line-height: 1.05 !important;
+    margin: 0 !important;
+    padding-bottom: 1px !important;
+  }
+
+  /* 快速记一手操作悬浮栏：全透明悬浮胶囊 */
+  #tx-quick-record-bar {
+    position: fixed !important;
+    bottom: 44px !important;
+    left: 0 !important;
+    right: 0 !important;
+    padding: 0 2.5rem !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    display: flex !important;
+    justify-content: center !important;
+    pointer-events: none !important;
+    z-index: 25 !important;
+  }
+
+  #tx-quick-record-bar > button,
+  #tx-quick-record-bar button {
+    pointer-events: auto !important;
+    width: 100% !important;
+    max-width: 260px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    padding: 0 1.25rem !important;
+    border-radius: 0.75rem !important;
+    font-size: 13px !important;
+    box-shadow: 0 6px 20px rgba(79, 70, 229, 0.45) !important;
+  }
+
+  /* 主内容区与顶部栏适度内收（~21.6px留白），告别宽扁贴边，提升精致感 */
+  #view-transactions > .shrink-0,
+  #tx-scroll-viewport,
+  #view-drafts {
+    padding-left: 1.35rem !important;
+    padding-right: 1.35rem !important;
+  }
+
+  /* 滚动列表底部留白，防止内容被底部浮动条及导航栏遮挡 */
+  #tx-scroll-viewport {
+    padding-bottom: 116px !important;
+  }
+
+  #view-drafts {
+    padding-bottom: 74px !important;
+  }
+
+  /* AI 配置中心：横向适度微收，纵向精致纤巧 (35px 黄金高度) */
+  #view-rules-accounts {
+    padding-left: 1.65rem !important;
+    padding-right: 1.65rem !important;
+    padding-bottom: 76px !important;
+  }
+
+  #view-rules-accounts input:not([type="hidden"]):not([type="file"]),
+  #view-rules-accounts .custom-dropdown-trigger {
+    min-height: 35px !important;
+    height: 35px !important;
+    padding: 0.35rem 0.7rem !important;
+    font-size: 12px !important;
+    border-radius: 0.75rem !important;
+  }
+
+  #view-rules-accounts #vlm-api-key {
+    padding-right: 2.5rem !important;
+  }
+
+  #vlm-eye-btn {
+    position: absolute !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    right: 4px !important;
+    width: 28px !important;
+    height: 26px !important;
+    padding: 5px !important;
+    background-color: #0f172a !important; /* 与 bg-slate-900 一致，彻底遮挡底层文字与密码圆点 */
+    border-radius: 0.5rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 5 !important;
+  }
+
+  #vlm-eye-btn svg {
+    width: 15px !important;
+    height: 15px !important;
+    display: block !important;
+  }
+
+  #view-rules-accounts .grid-cols-2 button {
+    min-height: 35px !important;
+    height: 35px !important;
+    padding: 0.35rem 0.75rem !important;
+    border-radius: 0.75rem !important;
+    font-size: 12px !important;
+  }
+
+  /* 整合输入栏 (Integrated input bars) */
+  #view-rules-accounts .bg-slate-900.border.rounded-xl {
+    padding: 0.25rem !important;
+    border-radius: 0.75rem !important;
+  }
+
+  #view-rules-accounts .bg-slate-900.border.rounded-xl input {
+    min-height: 30px !important;
+    height: 30px !important;
+    padding: 0.25rem 0.65rem !important;
+    font-size: 11px !important;
+  }
+
+  #view-rules-accounts .bg-slate-900.border.rounded-xl button {
+    min-height: 30px !important;
+    height: 30px !important;
+    padding: 0.25rem 0.65rem !important;
+    font-size: 11px !important;
+  }
+
+  /* 图标宽高比严格 1:1 保持不变形 */
+  [data-cat-icon],
+  [data-ui-icon] {
+    aspect-ratio: 1 / 1 !important;
+  }
+
+  /* 移动端提升卡片纵向饱满度与精致感，消除扁平拉宽视觉 */
+  .tx-item {
+    padding-top: 0.95rem !important;
+    padding-bottom: 0.95rem !important;
+    padding-left: 1.15rem !important;
+    padding-right: 1.15rem !important;
+    min-height: 4.6rem;
+  }
+
+  #view-transactions .bg-gradient-to-br {
+    padding: 1.15rem !important;
+  }
+
+  /* 移动端全局弹窗全屏覆盖与防穿透 */
+  #confidence-modal,
+  #filter-modal,
+  #category-modal,
+  #manual-add-modal,
+  #tx-detail-modal,
+  #order-security-modal,
+  #month-modal,
+  #dedup-modal,
+  #trash-modal,
+  #tx-delete-confirm-modal {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 100 !important;
+  }
 }

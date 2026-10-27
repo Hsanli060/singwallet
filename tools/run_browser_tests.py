@@ -24,7 +24,7 @@ function assert(cond, msg) {
   }
 }
 
-window.addEventListener('DOMContentLoaded', () => {
+function runAllTestsSuite() {
   try {
     console.log("=== COMPREHENSIVE BROWSER DROPDOWN TEST SUITE ===");
 
@@ -1881,6 +1881,139 @@ window.addEventListener('DOMContentLoaded', () => {
     assert(JSON.stringify(postUpgradeCategories) === JSON.stringify(preUpgradeCategories), "Group 37: Iron Rule 1/2 Verified: Custom categories 100% preserved");
     assert(postUpgradeVlm === preUpgradeVlm, "Group 37: Iron Rule 1/2 Verified: VLM API config 100% preserved");
 
+    // ================= Group 38: iOS-style Swipe-to-Delete & Confirmation Modal Verification =================
+    console.log("=== Group 38: iOS-style Swipe-to-Delete & Confirmation Modal ===");
+
+    // 1. 验证 DOM 容器与控件存在性
+    const simHomeInd = document.getElementById('simulator-home-indicator');
+    assert(!!simHomeInd, "Group 38: #simulator-home-indicator exists for desktop mockup / mobile isolation");
+    const bottomNavEl = document.getElementById('bottom-nav-bar');
+    assert(!!bottomNavEl, "Group 38: #bottom-nav-bar exists");
+    const txDeleteConfirmModal = document.getElementById('tx-delete-confirm-modal');
+    assert(!!txDeleteConfirmModal, "Group 38: #tx-delete-confirm-modal exists");
+    assert(txDeleteConfirmModal.classList.contains('hidden'), "Group 38: #tx-delete-confirm-modal is initially hidden");
+
+    // 2. 插入测试账单
+    insertTransactionToList({
+      id: 'tx_swipe_test_001',
+      merchant: '麦当劳得来速',
+      amount: 38.5,
+      catName: '餐饮美食',
+      parentCat: '餐饮美食',
+      channel: '支付宝',
+      time: '2026-10-27 13:14:00',
+      date: '2026-10-27',
+      orderId: 'SWIPE_TEST_ORDER_001'
+    });
+
+    const swipeTxItem = document.getElementById('tx_swipe_test_001');
+    assert(!!swipeTxItem, "Group 38: Swipe test transaction item rendered");
+    const swipeDelBtn = swipeTxItem.querySelector('.tx-swipe-delete-btn');
+    assert(!!swipeDelBtn, "Group 38: .tx-swipe-delete-btn exists inside tx-item");
+    assert(swipeDelBtn.getAttribute('role') === 'button', "Group 38: .tx-swipe-delete-btn has role='button'");
+    assert(swipeTxItem.querySelector('button') === null, "Group 38: tx-item contains NO button tag (preserving Group 22/36 assertions)");
+
+    // 3. 左滑交互测试
+    swipeTxItem.classList.add('swiped-left');
+    assert(swipeTxItem.classList.contains('swiped-left'), "Group 38: .swiped-left class added on left swipe");
+
+    // 4. 点击删除触发确认弹窗
+    swipeDelBtn.click();
+    assert(!txDeleteConfirmModal.classList.contains('hidden'), "Group 38: #tx-delete-confirm-modal opens on clicking .tx-swipe-delete-btn");
+    const confirmDesc = document.getElementById('tx-delete-confirm-desc');
+    assert(!!confirmDesc, "Group 38: #tx-delete-confirm-desc exists");
+    assert(confirmDesc.innerText.includes('麦当劳得来速'), "Group 38: Confirmation description contains merchant name '麦当劳得来速'");
+    assert(confirmDesc.innerText.includes('38.50'), "Group 38: Confirmation description contains formatted amount '38.50'");
+
+    // 5. 测试取消按钮
+    const btnCancelDel = document.getElementById('btn-cancel-tx-delete');
+    assert(!!btnCancelDel, "Group 38: #btn-cancel-tx-delete exists");
+    btnCancelDel.click();
+    assert(txDeleteConfirmModal.classList.contains('hidden'), "Group 38: #tx-delete-confirm-modal closed on cancel");
+    assert(!swipeTxItem.classList.contains('swiped-left'), "Group 38: .swiped-left removed from item on cancel");
+    assert(!swipeTxItem.classList.contains('soft-deleted'), "Group 38: Item was not deleted on cancel");
+
+    // 6. 重新左滑并确认删除
+    swipeTxItem.classList.add('swiped-left');
+    swipeDelBtn.click();
+    assert(!txDeleteConfirmModal.classList.contains('hidden'), "Group 38: Modal reopened");
+    const btnConfirmDel = document.getElementById('btn-confirm-tx-delete');
+    assert(!!btnConfirmDel, "Group 38: #btn-confirm-tx-delete exists");
+    btnConfirmDel.click();
+
+    // 7. 确认删除后状态验证
+    assert(txDeleteConfirmModal.classList.contains('hidden'), "Group 38: Modal closed after confirmation");
+    assert(swipeTxItem.classList.contains('soft-deleted'), "Group 38: Item marked as soft-deleted");
+    assert(swipeTxItem.style.display === 'none', "Group 38: Deleted item display is none");
+    const tBadge = document.getElementById('trash-badge');
+    assert(tBadge && !tBadge.classList.contains('hidden'), "Group 38: Trash badge visible after swipe delete");
+
+    // 8. 验证从回收站中撤销/恢复
+    if (typeof window.restoreTrash === 'function') {
+      window.restoreTrash('tx_swipe_test_001');
+      assert(!swipeTxItem.classList.contains('soft-deleted'), "Group 38: Item restored from trash");
+      assert(!swipeTxItem.classList.contains('swiped-left'), "Group 38: Restored item has no swiped-left state");
+    }
+
+    // 9. 验证分类字段容错与自愈引擎 (normalizeTxCategory)
+    assert(typeof window.normalizeTxCategory === 'function', "Group 38: window.normalizeTxCategory exists");
+    const healedSubway = window.normalizeTxCategory({ merchant: '杭州公共交通一码通' });
+    assert(healedSubway.catName === '交通出行' && healedSubway.parentCat === '交通出行', "Group 38: '杭州公共交通一码通' inferred as '交通出行'");
+    const healedShaxian = window.normalizeTxCategory({ merchant: '沙县小吃', catName: 'undefined' });
+    assert(healedShaxian.catName === '餐饮美食' && healedShaxian.parentCat === '餐饮美食', "Group 38: '沙县小吃' inferred as '餐饮美食'");
+    const healedBreakfast = window.normalizeTxCategory({ merchant: '杭州市拱墅区辰市早餐店', cat: undefined });
+    assert(healedBreakfast.catName === '餐饮美食' && healedBreakfast.parentCat === '餐饮美食', "Group 38: '杭州市拱墅区辰市早餐店' inferred as '餐饮美食'");
+
+    // 测试容错渲染：传入含 undefined 字段的账单，断言绝不呈现 'undefined'
+    insertTransactionToList({
+      id: 'tx_undefined_heal_test',
+      merchant: '杭州公共交通一码通',
+      amount: 50,
+      catName: undefined,
+      category: 'undefined'
+    });
+    const healedDomItem = document.getElementById('tx_undefined_heal_test');
+    assert(!!healedDomItem, "Group 38: Healed DOM item rendered");
+    const healedBadge = healedDomItem.querySelector('.inline-flex');
+    assert(healedBadge !== null, "Group 38: Category badge rendered");
+    assert(healedBadge.innerText.trim() === '交通出行', "Group 38: Badge text cleanly restored to '交通出行', not 'undefined'");
+    assert(healedDomItem.getAttribute('data-cat') === '交通出行', "Group 38: data-cat attribute restored to '交通出行'");
+
+    // ========================================================
+    // Group 39: 快捷指令无感抓屏卡片、草稿箱结构优化与全尺寸饱满度断言
+    // ========================================================
+    console.log("=== Group 39: Shortcut Capture, Draft Dropdown Ordering & Plump Controls ===");
+
+    // 1. 验证快捷指令无感抓屏模块卡片 (#shortcut-capture-card)
+    const scCard = document.getElementById('shortcut-capture-card');
+    assert(scCard !== null, "Group 39: #shortcut-capture-card exists in rules view");
+    const scUrl = document.getElementById('shortcut-api-url');
+    assert(scUrl !== null && scUrl.innerText.includes('/api/shortcut/adb-capture'), "Group 39: #shortcut-api-url displays correct adb capture URL");
+    const scDelayedBtn = document.getElementById('btn-trigger-delayed-capture');
+    assert(scDelayedBtn !== null, "Group 39: #btn-trigger-delayed-capture exists");
+    assert(typeof window.triggerDelayedPhoneCapture === 'function', "Group 39: window.triggerDelayedPhoneCapture function is defined");
+    assert(typeof window.copyShortcutApiUrl === 'function', "Group 39: window.copyShortcutApiUrl function is defined");
+    assert(typeof window.startShortcutPolling === 'function', "Group 39: window.startShortcutPolling function is defined");
+
+    // 2. 验证草稿箱分类下拉框置于支付网格之前，防止底部导航栏遮挡
+    const draftCatWrap = document.getElementById('dropdown-wrap-select-draft-category');
+    const draftPayGrid = document.getElementById('draft-payment-grid');
+    assert(draftCatWrap !== null, "Group 39: #dropdown-wrap-select-draft-category exists");
+    assert(draftPayGrid !== null, "Group 39: #draft-payment-grid exists");
+    assert(Boolean(draftCatWrap.compareDocumentPosition(draftPayGrid) & Node.DOCUMENT_POSITION_FOLLOWING), "Group 39: 草稿箱分类下拉框物理排布位于支付渠道网格之上");
+
+    // 3. 验证支出账户与支付渠道下拉菜单已移除写死的 inline min-width，实现 100% 触发器对齐
+    const accMenu39 = document.getElementById('menu-select-account');
+    const chanMenu39 = document.getElementById('menu-select-channel');
+    assert(accMenu39 !== null && (!accMenu39.style.minWidth || accMenu39.style.minWidth === ''), "Group 39: #menu-select-account has no inline min-width");
+    assert(chanMenu39 !== null && (!chanMenu39.style.minWidth || chanMenu39.style.minWidth === ''), "Group 39: #menu-select-channel has no inline min-width");
+
+    // 4. 验证分类管理器项目为精致紧凑比例 (rounded-xl 与 min-h-[36px])
+    syncAllCategoryUIs();
+    const catListFirstItem = document.querySelector('#custom-categories-list > div');
+    assert(catListFirstItem !== null && catListFirstItem.className.includes('rounded-xl'), "Group 39: Category manager items use rounded-xl");
+    assert(catListFirstItem !== null && catListFirstItem.className.includes('min-h-[36px]'), "Group 39: Category manager items use min-h-[36px]");
+
     // 4. 测试收尾：清理全部测试数据，确保 App 还原为 100% 干净状态
     cleanAllTestData();
     assert(document.querySelectorAll('#transactions-list .tx-item').length === 0, "Group 37 Post-Cleanup: Transactions restored to 0");
@@ -1896,7 +2029,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     const outDiv = document.createElement('div');
     outDiv.id = 'test-results-dump';
-    outDiv.innerHTML = JSON.stringify(window.__TEST_RESULTS__);
+    outDiv.textContent = JSON.stringify(window.__TEST_RESULTS__);
     document.body.appendChild(outDiv);
   } catch(e) {
     console.error("TEST EXECUTION ERROR: " + e.message + "\\n" + e.stack);
@@ -1906,11 +2039,16 @@ window.addEventListener('DOMContentLoaded', () => {
     errDiv.innerText = e.stack || e.message;
     document.body.appendChild(errDiv);
   }
-});
+}
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', runAllTestsSuite);
+} else {
+  runAllTestsSuite();
+}
 </script>
 """
 
-test_html = html.replace('</body>', test_script + '\n</body>')
+test_html = re.sub(r'\?v=[^"\'\s>]+', '', html).replace('</body>', test_script + '\n</body>')
 test_file = os.path.abspath('singwallet_test_runner.html')
 
 try:
@@ -1933,14 +2071,14 @@ try:
     try:
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore')
         try:
-            stdout, stderr = p.communicate(timeout=6)
+            stdout, stderr = p.communicate(timeout=10)
         except subprocess.TimeoutExpired:
             p.kill()
             stdout, stderr = p.communicate()
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
-    dump_m = re.search(r'<div id="test-results-dump">([^<]+)</div>', stdout)
+    dump_m = re.search(r'<div id="test-results-dump">([\s\S]*?)</div>', stdout)
     if dump_m:
         results = json.loads(dump_m.group(1))
         passed = [r for r in results if r['pass']]

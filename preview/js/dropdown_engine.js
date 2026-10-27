@@ -7,6 +7,22 @@
   'use strict';
 
   /**
+   * 动态计算菜单展开朝向（如果屏幕下方空间小于 210px，且下方有底部导航栏阻挡，自动向上展开）
+   */
+  function adjustDropdownPosition(wrap, menu) {
+    if (!wrap || !menu) return;
+    try {
+      const rect = wrap.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom - 52;
+      if (spaceBelow < 210) {
+        menu.classList.add('menu-dropup');
+      } else {
+        menu.classList.remove('menu-dropup');
+      }
+    } catch (e) {}
+  }
+
+  /**
    * 打开指定 ID 的自定义下拉浮层
    */
   function openCustomDropdownId(id) {
@@ -16,6 +32,7 @@
     if (!menu) return;
 
     closeAllCustomDropdowns();
+    adjustDropdownPosition(wrap, menu);
     menu.classList.add('open');
     if (trigger) trigger.classList.add('active');
     if (wrap) wrap.classList.add('z-active');
@@ -37,6 +54,7 @@
     closeAllCustomDropdowns();
 
     if (!isOpen) {
+      adjustDropdownPosition(wrap, menu);
       menu.classList.add('open');
       if (trigger) trigger.classList.add('active');
       if (wrap) wrap.classList.add('z-active');

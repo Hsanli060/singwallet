@@ -2,18 +2,19 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
   <title>SingWallet 交互式真机全功能模拟器</title>
-  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
-  <link rel="stylesheet" href="preview/css/preview.css">
+  <script src="preview/js/tailwindcss.min.js"></script>
+  <link rel="stylesheet" href="preview/css/preview.css?v=20261027_v7">
 </head>
 <body class="bg-slate-900 text-slate-100 antialiased min-h-screen flex flex-col items-center justify-center p-3 select-none">
 
   <!-- Mobile Device Outer Shell -->
-  <div class="relative w-full max-w-[410px] h-[820px] bg-slate-950 border-4 border-slate-700 rounded-[50px] shadow-2xl flex flex-col overflow-hidden ring-8 ring-slate-800/50">
+  <div id="mobile-device-shell" class="relative w-full max-w-[410px] h-[820px] bg-slate-950 border-4 border-slate-700 rounded-[50px] shadow-2xl flex flex-col overflow-hidden ring-8 ring-slate-800/50">
     
     <!-- iPhone / Android Notch & Status Bar -->
-    <div class="h-11 bg-slate-950 w-full flex items-center justify-between px-7 shrink-0 z-20 border-b border-slate-800/80">
+    <div id="simulator-status-bar" class="h-11 bg-slate-950 w-full flex items-center justify-between px-7 shrink-0 z-20 border-b border-slate-800/80">
       <span class="text-xs font-semibold text-slate-300 tracking-tight">09:41</span>
       <div class="w-24 h-4 bg-black rounded-full flex items-center justify-center cursor-pointer tap-highlight" onclick="showToast('灵动岛：SingWallet 本地离线 OCR 服务运行中')">
         <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-auto mr-2"></div>
@@ -222,10 +223,10 @@
 
         </div>
 
-        <!-- Floating Bottom Quick Action Capsule (Pure floating button, 80% frosted glass background) -->
-        <div id="tx-quick-record-bar" class="absolute bottom-16 left-0 right-0 p-3 bg-slate-900/80 backdrop-blur-md border-t border-slate-800/40 z-20 shadow-lg">
-          <button onclick="openManualAddModal()" class="w-full py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold shadow-xl flex items-center justify-center space-x-2 tap-highlight transition-all">
-            <div class="w-5 h-5 mr-1" id="quick-record-plus-icon"></div>
+        <!-- Floating Bottom Quick Action Capsule (Pure floating button, transparent container) -->
+        <div id="tx-quick-record-bar" class="absolute bottom-12 left-0 right-0 p-2 bg-transparent z-20 flex justify-center pointer-events-none">
+          <button onclick="openManualAddModal()" class="w-full max-w-[260px] py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-xl shadow-indigo-900/40 flex items-center justify-center space-x-1.5 tap-highlight transition-all pointer-events-auto">
+            <div class="w-4 h-4 mr-1" id="quick-record-plus-icon"></div>
             <span>快记一手</span>
           </button>
         </div>
@@ -344,75 +345,7 @@
               <input id="input-time" type="text" value="" placeholder="YYYY-MM-DD HH:mm:ss" class="w-full px-3 py-2 text-sm rounded-xl bg-slate-900 border border-slate-700 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-mono">
             </div>
 
-            <!-- Channel & Account (Pure HTML/CSS Custom Dropdown Components) -->
-            <div class="grid grid-cols-2 gap-2 text-xs">
-              <div>
-                <label class="block text-xs font-medium text-slate-400 mb-1">支付渠道</label>
-                <div class="custom-dropdown-container" id="dropdown-wrap-select-channel" data-id="select-channel">
-                  <input type="hidden" id="select-channel" value="微信">
-                  <button type="button" class="custom-dropdown-trigger px-3.5 py-2 text-xs font-medium rounded-xl" onclick="toggleCustomDropdown('select-channel', event)">
-                    <span class="custom-dropdown-label truncate" id="label-select-channel">微信</span>
-                    <svg class="w-4 h-4 dropdown-chevron ml-2 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M19 9l-7 7-7-7"/></svg>
-                  </button>
-                  <div class="custom-dropdown-menu rounded-2xl backdrop-blur-xl shadow-2xl" id="menu-select-channel" style="min-width: 140px;">
-                    <div class="custom-dropdown-option rounded-xl selected" tabindex="0" data-value="微信" onclick="selectCustomDropdownOption('select-channel', '微信', event)" onkeydown="if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('select-channel', '微信', event);event.preventDefault();}">
-                      <span class="truncate">微信</span>
-                      <span class="opt-check">✓</span>
-                    </div>
-                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="支付宝" onclick="selectCustomDropdownOption('select-channel', '支付宝', event)" onkeydown="if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('select-channel', '支付宝', event);event.preventDefault();}">
-                      <span class="truncate">支付宝</span>
-                      <span class="opt-check">✓</span>
-                    </div>
-                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="云闪付" onclick="selectCustomDropdownOption('select-channel', '云闪付', event)" onkeydown="if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('select-channel', '云闪付', event);event.preventDefault();}">
-                      <span class="truncate">云闪付</span>
-                      <span class="opt-check">✓</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div>
-                <label class="block text-xs font-medium text-slate-400 mb-1">支出账户</label>
-                <div class="custom-dropdown-container" id="dropdown-wrap-select-account" data-id="select-account">
-                  <input type="hidden" id="select-account" value="钱包">
-                  <button type="button" class="custom-dropdown-trigger px-3.5 py-2 text-xs font-medium rounded-xl" onclick="toggleCustomDropdown('select-account', event)">
-                    <span class="custom-dropdown-label truncate" id="label-select-account">钱包</span>
-                    <svg class="w-4 h-4 dropdown-chevron ml-2 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M19 9l-7 7-7-7"/></svg>
-                  </button>
-                  <div class="custom-dropdown-menu rounded-2xl backdrop-blur-xl menu-right shadow-2xl" id="menu-select-account" style="min-width: 175px;">
-                    <div class="custom-dropdown-option rounded-xl selected" tabindex="0" data-channel="微信" data-value="钱包" onclick="selectCustomDropdownOption('select-account', '钱包', event)" onkeydown="if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('select-account', '钱包', event);event.preventDefault();}">
-                      <span class="truncate">钱包</span>
-                      <span class="opt-check">✓</span>
-                    </div>
-                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-channel="微信" data-value="零钱通" onclick="selectCustomDropdownOption('select-account', '零钱通', event)" onkeydown="if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('select-account', '零钱通', event);event.preventDefault();}">
-                      <span class="truncate">零钱通</span>
-                      <span class="opt-check">✓</span>
-                    </div>
-                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-channel="微信" data-value="招商银行(8848)" onclick="selectCustomDropdownOption('select-account', '招商银行(8848)', event)" onkeydown="if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('select-account', '招商银行(8848)', event);event.preventDefault();}">
-                      <span class="truncate">招商银行(8848)</span>
-                      <span class="opt-check">✓</span>
-                    </div>
-                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-channel="支付宝" data-value="余额" onclick="selectCustomDropdownOption('select-account', '余额', event)" onkeydown="if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('select-account', '余额', event);event.preventDefault();}">
-                      <span class="truncate">余额</span>
-                      <span class="opt-check">✓</span>
-                    </div>
-                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-channel="支付宝" data-value="余额宝" onclick="selectCustomDropdownOption('select-account', '余额宝', event)" onkeydown="if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('select-account', '余额宝', event);event.preventDefault();}">
-                      <span class="truncate">余额宝</span>
-                      <span class="opt-check">✓</span>
-                    </div>
-                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-channel="支付宝" data-value="建设银行(1234)" onclick="selectCustomDropdownOption('select-account', '建设银行(1234)', event)" onkeydown="if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('select-account', '建设银行(1234)', event);event.preventDefault();}">
-                      <span class="truncate">建设银行(1234)</span>
-                      <span class="opt-check">✓</span>
-                    </div>
-                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-channel="云闪付" data-value="工商银行(5678)" onclick="selectCustomDropdownOption('select-account', '工商银行(5678)', event)" onkeydown="if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('select-account', '工商银行(5678)', event);event.preventDefault();}">
-                      <span class="truncate">工商银行(5678)</span>
-                      <span class="opt-check">✓</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 账单分类 (图4优化：分类UI与其他表单项保持高度一致) -->
+            <!-- 账单分类 (置于支付渠道之前，避免被底部导航遮挡并确保充足展开高度) -->
             <div>
               <div class="flex items-center justify-between mb-1">
                 <label class="block text-xs font-medium text-slate-400">账单分类</label>
@@ -488,6 +421,74 @@
                       <span class="opt-text truncate font-medium">工资收入</span>
                     </div>
                     <span class="opt-check">✓</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Channel & Account (Pure HTML/CSS Custom Dropdown Components) -->
+            <div class="grid grid-cols-2 gap-2 text-xs" id="draft-payment-grid">
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">支付渠道</label>
+                <div class="custom-dropdown-container" id="dropdown-wrap-select-channel" data-id="select-channel">
+                  <input type="hidden" id="select-channel" value="微信">
+                  <button type="button" class="custom-dropdown-trigger px-3.5 py-2 text-xs font-medium rounded-xl" onclick="toggleCustomDropdown('select-channel', event)">
+                    <span class="custom-dropdown-label truncate" id="label-select-channel">微信</span>
+                    <svg class="w-4 h-4 dropdown-chevron ml-2 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M19 9l-7 7-7-7"/></svg>
+                  </button>
+                  <div class="custom-dropdown-menu rounded-2xl backdrop-blur-xl shadow-2xl" id="menu-select-channel">
+                    <div class="custom-dropdown-option rounded-xl selected" tabindex="0" data-value="微信" onclick="selectCustomDropdownOption('select-channel', '微信', event)" onkeydown="if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('select-channel', '微信', event);event.preventDefault();}">
+                      <span class="truncate">微信</span>
+                      <span class="opt-check">✓</span>
+                    </div>
+                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="支付宝" onclick="selectCustomDropdownOption('select-channel', '支付宝', event)" onkeydown="if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('select-channel', '支付宝', event);event.preventDefault();}">
+                      <span class="truncate">支付宝</span>
+                      <span class="opt-check">✓</span>
+                    </div>
+                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="云闪付" onclick="selectCustomDropdownOption('select-channel', '云闪付', event)" onkeydown="if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('select-channel', '云闪付', event);event.preventDefault();}">
+                      <span class="truncate">云闪付</span>
+                      <span class="opt-check">✓</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">支出账户</label>
+                <div class="custom-dropdown-container" id="dropdown-wrap-select-account" data-id="select-account">
+                  <input type="hidden" id="select-account" value="钱包">
+                  <button type="button" class="custom-dropdown-trigger px-3.5 py-2 text-xs font-medium rounded-xl" onclick="toggleCustomDropdown('select-account', event)">
+                    <span class="custom-dropdown-label truncate" id="label-select-account">钱包</span>
+                    <svg class="w-4 h-4 dropdown-chevron ml-2 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M19 9l-7 7-7-7"/></svg>
+                  </button>
+                  <div class="custom-dropdown-menu rounded-2xl backdrop-blur-xl menu-right shadow-2xl" id="menu-select-account">
+                    <div class="custom-dropdown-option rounded-xl selected" tabindex="0" data-channel="微信" data-value="钱包" onclick="selectCustomDropdownOption('select-account', '钱包', event)" onkeydown="if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('select-account', '钱包', event);event.preventDefault();}">
+                      <span class="truncate">钱包</span>
+                      <span class="opt-check">✓</span>
+                    </div>
+                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-channel="微信" data-value="零钱通" onclick="selectCustomDropdownOption('select-account', '零钱通', event)" onkeydown="if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('select-account', '零钱通', event);event.preventDefault();}">
+                      <span class="truncate">零钱通</span>
+                      <span class="opt-check">✓</span>
+                    </div>
+                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-channel="微信" data-value="招商银行(8848)" onclick="selectCustomDropdownOption('select-account', '招商银行(8848)', event)" onkeydown="if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('select-account', '招商银行(8848)', event);event.preventDefault();}">
+                      <span class="truncate">招商银行(8848)</span>
+                      <span class="opt-check">✓</span>
+                    </div>
+                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-channel="支付宝" data-value="余额" onclick="selectCustomDropdownOption('select-account', '余额', event)" onkeydown="if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('select-account', '余额', event);event.preventDefault();}">
+                      <span class="truncate">余额</span>
+                      <span class="opt-check">✓</span>
+                    </div>
+                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-channel="支付宝" data-value="余额宝" onclick="selectCustomDropdownOption('select-account', '余额宝', event)" onkeydown="if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('select-account', '余额宝', event);event.preventDefault();}">
+                      <span class="truncate">余额宝</span>
+                      <span class="opt-check">✓</span>
+                    </div>
+                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-channel="支付宝" data-value="建设银行(1234)" onclick="selectCustomDropdownOption('select-account', '建设银行(1234)', event)" onkeydown="if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('select-account', '建设银行(1234)', event);event.preventDefault();}">
+                      <span class="truncate">建设银行(1234)</span>
+                      <span class="opt-check">✓</span>
+                    </div>
+                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-channel="云闪付" data-value="工商银行(5678)" onclick="selectCustomDropdownOption('select-account', '工商银行(5678)', event)" onkeydown="if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('select-account', '工商银行(5678)', event);event.preventDefault();}">
+                      <span class="truncate">工商银行(5678)</span>
+                      <span class="opt-check">✓</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -575,9 +576,9 @@
             <!-- API Key -->
             <div>
               <label class="block text-slate-400 mb-1 text-[11px] font-medium">API Key </label>
-              <div class="relative">
-                <input id="vlm-api-key" type="password" oninput="saveLlmConfigFromInputs(false)" class="w-full pl-2.5 pr-8 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-xs outline-none focus:ring-2 focus:ring-indigo-500 transition-all">
-                <button type="button" onclick="toggleVlmKeyVisibility()" class="absolute right-2.5 top-1.5 text-slate-400 hover:text-white tap-highlight w-4 h-4 flex items-center justify-center" title="显示/隐藏密钥" id="vlm-eye-btn"></button>
+              <div class="relative flex items-center">
+                <input id="vlm-api-key" type="password" oninput="saveLlmConfigFromInputs(false)" class="w-full pl-2.5 pr-10 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-xs outline-none focus:ring-2 focus:ring-indigo-500 transition-all">
+                <button type="button" onclick="toggleVlmKeyVisibility()" class="absolute right-1 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white tap-highlight w-7 h-6.5 flex items-center justify-center bg-slate-900 rounded-lg z-10" title="显示/隐藏密钥" id="vlm-eye-btn"></button>
               </div>
             </div>
 
@@ -606,6 +607,24 @@
               <span id="test-conn-text">测试连通性</span>
             </button>
             <button type="button" onclick="saveLlmConfig(true)" class="py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold tap-highlight text-center shadow transition-all">保存配置</button>
+          </div>
+        </div>
+
+        <!-- ================= 快捷指令与无感抓屏 (Shortcut Capture Card - 极简克制版) ================= -->
+        <div id="shortcut-capture-card" class="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-4 space-y-3 shadow-lg">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-700/60">
+            <h4 class="font-bold text-xs text-slate-200 whitespace-nowrap">快捷指令</h4>
+            <span class="text-[11px] text-slate-400 font-mono whitespace-nowrap">后台无感识别</span>
+            <span id="shortcut-api-url" class="hidden">http://localhost:8765/api/shortcut/adb-capture?delay=3</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2.5">
+            <button type="button" id="btn-copy-shortcut-url" onclick="copyShortcutApiUrl()" class="py-2 px-3 rounded-xl bg-slate-900/90 hover:bg-slate-700/80 border border-slate-700/80 hover:border-indigo-500/50 text-slate-200 text-xs font-medium transition-all flex items-center justify-center gap-1.5 tap-highlight">
+              <span>复制接口地址</span>
+            </button>
+            <button type="button" id="btn-trigger-delayed-capture" onclick="triggerDelayedPhoneCapture(3)" class="py-2 px-3 rounded-xl bg-slate-900/90 hover:bg-slate-700/80 border border-slate-700/80 hover:border-indigo-500/50 text-slate-200 text-xs font-medium transition-all flex items-center justify-center gap-1.5 tap-highlight">
+              <span>延时抓屏测试</span>
+            </button>
           </div>
         </div>
 
@@ -774,7 +793,7 @@
     </div>
 
     <!-- ================= 全局弹窗 1: 高级多维筛选抽屉 ================= -->
-    <div id="filter-modal" class="hidden absolute inset-0 bg-black/75 z-40 flex items-end justify-center backdrop-blur-sm">
+    <div id="filter-modal" class="hidden absolute inset-0 bg-black/75 z-50 flex items-end justify-center backdrop-blur-sm">
       <div class="bg-slate-900 border-t border-slate-700 rounded-t-3xl p-5 w-full shadow-2xl space-y-4 drawer-spring-in max-h-[85%] flex flex-col">
         <div class="flex items-center justify-between pb-2 border-b border-slate-800 shrink-0">
           <div class="flex items-center space-x-2">
@@ -868,7 +887,7 @@
     </div>
 
     <!-- ================= 全局弹窗 2: 分类更换选择器 ================= -->
-    <div id="category-modal" class="hidden absolute inset-0 bg-black/75 z-40 flex items-center justify-center p-4 backdrop-blur-sm">
+    <div id="category-modal" class="hidden absolute inset-0 bg-black/75 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
       <div class="bg-slate-900 border border-slate-700 rounded-3xl p-4 max-w-sm w-full shadow-2xl space-y-3.5 animate-fadeIn">
         <div class="flex items-center justify-between pb-2 border-b border-slate-800">
           <h3 class="font-bold text-sm text-white">选择交易分类</h3>
@@ -912,7 +931,7 @@
     </div>
 
     <!-- ================= 全局弹窗 4: 手动快速记账 & 截图智能识别 (图1优化：快记一手界面严格按图1排布) ================= -->
-    <div id="manual-add-modal" class="hidden absolute inset-0 bg-black/75 z-40 flex items-center justify-center p-3.5 backdrop-blur-sm overflow-hidden" onclick="if(event.target===this) closeManualAddModal()">
+    <div id="manual-add-modal" class="hidden absolute inset-0 bg-black/75 z-50 flex items-center justify-center p-3.5 backdrop-blur-sm overflow-hidden" onclick="if(event.target===this) closeManualAddModal()">
       <div id="manual-add-dialog" class="bg-slate-900/95 backdrop-blur-xl border border-slate-700/80 rounded-3xl p-3.5 max-w-xs w-full shadow-2xl space-y-2 animate-fadeIn">
         
         <!-- Header -->
@@ -1077,7 +1096,7 @@
                   <span class="custom-dropdown-label truncate" id="label-manual-pay-channel">微信</span>
                   <svg class="w-4 h-4 dropdown-chevron ml-1 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M19 9l-7 7-7-7"/></svg>
                 </button>
-                <div class="custom-dropdown-menu menu-dropup rounded-2xl backdrop-blur-xl shadow-2xl" id="menu-manual-pay-channel" style="min-width: 125px;">
+                <div class="custom-dropdown-menu menu-dropup rounded-2xl backdrop-blur-xl shadow-2xl" id="menu-manual-pay-channel">
                   <div class="custom-dropdown-option rounded-xl selected" tabindex="0" data-value="微信" onclick="selectCustomDropdownOption('manual-pay-channel', '微信', event)">
                     <span class="truncate">微信</span>
                     <span class="opt-check">✓</span>
@@ -1106,7 +1125,7 @@
                   <span class="custom-dropdown-label truncate" id="label-manual-pay-sub">钱包</span>
                   <svg class="w-4 h-4 dropdown-chevron ml-1 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M19 9l-7 7-7-7"/></svg>
                 </button>
-                <div class="custom-dropdown-menu menu-dropup rounded-2xl backdrop-blur-xl menu-right shadow-2xl" id="menu-manual-pay-sub" style="min-width: 165px; max-height: 180px;">
+                <div class="custom-dropdown-menu menu-dropup rounded-2xl backdrop-blur-xl menu-right shadow-2xl" id="menu-manual-pay-sub" style="max-height: 180px;">
                   <div class="custom-dropdown-option rounded-xl selected" data-channel="微信" tabindex="0" data-value="钱包" onclick="selectCustomDropdownOption('manual-pay-sub', '钱包', event)">
                     <span class="truncate">钱包</span>
                     <span class="opt-check">✓</span>
@@ -1162,7 +1181,7 @@
         </div>
 
         <!-- 图1: 确认入账 -->
-        <button onclick="saveManualTransaction()" class="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow tap-highlight transition-all mt-1">
+        <button onclick="saveManualTransaction()" class="w-full py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow tap-highlight transition-all mt-1">
           确认入账
         </button>
       </div>
@@ -1172,7 +1191,7 @@
     <div id="llm-config-modal" class="hidden" style="display: none;" aria-hidden="true"></div>
 
     <!-- ================= 全局弹窗 5: 账目详情查看 ================= -->
-    <div id="tx-detail-modal" class="hidden absolute inset-0 bg-black/75 z-40 flex items-center justify-center p-6 backdrop-blur-sm">
+    <div id="tx-detail-modal" class="hidden absolute inset-0 bg-black/75 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
       <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 max-w-xs w-full shadow-2xl space-y-3 animate-fadeIn">
         <div class="flex items-center justify-between pb-2 border-b border-slate-800">
           <h3 class="font-bold text-sm text-white">账目流水详情</h3>
@@ -1198,7 +1217,7 @@
     </div>
 
     <!-- ================= 全局弹窗 6: 单号安全与去重验证 ================= -->
-    <div id="order-security-modal" class="hidden absolute inset-0 bg-black/75 z-40 flex items-center justify-center p-6 backdrop-blur-sm">
+    <div id="order-security-modal" class="hidden absolute inset-0 bg-black/75 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
       <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 max-w-xs w-full shadow-2xl space-y-3 animate-fadeIn">
         <div class="w-12 h-12 rounded-2xl bg-blue-500/20 text-blue-400 flex items-center justify-center p-2.5 mx-auto border border-blue-500/30" id="order-sec-shield-icon"></div>
         <div class="text-center">
@@ -1218,7 +1237,7 @@
     </div>
 
     <!-- ================= 全局弹窗 7: 月份选择器 (无 alert / prompt，全量12个月网格) ================= -->
-    <div id="month-modal" class="hidden absolute inset-0 bg-black/75 z-40 flex items-center justify-center p-4 backdrop-blur-sm">
+    <div id="month-modal" class="hidden absolute inset-0 bg-black/75 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
       <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 max-w-sm w-full shadow-2xl space-y-3.5 animate-fadeIn">
         <div class="flex items-center justify-between pb-2 border-b border-slate-800">
           <div class="flex items-center space-x-2">
@@ -1264,7 +1283,7 @@
     </div>
 
     <!-- Deduplication Warning Modal -->
-    <div id="dedup-modal" class="hidden absolute inset-0 bg-black/75 z-40 flex items-center justify-center p-6 backdrop-blur-sm">
+    <div id="dedup-modal" class="hidden absolute inset-0 bg-black/75 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
       <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 max-w-xs w-full shadow-2xl space-y-3">
         <div class="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center p-2.5 mx-auto border border-amber-500/30" id="dedup-warn-icon"></div>
         <div class="text-center">
@@ -1288,7 +1307,7 @@
     </div>
 
     <!-- Trash Bin Modal -->
-    <div id="trash-modal" class="hidden absolute inset-0 bg-black/75 z-40 flex items-center justify-center p-6 backdrop-blur-sm">
+    <div id="trash-modal" class="hidden absolute inset-0 bg-black/75 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
       <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 max-w-xs w-full shadow-2xl space-y-3">
         <div class="flex items-center justify-between pb-2 border-b border-slate-800">
           <h3 class="font-bold text-sm text-white">回收站 (保留 30 天)</h3>
@@ -1303,32 +1322,60 @@
       </div>
     </div>
 
-    <!-- Bottom Navigation Bar (Material 3 Style) -->
-    <div class="absolute bottom-0 left-0 right-0 h-16 bg-slate-950 border-t border-slate-800 grid grid-cols-3 items-center z-20">
-      <button onclick="switchTab('transactions')" id="nav-btn-transactions" class="flex flex-col items-center justify-center h-full text-indigo-400 font-semibold tap-highlight">
-        <div class="w-5 h-5 mx-auto mb-0.5" id="nav-icon-transactions"></div>
-        <span class="text-[11px] mt-0.5">流水明细</span>
+    <!-- iOS-style Transaction Delete Confirmation Modal -->
+    <div id="tx-delete-confirm-modal" class="hidden absolute inset-0 bg-black/75 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-fadeIn">
+      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 max-w-xs w-full shadow-2xl space-y-3.5 text-center">
+        <div class="w-12 h-12 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center mx-auto mb-1">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        </div>
+        <div>
+          <h3 class="font-bold text-base text-white tracking-tight">确认删除账单</h3>
+          <p id="tx-delete-confirm-desc" class="text-xs text-slate-300 leading-relaxed mt-1.5 px-1">
+            确定要删除该笔账单吗？删除后可在右上角回收站中还原。
+          </p>
+        </div>
+        <div class="grid grid-cols-2 gap-2.5 pt-1">
+          <button id="btn-cancel-tx-delete" onclick="closeTxDeleteConfirmModal()" class="py-2.5 rounded-xl border border-slate-700 text-xs font-semibold text-slate-300 hover:bg-slate-800 active:bg-slate-700/80 tap-highlight transition-colors">
+            取消
+          </button>
+          <button id="btn-confirm-tx-delete" onclick="confirmTxSwipeDelete()" class="py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white text-xs font-bold shadow-lg shadow-rose-900/30 tap-highlight transition-colors">
+            确认删除
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Navigation Bar (Material 3 Style - 紧凑贴底设计) -->
+    <div id="bottom-nav-bar" class="absolute bottom-0 left-0 right-0 h-11 bg-slate-950 border-t border-slate-800 grid grid-cols-3 items-end z-20 pb-0.5">
+      <button onclick="switchTab('transactions')" id="nav-btn-transactions" class="flex flex-col items-center justify-end h-full text-indigo-400 font-semibold tap-highlight pb-0.5">
+        <div class="w-4 h-4 mx-auto" id="nav-icon-transactions"></div>
+        <span class="text-[11px] leading-tight">流水明细</span>
       </button>
 
-      <button onclick="switchTab('drafts')" id="nav-btn-drafts" class="relative flex flex-col items-center justify-center h-full text-slate-400 hover:text-white tap-highlight">
-        <span id="draft-nav-dot" class="hidden absolute top-2 right-8 w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-        <span id="nav-draft-badge" class="hidden absolute top-1 right-6 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[10px] font-bold text-white flex items-center justify-center">0</span>
-        <div class="w-5 h-5 mx-auto mb-0.5" id="nav-icon-drafts"></div>
-        <span class="text-[11px] mt-0.5">草稿箱</span>
+      <button onclick="switchTab('drafts')" id="nav-btn-drafts" class="relative flex flex-col items-center justify-end h-full text-slate-400 hover:text-white tap-highlight pb-0.5">
+        <span id="draft-nav-dot" class="hidden absolute top-1 right-8 w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+        <span id="nav-draft-badge" class="hidden absolute top-0.5 right-6 min-w-[16px] h-3.5 px-1 rounded-full bg-red-500 text-[9px] font-bold text-white flex items-center justify-center">0</span>
+        <div class="w-4 h-4 mx-auto" id="nav-icon-drafts"></div>
+        <span class="text-[11px] leading-tight">草稿箱</span>
       </button>
 
-      <button onclick="switchTab('rules')" id="nav-btn-rules" class="flex flex-col items-center justify-center h-full text-slate-400 hover:text-white tap-highlight">
-        <div class="w-5 h-5 mx-auto mb-0.5" id="nav-icon-rules"></div>
-        <span class="text-[11px] mt-0.5">AI 配置</span>
+      <button onclick="switchTab('rules')" id="nav-btn-rules" class="flex flex-col items-center justify-end h-full text-slate-400 hover:text-white tap-highlight pb-0.5">
+        <div class="w-4 h-4 mx-auto" id="nav-icon-rules"></div>
+        <span class="text-[11px] leading-tight">AI 配置</span>
       </button>
+    </div>
+
+    <!-- Home Indicator -->
+    <div id="simulator-home-indicator" class="hidden h-5 bg-slate-900 w-full flex items-center justify-center shrink-0">
+      <div class="w-32 h-1 bg-slate-600 rounded-full"></div>
     </div>
   </div>
 
-  <script src="preview/js/domain_config.js"></script>
-  <script src="preview/js/icon_registry.js"></script>
-  <script src="preview/js/dropdown_engine.js"></script>
-  <script src="preview/js/ocr_vlm_engine.js"></script>
-  <script src="preview/js/app_controller.js"></script>
+  <script src="preview/js/domain_config.js?v=20261027_v7"></script>
+  <script src="preview/js/icon_registry.js?v=20261027_v7"></script>
+  <script src="preview/js/dropdown_engine.js?v=20261027_v7"></script>
+  <script src="preview/js/ocr_vlm_engine.js?v=20261027_v7"></script>
+  <script src="preview/js/app_controller.js?v=20261027_v7"></script>
 
 
 
