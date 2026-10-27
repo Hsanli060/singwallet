@@ -43,9 +43,10 @@ class NativeCaptureHostApiImpl(
          * - Divides rect.left, rect.top, rect.width, rect.height by imageWidth and imageHeight.
          * - Coerces each component into [0.0, 1.0].
          * - Defensively handles zero/negative dimensions and out-of-bound coordinates.
+         * - Null-safe accepting nullable Rect (ML Kit textLine.boundingBox is nullable).
          */
-        fun normalizeBoundingBox(rect: Rect, imageWidth: Int, imageHeight: Int): OcrBoundingBox {
-            if (imageWidth <= 0 || imageHeight <= 0) {
+        fun normalizeBoundingBox(rect: Rect?, imageWidth: Int, imageHeight: Int): OcrBoundingBox {
+            if (rect == null || imageWidth <= 0 || imageHeight <= 0) {
                 return OcrBoundingBox(left = 0.0, top = 0.0, width = 0.0, height = 0.0)
             }
             val flutterLeft = (rect.left.toDouble() / imageWidth).coerceIn(0.0, 1.0)
@@ -58,13 +59,6 @@ class NativeCaptureHostApiImpl(
                 width = flutterWidth,
                 height = flutterHeight
             )
-        }
-
-        /**
-         * Null-safe overload accepting nullable Rect (ML Kit textLine.boundingBox is nullable).
-         */
-        fun normalizeBoundingBox(rect: Rect?, imageWidth: Int, imageHeight: Int): OcrBoundingBox {
-            return normalizeBoundingBox(rect ?: Rect(), imageWidth, imageHeight)
         }
     }
 
