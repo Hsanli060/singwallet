@@ -1,0 +1,227 @@
+.hidden { display: none !important; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.35); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.65); }
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+.tap-highlight:active { transform: scale(0.96); transition: transform 0.08s ease; }
+
+/* Apple/iOS 级弹簧减震入场曲线 cubic-bezier(0.16, 1, 0.3, 1) */
+.animate-fadeIn,
+.modal-spring-in {
+  animation: modalSpringIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes modalSpringIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.drawer-spring-in {
+  animation: drawerSpringIn 0.36s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes drawerSpringIn {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 全局强制图标尺寸兜底规则 (彻底根治 SVG 图标脱离容器撑满异常) */
+[data-cat-icon],
+[data-ui-icon] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+[data-cat-icon].w-3\.5, [data-ui-icon].w-3\.5 { width: 0.875rem; height: 0.875rem; }
+[data-cat-icon].w-4, [data-ui-icon].w-4 { width: 1rem; height: 1rem; }
+[data-cat-icon].w-5, [data-ui-icon].w-5 { width: 1.25rem; height: 1.25rem; }
+[data-cat-icon].w-6, [data-ui-icon].w-6 { width: 1.5rem; height: 1.5rem; }
+[data-cat-icon].w-7, [data-ui-icon].w-7 { width: 1.75rem; height: 1.75rem; }
+[data-cat-icon].w-8, [data-ui-icon].w-8 { width: 2rem; height: 2rem; }
+[data-cat-icon].w-10, [data-ui-icon].w-10 { width: 2.5rem; height: 2.5rem; }
+[data-cat-icon] > svg,
+[data-ui-icon] > svg {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+}
+.active-tag { background: #4f46e5 !important; color: #ffffff !important; border-color: #4f46e5 !important; }
+
+#tx-quick-record-bar {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+/* Pure HTML/CSS Custom Floating Select Components (100% Win32 Popups Free) */
+.custom-dropdown-container {
+  position: relative;
+  width: 100%;
+}
+.custom-dropdown-container.inline-dropdown {
+  width: auto;
+  display: inline-flex;
+}
+.custom-dropdown-container.z-active {
+  z-index: 60 !important;
+}
+
+.custom-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.96) 0%, rgba(15, 23, 42, 0.98) 100%);
+  border: 1px solid rgba(71, 85, 105, 0.75);
+  border-radius: 0.75rem; /* rounded-xl (12px) */
+  color: #f8fafc;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.35), inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+  user-select: none;
+  text-align: left;
+}
+.custom-dropdown-trigger:hover {
+  background: linear-gradient(180deg, rgba(51, 65, 85, 0.96) 0%, rgba(30, 41, 59, 0.98) 100%);
+  border-color: rgba(99, 102, 241, 0.65);
+  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.45), 0 0 12px rgba(99, 102, 241, 0.2);
+}
+.custom-dropdown-trigger.active,
+.custom-dropdown-trigger:focus-visible {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.35), 0 0 20px rgba(99, 102, 241, 0.3);
+}
+.custom-dropdown-trigger:active {
+  transform: scale(0.985);
+}
+
+/* Floating Menu Overlay - rounded-2xl & Dark Frosted Glass */
+.custom-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 100%;
+  min-width: 140px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #0f172a !important;
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(99, 102, 241, 0.45);
+  border-radius: 1rem; /* rounded-2xl (16px) */
+  padding: 6px;
+  box-shadow: 0 20px 35px -8px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.1), 0 0 16px rgba(99, 102, 241, 0.18);
+  z-index: 70;
+  opacity: 0;
+  transform: translateY(-6px) scale(0.97);
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 0.16s ease-out, transform 0.16s ease-out, visibility 0.16s;
+}
+.custom-dropdown-menu.menu-right {
+  left: auto;
+  right: 0;
+}
+.custom-dropdown-menu.menu-dropup {
+  top: auto;
+  bottom: calc(100% + 6px);
+  transform: translateY(6px) scale(0.97);
+}
+.custom-dropdown-menu.menu-dropup.open {
+  transform: translateY(0) scale(1);
+}
+.custom-dropdown-menu.open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+  visibility: visible;
+}
+
+/* Dropdown Option Items - rounded-xl */
+.custom-dropdown-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 0.75rem; /* rounded-xl (12px) */
+  font-size: 13px;
+  font-weight: 500;
+  color: #f1f5f9;
+  cursor: pointer;
+  transition: all 0.12s ease-in-out;
+  border: 1px solid transparent;
+  user-select: none;
+  white-space: nowrap;
+}
+.custom-dropdown-option:hover {
+  background: rgba(49, 46, 129, 0.65);
+  color: #ffffff;
+  border-color: rgba(99, 102, 241, 0.35);
+}
+.custom-dropdown-option.selected {
+  background: rgba(99, 102, 241, 0.28);
+  color: #c7d2fe;
+  font-weight: 600;
+  border-color: rgba(99, 102, 241, 0.55);
+}
+.custom-dropdown-option .opt-check {
+  display: none;
+  color: #818cf8;
+  font-weight: 700;
+  font-size: 13px;
+  margin-left: 8px;
+}
+.custom-dropdown-option.selected .opt-check {
+  display: inline-block;
+}
+
+/* Chevron rotation */
+.dropdown-chevron {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.custom-dropdown-trigger.active .dropdown-chevron {
+  transform: rotate(180deg);
+}
+
+/* Monthly Category Breakdown Solid Pie & Legend */
+#monthly-pie-chart svg .pie-slice {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+#monthly-pie-legend {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+#monthly-pie-legend::-webkit-scrollbar {
+  display: none;
+}
+.monthly-pie-legend-item {
+  flex-shrink: 0;
+  min-height: 15px;
+}
+.pie-legend-fade-bottom {
+  mask-image: linear-gradient(to bottom, #000 68%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 68%, transparent 100%);
+}
+

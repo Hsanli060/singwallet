@@ -5,6 +5,7 @@ import 'package:singwallet/core/utils/currency_utils.dart';
 import 'package:singwallet/data/models/models.dart';
 import 'package:singwallet/presentation/providers/core_providers.dart';
 import 'package:singwallet/presentation/providers/rule_account_providers.dart';
+import 'package:singwallet/presentation/theme/app_icon_registry.dart';
 
 /// Tab displaying financial asset accounts, total assets sum, real-time balances,
 /// channel type icons (WeChat, Alipay, Bank Card, Cash), and account creation dialog.
@@ -16,62 +17,18 @@ class AccountsTab extends ConsumerStatefulWidget {
 }
 
 class _AccountsTabState extends ConsumerState<AccountsTab> {
-  IconData _getChannelIcon(String kind, String name) {
-    final lowerKind = kind.toLowerCase();
-    final lowerName = name.toLowerCase();
+  IconData _getChannelIcon(String kind, String name) =>
+      AppIconRegistry.resolveChannelIcon(kind, name);
 
-    if (lowerKind.contains('wechat') || lowerName.contains('微信')) {
-      return Icons.chat_bubble_outline;
-    } else if (lowerKind.contains('alipay') || lowerName.contains('支付宝')) {
-      return Icons.account_balance_wallet_outlined;
-    } else if (lowerKind.contains('card') ||
-        lowerKind.contains('bank') ||
-        lowerName.contains('银行') ||
-        lowerName.contains('卡')) {
-      return Icons.credit_card_outlined;
-    } else if (lowerKind.contains('cash') || lowerName.contains('现金')) {
-      return Icons.payments_outlined;
-    }
-    return Icons.account_balance_outlined;
-  }
+  Color _getChannelColor(String kind, String name, ThemeData theme) =>
+      AppIconRegistry.resolveChannelColor(kind, theme, name);
 
-  Color _getChannelColor(String kind, String name, ThemeData theme) {
-    final lowerKind = kind.toLowerCase();
-    final lowerName = name.toLowerCase();
+  String _getChannelLabel(String kind) =>
+      AppIconRegistry.resolveAccountTypeLabel(kind);
 
-    if (lowerKind.contains('wechat') || lowerName.contains('微信')) {
-      return Colors.green.shade600;
-    } else if (lowerKind.contains('alipay') || lowerName.contains('支付宝')) {
-      return Colors.blue.shade600;
-    } else if (lowerKind.contains('card') ||
-        lowerKind.contains('bank') ||
-        lowerName.contains('银行') ||
-        lowerName.contains('卡')) {
-      return Colors.indigo.shade500;
-    } else if (lowerKind.contains('cash') || lowerName.contains('现金')) {
-      return Colors.amber.shade700;
-    }
-    return theme.colorScheme.primary;
-  }
-
-  String _getChannelLabel(String kind) {
-    switch (kind) {
-      case 'wechat':
-        return '微信支付';
-      case 'alipay':
-        return '支付宝';
-      case 'debit_card':
-        return '借记卡';
-      case 'credit_card':
-        return '信用卡';
-      case 'cash':
-        return '现金';
-      case 'e_wallet':
-        return '电子钱包';
-      default:
-        return '金融账户';
-    }
-  }
+  IconData _typeIcon(String kind, String name) => _getChannelIcon(kind, name);
+  Color _typeColor(String kind, String name, ThemeData theme) => _getChannelColor(kind, name, theme);
+  String _typeLabel(String kind) => _getChannelLabel(kind);
 
   void _showAddAccountDialog() {
     final nameController = TextEditingController();

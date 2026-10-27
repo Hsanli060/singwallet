@@ -33,11 +33,11 @@ window.addEventListener('DOMContentLoaded', () => {
       'quick-date-dropdown',
       'select-channel',
       'select-account',
-      'rule-match-type',
-      'rule-target-cat',
+      'select-draft-category',
       'manual-category',
       'manual-account',
-      'acc-add-type'
+      'manual-pay-channel',
+      'vlm-provider-select'
     ];
 
     dropdownIds.forEach(id => {
@@ -138,20 +138,22 @@ window.addEventListener('DOMContentLoaded', () => {
     accInput.value = '微信钱包';
     assert(document.getElementById('label-select-account').textContent.trim() === '钱包', "Alias: accInput set to '微信钱包' matched '钱包'");
 
-    // Group 11: Rule match type dropdown and alias test
-    const ruleTypeInput = document.getElementById('rule-match-type');
-    selectCustomDropdownOption('rule-match-type', 'exact');
-    assert(ruleTypeInput.value === 'exact', "rule-match-type value is exact");
-    assert(document.getElementById('label-rule-match-type').textContent.includes('全词精确匹配'), "rule-match-type label has 全词精确匹配");
+    // Group 11: VLM Provider dropdown test
+    const vlmProvInput = document.getElementById('vlm-provider-select');
+    assert(!!vlmProvInput, "vlm-provider-select element exists");
+    selectCustomDropdownOption('vlm-provider-select', 'openai');
+    assert(vlmProvInput.value === 'openai', "vlm-provider-select value is openai");
+    assert(document.getElementById('label-vlm-provider-select').textContent.includes('OpenAI'), "vlm-provider-select label has OpenAI");
+    selectCustomDropdownOption('vlm-provider-select', 'qwen');
+    assert(vlmProvInput.value === 'qwen', "vlm-provider-select value restored to qwen");
 
-    ruleTypeInput.value = '通配符';
-    assert(ruleTypeInput.value === '通配符', "ruleTypeInput is 通配符");
-    assert(document.getElementById('label-rule-match-type').textContent.includes('通配符'), "rule-match-type label matched 通配符 via alias");
-
-    // Group 12: Rule target cat dropdown test
-    selectCustomDropdownOption('rule-target-cat', '日常购物');
-    assert(document.getElementById('rule-target-cat').value === '日常购物', "rule-target-cat value is 日常购物");
-    assert(document.getElementById('label-rule-target-cat').textContent.trim() === '日常购物', "rule-target-cat label is 日常购物");
+    // Group 12: Draft category dropdown test
+    const draftCatInput = document.getElementById('select-draft-category');
+    assert(!!draftCatInput, "select-draft-category element exists");
+    selectCustomDropdownOption('select-draft-category', '日常购物');
+    assert(draftCatInput.value === '日常购物', "select-draft-category value is 日常购物");
+    assert(document.getElementById('label-select-draft-category').textContent.includes('日常购物'), "select-draft-category label is 日常购物");
+    selectCustomDropdownOption('select-draft-category', '餐饮美食');
 
     // Group 13: Manual transaction modal dropdowns
     selectCustomDropdownOption('manual-category', '交通出行');
@@ -162,14 +164,14 @@ window.addEventListener('DOMContentLoaded', () => {
     assert(document.getElementById('manual-account').value === '微信 · 招商银行(8848)', "manual-account value is 微信 · 招商银行(8848)");
     assert(document.getElementById('label-manual-account').textContent.trim() === '微信 · 招商银行(8848)', "manual-account label is 微信 · 招商银行(8848)");
 
-    // Group 14: Acc add type dropdown & alias
-    const accTypeInput = document.getElementById('acc-add-type');
-    selectCustomDropdownOption('acc-add-type', 'credit_card');
-    assert(accTypeInput.value === 'credit_card', "acc-add-type value is credit_card");
-    assert(document.getElementById('label-acc-add-type').textContent.includes('信用卡'), "acc-add-type label has 信用卡");
-
-    accTypeInput.value = '微信钱包';
-    assert(document.getElementById('label-acc-add-type').textContent.includes('微信钱包'), "acc-add-type matched '微信钱包' via alias");
+    // Group 14: Verification of Asset Accounts & Rules module complete removal
+    assert(document.getElementById('accounts-grid') === null, "Group 14: 资产账户网格 #accounts-grid 已从 DOM 中彻底移除");
+    assert(document.getElementById('rules-list-container') === null, "Group 14: 分类匹配规则列表 #rules-list-container 已从 DOM 中彻底移除");
+    assert(document.getElementById('acc-edit-modal') === null, "Group 14: 账户编辑弹窗 #acc-edit-modal 已彻底移除");
+    assert(document.getElementById('acc-add-modal') === null, "Group 14: 新增账户弹窗 #acc-add-modal 已彻底移除");
+    assert(document.getElementById('add-rule-modal') === null, "Group 14: 新建规则弹窗 #add-rule-modal 已彻底移除");
+    assert(document.getElementById('view-rules-accounts').querySelector('h1').textContent.trim() === 'AI 视觉引擎配置', "Group 14: 视图顶部标题已更新为 'AI 视觉引擎配置'");
+    assert(document.getElementById('nav-btn-rules').textContent.includes('AI 配置'), "Group 14: 底部导航栏按钮文字已更新为 'AI 配置'");
 
     // Group 15: Tab switch closes all open dropdowns
     toggleCustomDropdown('quick-date-dropdown');
@@ -301,14 +303,19 @@ window.addEventListener('DOMContentLoaded', () => {
     const subwayTx = Array.from(document.querySelectorAll('.tx-item')).find(el => el.innerText.includes('地铁集团'));
     assert(subwayTx !== undefined, "Subway transaction directly committed to ledger");
 
-    // Group 22: 删除账单后净支出与总支出扣减联动及撤回/还原恢复 (Bug 修复验证)
+    // Group 22: 账单卡片删除按钮移除、tx-source-tag 呈现与 deleteTxItem / 撤回 / 还原恢复验证
     const netBeforeDel = parseFloat(document.getElementById('total-net-expense').innerText.replace(/[¥\s,]/g, ''));
     const expBeforeDel = parseFloat(document.getElementById('total-expense').innerText.replace(/[¥\s,]/g, ''));
     
-    // Find subwayTx delete button and click it (amount = 5.00)
+    // Assert no visible delete button in tx-item
     const delBtn = subwayTx.querySelector('button');
-    assert(delBtn !== null, "Delete button found on subwayTx");
-    delBtn.click(); // deleteTransaction('...', '杭州市地铁集团有限责任公司', 5.00)
+    assert(delBtn === null, "Group 22: Delete button is completely removed from subwayTx card");
+    const subwaySourceTag = subwayTx.querySelector('.tx-source-tag');
+    assert(subwaySourceTag !== null, "Group 22: .tx-source-tag is present in right section of subwayTx");
+    assert(subwaySourceTag.innerText.trim().length > 0, "Group 22: .tx-source-tag has valid text content");
+
+    // Test deleteTxItem compatibility function
+    deleteTxItem(subwayTx);
     
     const netAfterDel = parseFloat(document.getElementById('total-net-expense').innerText.replace(/[¥\s,]/g, ''));
     const expAfterDel = parseFloat(document.getElementById('total-expense').innerText.replace(/[¥\s,]/g, ''));
@@ -325,7 +332,7 @@ window.addEventListener('DOMContentLoaded', () => {
     assert(!subwayTx.classList.contains('soft-deleted'), "subwayTx restored from soft-deleted");
 
     // Delete again and test restore from trash modal
-    delBtn.click();
+    deleteTxItem(subwayTx);
     assert(Math.abs(parseFloat(document.getElementById('total-net-expense').innerText.replace(/[¥\s,]/g, '')) - (netBeforeDel - 5.00)) < 0.01, "Net expense decreased again after second deletion");
     restoreTrash(subwayTx.id);
     const netAfterRestore = parseFloat(document.getElementById('total-net-expense').innerText.replace(/[¥\s,]/g, ''));
@@ -363,10 +370,14 @@ window.addEventListener('DOMContentLoaded', () => {
     // Group 24: 批量入账单号自动注册防重与全月数据模型联动
     switchTab('drafts');
     resetDemoDrafts();
+    // 为避免前面 Group 17 拼多多已入账单号导致的重复拦截，将草稿分配唯一单号以验证纯净草稿批量入账能力
+    draftQueue.forEach((d, i) => { d.orderId = 'BATCH_CLEAN_ORDER_20261026_' + i; });
+    const inOrderEl = document.getElementById('input-order');
+    if (inOrderEl) inOrderEl.value = draftQueue[0].orderId;
     const orderBeforeBatch = draftQueue[0].orderId;
     batchConfirmHighConfidenceDrafts();
     assert(isOrderIdDuplicate(orderBeforeBatch), "Batch confirmed draft order is now marked duplicate in isOrderIdDuplicate");
-    assert(dedupToast.classList.contains('hidden'), "Dedup toast is closed after batch confirmation");
+    assert(dedupToast.classList.contains('hidden'), "Dedup toast is closed after batch confirmation of clean drafts");
 
     // Group 25: OCR 凭证底卡所有数据块只读与文件输入重选测试
     switchTab('drafts');
@@ -407,10 +418,13 @@ window.addEventListener('DOMContentLoaded', () => {
     const llmModal = document.getElementById('llm-config-modal');
     assert(!llmModal.classList.contains('hidden'), "llm-config-modal is opened");
     const provSelect = document.getElementById('vlm-provider-select');
-    provSelect.value = 'qwen';
-    onVlmProviderChange('qwen');
-    assert(document.getElementById('vlm-endpoint').value.includes('dashscope.aliyuncs.com'), "Qwen default endpoint configured");
+    document.getElementById('vlm-endpoint').value = 'https://my-custom-vlm.internal';
+    document.getElementById('vlm-model').value = 'my-custom-model';
     document.getElementById('vlm-api-key').value = 'sk-vlm-test-key-2026';
+    provSelect.value = 'openai_chat';
+    onVlmProviderChange('openai_chat');
+    assert(document.getElementById('vlm-endpoint').value === 'https://my-custom-vlm.internal/v1/chat/completions', "切换服务商自动同步更新协议后缀到输入框");
+    assert(document.getElementById('vlm-model').value === 'my-custom-model', "切换服务商绝不覆盖用户自定义 model");
     saveLlmConfig();
     assert(llmModal.classList.contains('hidden'), "llm-config-modal closed after save");
     assert(vlmConfig.apiKey === 'sk-vlm-test-key-2026', "vlmConfig.apiKey saved to memory");
@@ -486,10 +500,11 @@ window.addEventListener('DOMContentLoaded', () => {
     const imgShotAmt = document.getElementById('manual-amount').value;
     assert(imgShotAmt !== '70.00' && imgShotAmt !== '38.50', "IMG_20261025_001.png is not 70.00 or 38.50 (got " + imgShotAmt + ")");
 
-    // Test Gemini provider change configuration
-    onVlmProviderChange('gemini');
-    assert(document.getElementById('vlm-endpoint').value.includes('googleapis.com'), "Gemini endpoint contains googleapis.com");
-    assert(document.getElementById('vlm-model').value === 'gemini-1.5-flash', "Gemini model is gemini-1.5-flash");
+    // Test protocol change updates suffix on input
+    onVlmProviderChange('gemini_native');
+    assert(vlmConfig.provider === 'gemini_native', "vlmConfig.provider switched to gemini_native");
+    assert(document.getElementById('vlm-endpoint').value === 'https://my-custom-vlm.internal/v1beta/models/my-custom-model:generateContent', "Gemini provider change updates endpoint suffix in input");
+    assert(document.getElementById('vlm-model').value === 'my-custom-model', "Gemini provider change preserves user model");
 
     // Test form reset idempotency on openManualAddModal and saveManualTransaction
     document.getElementById('manual-amount').value = '99.99';
@@ -721,23 +736,57 @@ window.addEventListener('DOMContentLoaded', () => {
     assert(vlmLabel !== null, "Group 28: #label-vlm-provider-select 标签存在");
     assert(vlmProviderEl.type === 'hidden', "Group 28: vlm-provider-select 是隐藏 input (无原生 win32 下拉框)");
 
-    // 通过自定义下拉选择切换服务商
-    selectCustomDropdownOption('vlm-provider-select', 'gemini');
-    assert(vlmProviderEl.value === 'gemini', "Group 28: 自定义下拉切换为 gemini");
-    assert(vlmLabel.innerText.includes('Gemini'), "Group 28: 自定义下拉标签更新为 Gemini: " + vlmLabel.innerText);
-    assert(vlmEndpointEl.value.includes('generativelanguage.googleapis.com'), "Group 28: Gemini 端点联动成功");
-    assert(vlmModelEl.value === 'gemini-1.5-flash', "Group 28: Gemini 模型联动为 gemini-1.5-flash");
+    vlmEndpointEl.value = 'http://192.168.1.100:11434';
+    vlmModelEl.value = 'llava:latest';
 
-    selectCustomDropdownOption('vlm-provider-select', 'openai');
-    assert(vlmProviderEl.value === 'openai', "Group 28: 自定义下拉切换为 openai");
-    assert(vlmLabel.innerText.includes('OpenAI'), "Group 28: 自定义下拉标签更新为 OpenAI: " + vlmLabel.innerText);
-    assert(vlmEndpointEl.value.includes('api.openai.com'), "Group 28: OpenAI 端点联动成功");
-    assert(vlmModelEl.value === 'gpt-4o-mini', "Group 28: OpenAI 模型联动为 gpt-4o-mini");
+    // 4 种协议切换测试 (同步更新对应协议后缀到输入框，用户填啥就是啥)
+    selectCustomDropdownOption('vlm-provider-select', 'anthropic_messages');
+    assert(vlmProviderEl.value === 'anthropic_messages', "Group 28: 自定义下拉切换为 anthropic_messages");
+    assert(vlmLabel.innerText.includes('Anthropic Messages'), "Group 28: 自定义下拉标签更新为 Anthropic Messages: " + vlmLabel.innerText);
+    assert(vlmEndpointEl.value === 'http://192.168.1.100:11434/v1/messages', "Group 28: 切换协议自动更新为 Anthropic 后缀 /v1/messages");
+    assert(vlmModelEl.value === 'llava:latest', "Group 28: 切换协议保持用户已填写的 model");
+
+    selectCustomDropdownOption('vlm-provider-select', 'openai_responses');
+    assert(vlmProviderEl.value === 'openai_responses', "Group 28: 自定义下拉切换为 openai_responses");
+    assert(vlmLabel.innerText.includes('OpenAI Responses'), "Group 28: 自定义下拉标签更新为 OpenAI Responses: " + vlmLabel.innerText);
+    assert(vlmEndpointEl.value === 'http://192.168.1.100:11434/v1/responses', "Group 28: 切换协议自动更新为 Responses 后缀 /v1/responses");
+    assert(vlmModelEl.value === 'llava:latest', "Group 28: 再次切换协议 model 保持不变");
+
+    selectCustomDropdownOption('vlm-provider-select', 'gemini_native');
+    assert(vlmProviderEl.value === 'gemini_native', "Group 28: 自定义下拉切换为 gemini_native");
+    assert(vlmLabel.innerText.includes('Gemini Native'), "Group 28: 自定义下拉标签更新为 Gemini Native: " + vlmLabel.innerText);
+    assert(vlmEndpointEl.value === 'http://192.168.1.100:11434/v1beta/models/llava:latest:generateContent', "Group 28: 切换协议自动更新为 Gemini Native 后缀");
+
+    selectCustomDropdownOption('vlm-provider-select', 'openai_chat');
+    assert(vlmProviderEl.value === 'openai_chat', "Group 28: 自定义下拉切换为 openai_chat");
+    assert(vlmLabel.innerText.includes('OpenAI Chat'), "Group 28: 自定义下拉标签更新为 OpenAI Chat: " + vlmLabel.innerText);
+    assert(vlmEndpointEl.value === 'http://192.168.1.100:11434/v1/chat/completions', "Group 28: 切换协议自动更新为 OpenAI Chat 后缀 /v1/chat/completions");
+
+    // 4.1 验证 4 大协议 URL 拼接与补全逻辑 (normalizeApiEndpoint)
+    // 1) OpenAI Chat Completions: /v1/chat/completions
+    assert(normalizeApiEndpoint('https://freeapi.opensingli.top:8443', 'openai_chat') === 'https://freeapi.opensingli.top:8443/v1/chat/completions', "Group 28: openai_chat 无 /v1 自动补全 /v1/chat/completions");
+    assert(normalizeApiEndpoint('https://freeapi.opensingli.top:8443/v1', 'openai_chat') === 'https://freeapi.opensingli.top:8443/v1/chat/completions', "Group 28: openai_chat 尾部为 /v1 自动补全 /chat/completions");
+    assert(normalizeApiEndpoint('https://freeapi.opensingli.top:8443/v1/chat/completions', 'openai_chat') === 'https://freeapi.opensingli.top:8443/v1/chat/completions', "Group 28: openai_chat 已有完整后缀保持不变");
+
+    // 2) Anthropic Messages: /v1/messages
+    assert(normalizeApiEndpoint('https://freeapi.opensingli.top:8443', 'anthropic_messages') === 'https://freeapi.opensingli.top:8443/v1/messages', "Group 28: anthropic_messages 无 /v1 自动补全 /v1/messages");
+    assert(normalizeApiEndpoint('https://freeapi.opensingli.top:8443/v1', 'anthropic_messages') === 'https://freeapi.opensingli.top:8443/v1/messages', "Group 28: anthropic_messages 尾部为 /v1 自动补全 /messages");
+    assert(normalizeApiEndpoint('https://freeapi.opensingli.top:8443/v1/messages', 'anthropic_messages') === 'https://freeapi.opensingli.top:8443/v1/messages', "Group 28: anthropic_messages 已有完整后缀保持不变");
+
+    // 3) OpenAI Responses API: /v1/responses
+    assert(normalizeApiEndpoint('https://freeapi.opensingli.top:8443', 'openai_responses') === 'https://freeapi.opensingli.top:8443/v1/responses', "Group 28: openai_responses 无 /v1 自动补全 /v1/responses");
+    assert(normalizeApiEndpoint('https://freeapi.opensingli.top:8443/v1', 'openai_responses') === 'https://freeapi.opensingli.top:8443/v1/responses', "Group 28: openai_responses 尾部为 /v1 自动补全 /responses");
+    assert(normalizeApiEndpoint('https://freeapi.opensingli.top:8443/v1/responses', 'openai_responses') === 'https://freeapi.opensingli.top:8443/v1/responses', "Group 28: openai_responses 已有完整后缀保持不变");
+
+    // 4) Gemini Native generateContent: /v1beta/models/{model}:generateContent
+    assert(normalizeApiEndpoint('https://generativelanguage.googleapis.com', 'gemini_native', 'gemini-1.5-flash') === 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent', "Group 28: gemini_native 根域名自动拼接 /v1beta/models/{model}:generateContent");
+    assert(normalizeApiEndpoint('https://generativelanguage.googleapis.com/v1beta', 'gemini_native', 'gemini-1.5-flash') === 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent', "Group 28: gemini_native 尾部为 /v1beta 自动拼接 /models/{model}:generateContent");
+    assert(normalizeApiEndpoint('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent', 'gemini_native') === 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent', "Group 28: gemini_native 已包含 :generateContent 保持原样");
 
     // 一键体验配置
     fillVlmDemoKey();
-    assert(vlmProviderEl.value === 'qwen', "Group 28: 一键体验配置恢复为 qwen");
-    assert(vlmLabel.innerText.includes('通义千问'), "Group 28: 一键体验标签恢复为通义千问");
+    assert(vlmProviderEl.value === 'openai_chat', "Group 28: 一键体验配置恢复为 openai_chat");
+    assert(vlmLabel.innerText.includes('OpenAI Chat'), "Group 28: 一键体验标签恢复为 OpenAI Chat");
     assert(vlmKeyEl.value === 'sk-vlm-singwallet-demo-live', "Group 28: 填入演示体验 Key");
 
     // 5. 密码可见性切换
@@ -755,6 +804,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // 7. 测试连通性：未配置 API Key 错误拦截
     vlmKeyEl.value = '';
+    vlmEndpointEl.value = 'http://localhost:8000';
+    vlmModelEl.value = 'gpt-4o';
     saveLlmConfigFromInputs(false);
     testVlmConnection();
     assert(vlmStatusEl.innerText.includes('未配置 API Key'), "Group 28: 空 API Key 连通失败提示: " + vlmStatusEl.innerText);
@@ -763,8 +814,24 @@ window.addEventListener('DOMContentLoaded', () => {
     assert(document.getElementById('llm-error-msg').innerText.includes('未配置 API Key'), "Group 28: 上方小窗口显示未配置 API Key 错误");
     closeLlmTopError();
 
+    // 7.1 测试连通性：未配置 Base URL 错误拦截
+    vlmKeyEl.value = 'sk-test-key';
+    vlmEndpointEl.value = '';
+    vlmModelEl.value = 'gpt-4o';
+    testVlmConnection();
+    assert(vlmStatusEl.innerText.includes('未配置 Base URL'), "Group 28: 空 Base URL 连通失败提示: " + vlmStatusEl.innerText);
+    closeLlmTopError();
+
+    // 7.2 测试连通性：未配置 Model 错误拦截
+    vlmEndpointEl.value = 'http://localhost:8000';
+    vlmModelEl.value = '';
+    testVlmConnection();
+    assert(vlmStatusEl.innerText.includes('未配置 Model'), "Group 28: 空 Model 连通失败提示: " + vlmStatusEl.innerText);
+    closeLlmTopError();
+
     // 8. 测试连通性：401 Unauthorized 错误提示
     vlmKeyEl.value = 'invalid-key';
+    vlmModelEl.value = 'gpt-4o';
     testVlmConnection();
     assert(vlmStatusEl.innerText.includes('401 Unauthorized'), "Group 28: 401 连通失败状态提示正确: " + vlmStatusEl.innerText);
     assert(!topErrorToast.classList.contains('hidden'), "Group 28: 401 失败在上方弹出临时小窗口");
@@ -794,6 +861,24 @@ window.addEventListener('DOMContentLoaded', () => {
     const vlmResultBox = document.getElementById('vlm-test-result-box');
     assert(vlmResultBox.classList.contains('text-emerald-300'), "Group 28: 连通成功结果卡片为绿色正常状态");
 
+    // 11.1 测试输入框值保持不变 (绝不篡改用户输入)
+    assert(vlmEndpointEl.value === 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', "Group 28: 连通测试后 endpoint 输入框值绝不被自动改写");
+    assert(vlmModelEl.value === 'qwen-vl-plus', "Group 28: 连通测试后 model 输入框值绝不被自动改写");
+
+    // 11.2 测试网络/空指针防御：即使候选端点全部抛错或无响应，也绝不抛出 Cannot read properties of null (reading 'status')
+    vlmKeyEl.value = 'sk-test-fail-probe';
+    vlmEndpointEl.value = 'http://127.0.0.1:59998/offline-test';
+    vlmModelEl.value = 'my-vision-model';
+    testVlmConnection();
+    assert(!vlmStatusEl.innerText.includes('Cannot read properties of null'), "Group 28: 网络异常场景绝不抛出 null.status 空指针错误");
+    assert(vlmStatusEl.innerText.includes('连通失败'), "Group 28: 优雅展示连通失败友善提示");
+
+    // 恢复配置
+    vlmKeyEl.value = 'sk-vlm-test-key-2026';
+    vlmEndpointEl.value = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
+    vlmModelEl.value = 'qwen-vl-plus';
+    testVlmConnection();
+
     // 12. 统一大模型识别：无 API Key 时上传识别失败上方弹窗且无模拟假数据回填
     openManualAddModal();
     setManualOcrEngine('llm');
@@ -808,8 +893,635 @@ window.addEventListener('DOMContentLoaded', () => {
     closeLlmTopError();
     closeManualAddModal();
 
+    // Group 29: SSOT 图标与元数据解耦联动验证 ("改一处全局自动替换")
+    // 1. 验证 window.DomainRegistry 与 window.IconRegistry 已加载且包含 8 大核心分类
+    assert(typeof window.DomainRegistry === 'object' && window.DomainRegistry !== null, "Group 29: window.DomainRegistry 已挂载");
+    assert(typeof window.IconRegistry === 'object' && window.IconRegistry !== null, "Group 29: window.IconRegistry 已挂载");
+    assert(typeof window.CATEGORY_ICON_MAP === 'object', "Group 29: window.CATEGORY_ICON_MAP 代理对象已挂载");
 
-    const failed = window.__TEST_RESULTS__.filter(r => !r.pass);
+    const coreCategories = ['餐饮美食', '交通出行', '日常购物', '休闲娱乐', '生活缴费', '医疗健康', '其他支出', '工资收入'];
+    assert(window.DomainRegistry.getCategories().length === 8, "Group 29: DomainRegistry 包含且仅包含 8 大核心分类定义");
+    assert(window.DomainRegistry.getParentCategories().length === 8, "Group 29: DomainRegistry.getParentCategories() 返回 8 大核心一级分类");
+    coreCategories.forEach(cat => {
+      assert(!!window.DomainRegistry.getCategoryByName(cat), "Group 29: DomainRegistry 成功查得分类: " + cat);
+      assert(!!window.IconRegistry.getCategoryIcon(cat), "Group 29: IconRegistry 具有分类图标: " + cat);
+    });
+
+    // 确保流水列表中存在餐饮美食条目以供联动断言
+    switchTab('transactions');
+    let foodTx = document.querySelector('.tx-item[data-category="餐饮美食"]');
+    if (!foodTx) {
+      insertTransactionToList({
+        id: "item-tx-food-ssot-test",
+        merchant: "测试老灶火锅店",
+        amount: 188.00,
+        amountInCents: 18800,
+        catName: "餐饮美食",
+        parentCat: "餐饮美食",
+        category: "餐饮美食",
+        channel: "微信",
+        account: "微信 · 钱包",
+        txTime: "2026-10-26 18:30:00",
+        orderTime: "2026-10-26 18:30:00",
+        txDate: "2026-10-26",
+        timeOnly: "18:30",
+        orderId: "SSOT_FOOD_TEST_9999",
+        badge: "联动测试"
+      });
+      foodTx = document.querySelector('.tx-item[data-category="餐饮美食"]');
+    }
+    assert(foodTx !== null, "Group 29: 流水列表存在餐饮美食交易卡片 .tx-item[data-category='餐饮美食']");
+
+    // 保存初始餐饮美食默认图标，并获取页面 4 处 DOM 容器
+    const origFoodIcon = IconRegistry.getCategoryIcon('餐饮美食');
+    assert(typeof origFoodIcon === 'string' && origFoodIcon.includes('<svg'), "Group 29: 默认餐饮美食图标已是蓝金线性 SVG 矢量图标");
+
+    const foodTxIconEl = foodTx.querySelector('[data-cat-icon="餐饮美食"]') || foodTx.querySelector('.w-10.h-10');
+    const filterFoodIconEl = document.querySelector('#filter-modal-cats [data-cat-icon="餐饮美食"]');
+    const modalFoodIconEl = document.querySelector('#category-modal-grid [data-category-name="餐饮美食"] [data-cat-icon="餐饮美食"]') || document.querySelector('#category-modal-grid [data-cat-icon="餐饮美食"]');
+    const draftMenuFoodIconEl = document.querySelector('#menu-select-draft-category [data-value="餐饮美食"] [data-cat-icon="餐饮美食"]');
+
+    assert(foodTxIconEl !== null && foodTxIconEl.querySelector('svg') !== null, "Group 29: 流水列表卡片内部成功渲染 SVG 矢量元素");
+    assert(filterFoodIconEl !== null && filterFoodIconEl.querySelector('svg') !== null, "Group 29: 筛选弹窗中餐饮美食内部成功渲染 SVG 矢量元素");
+    assert(modalFoodIconEl !== null && modalFoodIconEl.querySelector('svg') !== null, "Group 29: 分类弹窗中餐饮美食内部成功渲染 SVG 矢量元素");
+    assert(draftMenuFoodIconEl !== null && draftMenuFoodIconEl.querySelector('svg') !== null, "Group 29: 草稿分类下拉框中餐饮美食内部成功渲染 SVG 矢量元素");
+
+    // 断言页面中所有 [data-ui-icon] 节点内部均已成功渲染 SVG 矢量元素
+    const uiIconEls = document.querySelectorAll('[data-ui-icon]');
+    assert(uiIconEls.length > 0, "Group 29: 页面存在 [data-ui-icon] 元素");
+    uiIconEls.forEach(el => {
+      const iconKey = el.getAttribute('data-ui-icon');
+      assert(el.querySelector('svg') !== null, "Group 29: [data-ui-icon='" + iconKey + "'] 内部成功渲染 SVG 矢量元素");
+    });
+
+    // 2. 测试调用 IconRegistry.setCategoryIcon('餐饮美食', '<svg id="custom-noodle-svg"></svg>') 联动验证
+    IconRegistry.setCategoryIcon('餐饮美食', '<svg id="custom-noodle-svg"></svg>');
+    assert(foodTxIconEl.querySelector('#custom-noodle-svg') !== null, "Group 29: [IconRegistry.setCategoryIcon] 流水列表图标自动同步为 #custom-noodle-svg");
+    assert(filterFoodIconEl.querySelector('#custom-noodle-svg') !== null, "Group 29: [IconRegistry.setCategoryIcon] 筛选弹窗图标自动同步为 #custom-noodle-svg");
+    assert(modalFoodIconEl.querySelector('#custom-noodle-svg') !== null, "Group 29: [IconRegistry.setCategoryIcon] 分类弹窗图标自动同步为 #custom-noodle-svg");
+    assert(draftMenuFoodIconEl.querySelector('#custom-noodle-svg') !== null, "Group 29: [IconRegistry.setCategoryIcon] 草稿分类下拉框图标自动同步为 #custom-noodle-svg");
+
+    // 3. 测试直接赋值 CATEGORY_ICON_MAP['餐饮美食'] = '<svg id="custom-bento-svg"></svg>' 响应式代理联动验证
+    CATEGORY_ICON_MAP['餐饮美食'] = '<svg id="custom-bento-svg"></svg>';
+    assert(foodTxIconEl.querySelector('#custom-bento-svg') !== null, "Group 29: [Proxy CATEGORY_ICON_MAP] 流水列表图标自动同步为 #custom-bento-svg");
+    assert(filterFoodIconEl.querySelector('#custom-bento-svg') !== null, "Group 29: [Proxy CATEGORY_ICON_MAP] 筛选弹窗图标自动同步为 #custom-bento-svg");
+    assert(modalFoodIconEl.querySelector('#custom-bento-svg') !== null, "Group 29: [Proxy CATEGORY_ICON_MAP] 分类弹窗图标自动同步为 #custom-bento-svg");
+    assert(draftMenuFoodIconEl.querySelector('#custom-bento-svg') !== null, "Group 29: [Proxy CATEGORY_ICON_MAP] 草稿分类下拉菜单图标自动同步为 #custom-bento-svg");
+
+    // 4. 测试完毕后调用 IconRegistry.setCategoryIcon('餐饮美食', origFoodIcon) 恢复默认蓝金线性 SVG 图标
+    IconRegistry.setCategoryIcon('餐饮美食', origFoodIcon);
+    assert(foodTxIconEl.querySelector('svg') !== null && foodTxIconEl.querySelector('#custom-bento-svg') === null, "Group 29: [Cleanup] 流水列表图标成功恢复默认 SVG");
+    assert(filterFoodIconEl.querySelector('svg') !== null && filterFoodIconEl.querySelector('#custom-bento-svg') === null, "Group 29: [Cleanup] 筛选弹窗图标成功恢复默认 SVG");
+    assert(modalFoodIconEl.querySelector('svg') !== null && modalFoodIconEl.querySelector('#custom-bento-svg') === null, "Group 29: [Cleanup] 分类弹窗图标成功恢复默认 SVG");
+    assert(draftMenuFoodIconEl.querySelector('svg') !== null && draftMenuFoodIconEl.querySelector('#custom-bento-svg') === null, "Group 29: [Cleanup] 草稿分类下拉菜单图标成功恢复默认 SVG");
+    assert(IconRegistry.getCategoryIcon('餐饮美食') === origFoodIcon, "Group 29: [Cleanup] IconRegistry 成功恢复为 origFoodIcon");
+
+    // ==========================================
+    // Group 30: 账单分类管理（增删分类 & 全局多标签联动）
+    // ==========================================
+    assert(document.getElementById('category-manager-card') !== null, "Group 30: category-manager-card exists");
+    assert(document.getElementById('custom-categories-list') !== null, "Group 30: custom-categories-list exists");
+    assert(document.getElementById('custom-category-input') !== null, "Group 30: custom-category-input exists");
+    assert(document.getElementById('btn-add-category') !== null, "Group 30: btn-add-category exists");
+
+    // 1. 添加新分类
+    const catInput = document.getElementById('custom-category-input');
+    catInput.value = '潮玩手办';
+    addCustomCategory();
+    assert(DomainRegistry.getParentCategories().includes('潮玩手办'), "Group 30: DomainRegistry includes 潮玩手办");
+    assert(BILL_STRUCTURED_SCHEMA.json_schema.schema.properties.category.enum.includes('潮玩手办'), "Group 30: BILL_STRUCTURED_SCHEMA enum includes 潮玩手办");
+
+    // 2. 验证全站 5 处 UI 联动同步
+    const customList = document.getElementById('custom-categories-list');
+    assert(customList.innerText.includes('潮玩手办'), "Group 30: custom-categories-list displays 潮玩手办");
+    const menuDraftCat = document.getElementById('menu-select-draft-category');
+    assert(menuDraftCat.innerText.includes('潮玩手办'), "Group 30: menu-select-draft-category displays 潮玩手办");
+    const menuManualCat = document.getElementById('menu-manual-category');
+    assert(menuManualCat.innerText.includes('潮玩手办'), "Group 30: menu-manual-category displays 潮玩手办");
+    const modalGrid = document.getElementById('category-modal-grid');
+    assert(modalGrid.innerText.includes('潮玩手办'), "Group 30: category-modal-grid displays 潮玩手办");
+    const filterCatsEl = document.getElementById('filter-modal-cats');
+    assert(filterCatsEl.innerText.includes('潮玩手办'), "Group 30: filter-modal-cats displays 潮玩手办");
+
+    // 3. 删除分类
+    removeCustomCategory('潮玩手办');
+    assert(!DomainRegistry.getParentCategories().includes('潮玩手办'), "Group 30: DomainRegistry removed 潮玩手办");
+    assert(!customList.innerText.includes('潮玩手办'), "Group 30: custom-categories-list removed 潮玩手办");
+    assert(!menuDraftCat.innerText.includes('潮玩手办'), "Group 30: menu-select-draft-category removed 潮玩手办");
+
+    // 4. 恢复默认分类
+    resetCategoriesToDefault();
+    assert(DomainRegistry.getParentCategories().length === 8, "Group 30: resetCategoriesToDefault restores 8 standard categories");
+
+    // ==========================================
+    // Group 31: 图标尺寸根治断言与弹窗排版动效
+    // ==========================================
+    openFilterModal();
+    const filterModal = document.getElementById('filter-modal');
+    assert(!filterModal.classList.contains('hidden'), "Group 31: filter-modal is open");
+    const filterSvgs = document.querySelectorAll('#filter-modal-cats [data-cat-icon] svg');
+    assert(filterSvgs.length > 0, "Group 31: filter-modal-cats has category SVG icons");
+    filterSvgs.forEach((svg, i) => {
+      const rect = svg.getBoundingClientRect();
+      assert(rect.width <= 28, "Group 31: filter-modal-cats svg " + i + " width <= 28px (actual: " + rect.width + "px)");
+    });
+    closeFilterModal();
+
+    // 草稿分类下拉菜单图标尺寸断言
+    const draftMenuSvgs = document.querySelectorAll('#menu-select-draft-category [data-cat-icon] svg');
+    assert(draftMenuSvgs.length > 0, "Group 31: menu-select-draft-category has category SVG icons");
+    draftMenuSvgs.forEach((svg, i) => {
+      const rect = svg.getBoundingClientRect();
+      assert(rect.width <= 28, "Group 31: menu-select-draft-category svg " + i + " width <= 28px (actual: " + rect.width + "px)");
+    });
+
+    // 置信度弹窗浅灰文字与图标验证
+    openConfidenceModal();
+    const confModal = document.getElementById('confidence-modal');
+    assert(!confModal.classList.contains('hidden'), "Group 31: confidence-modal is open");
+    assert(document.getElementById('guard-shield-svg-icon') !== null, "Group 31: guard-shield-svg-icon exists in confidence-modal");
+    closeConfidenceModal();
+
+    // 手动记账弹窗单屏无滚动溢出验证
+    openManualAddModal();
+    const manualDialog = document.getElementById('manual-add-dialog');
+    assert(manualDialog.scrollHeight <= manualDialog.clientHeight + 1, "Group 31: manual-add-dialog scrollHeight <= clientHeight + 1 (actual scrollHeight: " + manualDialog.scrollHeight + ", clientHeight: " + manualDialog.clientHeight + ")");
+    closeManualAddModal();
+
+    // ==========================================
+    // Group 32: 快记一手改为后台异步解析 + 草稿箱横向任务胶囊极简进度条
+    // ==========================================
+    const testTaskId = 'draft-vlm-task-test-999';
+    const mockTaskDraft = {
+      id: testTaskId,
+      merchant: '大模型解析中...',
+      merchantHeader: 'VLM 解析',
+      amount: 0,
+      amountInCents: 0,
+      confidence: 0,
+      isParsing: true,
+      progress: 35,
+      category: '日常购物',
+      categoryName: '日常购物',
+      channel: '微信',
+      account: '钱包',
+      imgTitle: 'test_async_upload.png',
+      tag: '后台解析中...',
+      rule: 'VLM 视觉智能识别',
+      time: '2026-10-26 18:00:00'
+    };
+    draftQueue.unshift(mockTaskDraft);
+    renderDraftQueue();
+
+    const progBar = document.getElementById('draft-task-prog-' + testTaskId);
+    assert(progBar !== null, "Group 32: draft-task-prog element exists for isParsing task");
+    assert(progBar.style.width === '35%', "Group 32: progress bar width is 35%");
+    const progWrap = progBar.parentElement;
+    assert(progWrap.classList.contains('bg-slate-700/50') || progWrap.className.includes('bg-slate-700'), "Group 32: progress bar has bg-slate-700/50 wrapper");
+
+    // 验证批量确认排除 isParsing 任务
+    const batchList = draftQueue.filter(d => !d.isParsing && d.confidence >= autoCommitThreshold);
+    assert(!batchList.some(d => d.id === testTaskId), "Group 32: batchConfirm list strictly excludes isParsing drafts");
+
+    // 清理测试任务
+    const testTaskIdx = draftQueue.findIndex(d => d.id === testTaskId);
+    if (testTaskIdx !== -1) draftQueue.splice(testTaskIdx, 1);
+    renderDraftQueue();
+
+
+
+    // ==========================================
+    // Group 33: 后端与领域引擎架构层深度校验 (SSOT DomainRegistry & VLM Queue)
+    // ==========================================
+    // 1. DomainRegistry.addCategory 校验与去重
+    assert(typeof DomainRegistry.addCategory === 'function', "Group 33: DomainRegistry.addCategory exists");
+    assert(typeof DomainRegistry.removeCategory === 'function', "Group 33: DomainRegistry.removeCategory exists");
+    assert(typeof DomainRegistry.resetCategories === 'function', "Group 33: DomainRegistry.resetCategories exists");
+
+    const initialCatCount = DomainRegistry.getParentCategories().length;
+    const addSuccess = DomainRegistry.addCategory('智能新能源');
+    assert(addSuccess === true, "Group 33: DomainRegistry.addCategory returns true on new category");
+    assert(DomainRegistry.getParentCategories().includes('智能新能源'), "Group 33: getParentCategories includes 智能新能源");
+    assert(BILL_STRUCTURED_SCHEMA.json_schema.schema.properties.category.enum.includes('智能新能源'), "Group 33: BILL_STRUCTURED_SCHEMA enum includes 智能新能源");
+    const storedCats1 = JSON.parse(localStorage.getItem('singwallet_custom_categories') || '[]');
+    assert(storedCats1.includes('智能新能源'), "Group 33: localStorage persisted 智能新能源");
+
+    // 去重断言
+    const addDup = DomainRegistry.addCategory('智能新能源');
+    assert(addDup === false, "Group 33: DomainRegistry.addCategory returns false on duplicate");
+    assert(DomainRegistry.addCategory('') === false, "Group 33: addCategory returns false on empty string");
+    assert(DomainRegistry.addCategory('   ') === false, "Group 33: addCategory returns false on whitespace");
+
+    // 2. DomainRegistry.removeCategory 校验
+    const remSuccess = DomainRegistry.removeCategory('生活缴费');
+    assert(remSuccess === true, "Group 33: removeCategory returns true");
+    assert(!DomainRegistry.getParentCategories().includes('生活缴费'), "Group 33: getParentCategories does not contain 生活缴费");
+    assert(!BILL_STRUCTURED_SCHEMA.json_schema.schema.properties.category.enum.includes('生活缴费'), "Group 33: BILL_STRUCTURED_SCHEMA enum does not contain 生活缴费");
+    const resolvedLiving = resolveParentCategory('国家电网电费代扣', '国网电力');
+    assert(resolvedLiving !== '生活缴费', "Group 33: resolveParentCategory never returns removed category 生活缴费");
+    assert(DomainRegistry.getParentCategories().includes(resolvedLiving), "Group 33: resolveParentCategory falls back to active category");
+
+    // 3. DomainRegistry.resetCategories 校验
+    const resetSuccess = DomainRegistry.resetCategories();
+    assert(resetSuccess === true, "Group 33: resetCategories returns true");
+    assert(DomainRegistry.getParentCategories().length === 8, "Group 33: getParentCategories restored to 8");
+    assert(BILL_STRUCTURED_SCHEMA.json_schema.schema.properties.category.enum.length === 8, "Group 33: BILL_STRUCTURED_SCHEMA enum restored to 8");
+    assert(BILL_STRUCTURED_SCHEMA.json_schema.schema.properties.category.enum.includes('生活缴费'), "Group 33: schema enum restored 生活缴费");
+    const storedReset = JSON.parse(localStorage.getItem('singwallet_custom_categories') || '[]');
+    assert(storedReset.length === 8, "Group 33: localStorage restored to 8 categories");
+
+    // 4. 后台异步解析任务队列引擎字段与单号去重校验
+    const queueTaskId = 'draft-vlm-queue-test-' + Date.now();
+    const taskItem = {
+      id: queueTaskId,
+      merchant: '大模型解析中...',
+      merchantHeader: 'VLM 解析',
+      amount: 0,
+      amountInCents: 0,
+      confidence: 0,
+      isParsing: true,
+      progress: 15,
+      category: '日常购物',
+      categoryName: '日常购物',
+      channel: '微信',
+      account: '钱包',
+      imgTitle: 'queue_test.png',
+      tag: '后台解析中...',
+      rule: 'VLM 视觉智能识别',
+      time: '2026-10-26 19:00:00'
+    };
+    draftQueue.unshift(taskItem);
+    assert(draftQueue[0].id === queueTaskId, "Group 33: taskItem unshifted to head of draftQueue");
+    assert(draftQueue[0].isParsing === true, "Group 33: head draft has isParsing === true");
+    assert(draftQueue[0].progress === 15, "Group 33: head draft has initial progress");
+
+    // 单号重复去重校验
+    assert(typeof isOrderIdDuplicate === 'function', "Group 33: isOrderIdDuplicate function exists");
+    committedOrderIds.add('TEST_DEDUP_ORDER_999');
+    assert(isOrderIdDuplicate('TEST_DEDUP_ORDER_999') === true, "Group 33: isOrderIdDuplicate correctly identifies duplicate order");
+    assert(isOrderIdDuplicate('BRAND_NEW_ORDER_UNIQUE') === false, "Group 33: isOrderIdDuplicate returns false for unique order");
+
+    // 清理测试任务与单号
+    const cleanQueueIdx = draftQueue.findIndex(d => d.id === queueTaskId);
+    if (cleanQueueIdx !== -1) draftQueue.splice(cleanQueueIdx, 1);
+    committedOrderIds.delete('TEST_DEDUP_ORDER_999');
+    renderDraftQueue();
+
+    // ==========================================
+    // Group 34: 前端 UI 规范与视觉排版专项验证 (Toast 屏幕居中 & 分类双列网格)
+    // ==========================================
+    // 1. Toast 屏幕内水平居中验证
+    showToast('测试居中弹窗');
+    const toastWrap = document.querySelector('.singwallet-toast-wrap');
+    const screenContainer = document.getElementById('screen-container');
+    assert(toastWrap !== null, "Group 34: singwallet-toast-wrap element exists");
+    assert(screenContainer.contains(toastWrap), "Group 34: singwallet-toast-wrap is mounted inside #screen-container");
+
+    const toastInner = toastWrap.querySelector('div');
+    const toastRect = toastInner.getBoundingClientRect();
+    const screenRect = screenContainer.getBoundingClientRect();
+    const toastCenter = toastRect.left + toastRect.width / 2;
+    const screenCenter = screenRect.left + screenRect.width / 2;
+    const centerDiff = Math.abs(toastCenter - screenCenter);
+    assert(centerDiff < 5, "Group 34: Toast is horizontally centered within #screen-container (centerDiff: " + centerDiff.toFixed(2) + "px < 5px)");
+
+    // 2. 分类管理双列网格排版与数量徽章验证
+    const customCatsGrid = document.getElementById('custom-categories-list');
+    assert(customCatsGrid.classList.contains('grid-cols-2'), "Group 34: custom-categories-list has grid-cols-2 class for symmetrical 2-column layout");
+    assert(document.getElementById('category-count-badge') !== null, "Group 34: category-count-badge exists");
+    assert(document.getElementById('category-count-badge').innerText === String(DomainRegistry.getParentCategories().length), "Group 34: category-count-badge reflects category count");
+
+
+    // ==========================================
+    // Group 35: 账单去重 (Order ID Deduplication) 领域与一键批量入账全场景专项验证
+    // ==========================================
+    switchTab('drafts');
+
+    // 1. 领域纯函数 SingWalletDomain.normalizeOrderId 校验
+    assert(typeof SingWalletDomain.normalizeOrderId === 'function', "Group 35: SingWalletDomain.normalizeOrderId exists");
+    assert(SingWalletDomain.normalizeOrderId(null) === '', "Group 35: normalizeOrderId null returns empty string");
+    assert(SingWalletDomain.normalizeOrderId('   ') === '', "Group 35: normalizeOrderId whitespace returns empty string");
+    assert(SingWalletDomain.normalizeOrderId('无') === '', "Group 35: normalizeOrderId '无' returns empty string");
+    assert(SingWalletDomain.normalizeOrderId('--') === '', "Group 35: normalizeOrderId '--' returns empty string");
+    assert(SingWalletDomain.normalizeOrderId('  420000_TEST_ORDER  ') === '420000_TEST_ORDER', "Group 35: normalizeOrderId trims whitespace");
+
+    // 2. 领域纯函数 SingWalletDomain.isOrderIdDuplicate 校验
+    assert(typeof SingWalletDomain.isOrderIdDuplicate === 'function', "Group 35: SingWalletDomain.isOrderIdDuplicate exists");
+    const testCommittedSet = new Set(['ORDER_EXISTING_AAA']);
+    assert(SingWalletDomain.isOrderIdDuplicate('ORDER_EXISTING_AAA', testCommittedSet) === true, "Group 35: isOrderIdDuplicate identifies duplicate against Set");
+    assert(SingWalletDomain.isOrderIdDuplicate('  ORDER_EXISTING_AAA  ', testCommittedSet) === true, "Group 35: isOrderIdDuplicate normalizes whitespace against Set");
+    assert(SingWalletDomain.isOrderIdDuplicate('ORDER_UNIQUE_BBB', testCommittedSet) === false, "Group 35: isOrderIdDuplicate returns false for unique order");
+    assert(SingWalletDomain.isOrderIdDuplicate('', testCommittedSet) === false, "Group 35: isOrderIdDuplicate returns false for empty order");
+
+    // 3. 领域纯函数 SingWalletDomain.partitionDraftsByDedup 校验 (含同批次自去重)
+    assert(typeof SingWalletDomain.partitionDraftsByDedup === 'function', "Group 35: SingWalletDomain.partitionDraftsByDedup exists");
+    const testDraftsForPartition = [
+      { id: 't1', orderId: 'ORDER_EXISTING_AAA' }, // 与已入账重复
+      { id: 't2', orderId: 'ORDER_BATCH_DUP_111' }, // 批次首笔唯一
+      { id: 't3', orderId: 'ORDER_BATCH_DUP_111' }, // 同批次重复
+      { id: 't4', orderId: '' },                     // 无单号草稿
+      { id: 't5', orderId: 'ORDER_BATCH_UNIQ_222' }  // 另一笔唯一
+    ];
+    const partitionRes = SingWalletDomain.partitionDraftsByDedup(testDraftsForPartition, testCommittedSet);
+    assert(partitionRes.validList.length === 3, "Group 35: partitionDraftsByDedup validList has 3 items (found " + partitionRes.validList.length + ")");
+    assert(partitionRes.validList.map(d => d.id).join(',') === 't2,t4,t5', "Group 35: validList contains t2, t4, t5");
+    assert(partitionRes.dupList.length === 2, "Group 35: partitionDraftsByDedup dupList has 2 items (found " + partitionRes.dupList.length + ")");
+    assert(partitionRes.dupList.map(d => d.id).join(',') === 't1,t3', "Group 35: dupList contains t1 (committed dup) and t3 (intra-batch dup)");
+
+    // 4. 应用层：一键入账拦截与已入账流水重复的草稿，保留在 draftQueue，设为当前选中，并触发顶部橙色 Toast
+    closeDedupTopToast();
+    const dupTestOrder = 'EXISTING_FLOW_ORDER_888';
+    committedOrderIds.add(dupTestOrder);
+
+    draftQueue = [
+      {
+        id: 'draft-dup-comm-1',
+        merchant: '重复商户A',
+        amount: 25.00,
+        amountInCents: 2500,
+        confidence: 98,
+        isParsing: false,
+        orderId: dupTestOrder,
+        time: '2026-10-26 10:00:00',
+        category: '餐饮美食'
+      },
+      {
+        id: 'draft-uniq-valid-2',
+        merchant: '正常商户B',
+        amount: 30.00,
+        amountInCents: 3000,
+        confidence: 96,
+        isParsing: false,
+        orderId: 'UNIQUE_CLEAN_ORDER_777',
+        time: '2026-10-26 10:30:00',
+        category: '日常购物'
+      }
+    ];
+    currentDraftIndex = 0;
+    renderDraftQueue();
+
+    batchConfirmHighConfidenceDrafts();
+
+    const dedupToastEl = document.getElementById('dedup-top-toast');
+    const toastOrderText = document.getElementById('dedup-toast-order-text')?.innerText || '';
+    assert(!dedupToastEl.classList.contains('hidden'), "Group 35: dedup-top-toast is displayed when batch confirming duplicate order");
+    assert(toastOrderText.includes(dupTestOrder), "Group 35: dedup-top-toast displays intercepted order ID: " + dupTestOrder);
+    assert(draftQueue.some(d => d.id === 'draft-dup-comm-1'), "Group 35: Intercepted duplicate draft MUST remain in draftQueue");
+    assert(!draftQueue.some(d => d.id === 'draft-uniq-valid-2'), "Group 35: Valid draft successfully committed and removed from draftQueue");
+    assert(draftQueue[currentDraftIndex].id === 'draft-dup-comm-1', "Group 35: Active draft is automatically switched to the intercepted duplicate draft");
+
+    // 5. 应用层：一键入账同批次内自去重拦截 (Intra-batch deduplication)
+    closeDedupTopToast();
+    const intraBatchOrder = 'INTRA_BATCH_SHARED_ORDER_555';
+    draftQueue = [
+      {
+        id: 'draft-intra-1',
+        merchant: '批次相同单号第1笔',
+        amount: 18.00,
+        amountInCents: 1800,
+        confidence: 99,
+        isParsing: false,
+        orderId: intraBatchOrder,
+        time: '2026-10-26 11:00:00',
+        category: '休闲娱乐'
+      },
+      {
+        id: 'draft-intra-2',
+        merchant: '批次相同单号第2笔',
+        amount: 22.00,
+        amountInCents: 2200,
+        confidence: 97,
+        isParsing: false,
+        orderId: intraBatchOrder,
+        time: '2026-10-26 11:15:00',
+        category: '休闲娱乐'
+      }
+    ];
+    currentDraftIndex = 0;
+    renderDraftQueue();
+
+    batchConfirmHighConfidenceDrafts();
+
+    assert(!dedupToastEl.classList.contains('hidden'), "Group 35: Intra-batch duplicate triggers dedup-top-toast");
+    assert(draftQueue.length === 1, "Group 35: 1 draft remained in draftQueue (found " + draftQueue.length + ")");
+    assert(draftQueue[0].id === 'draft-intra-2', "Group 35: Second draft with same orderId was intercepted as intra-batch duplicate");
+    assert(isOrderIdDuplicate(intraBatchOrder), "Group 35: intraBatchOrder is now marked committed after first draft succeeded");
+
+    // 6. 应用层：全部草稿因重复被拦截时，严禁弹出“成功入账”虚假提示
+    closeDedupTopToast();
+    draftQueue = [
+      {
+        id: 'draft-all-dup-1',
+        merchant: '全重复商户1',
+        amount: 12.00,
+        amountInCents: 1200,
+        confidence: 96,
+        isParsing: false,
+        orderId: dupTestOrder,
+        time: '2026-10-26 12:00:00',
+        category: '餐饮美食'
+      }
+    ];
+    currentDraftIndex = 0;
+    renderDraftQueue();
+
+    batchConfirmHighConfidenceDrafts();
+
+    const toastWrapEl = document.querySelector('.singwallet-toast-wrap');
+    const toastMsg = toastWrapEl ? toastWrapEl.innerText : '';
+    assert(!dedupToastEl.classList.contains('hidden'), "Group 35: dedupToastEl visible when all drafts are duplicates");
+    assert(draftQueue.length === 1, "Group 35: Draft remains in draftQueue when all intercepted");
+    assert(!toastMsg.includes('成功将'), "Group 35: No false positive '成功将' success toast when all drafts are duplicates");
+    assert(toastMsg.includes('拦截') || toastMsg.includes('重复'), "Group 35: Toast explicitly informs interception of duplicate drafts");
+
+    // 7. 应用层：后台自动入账 commitDraftTransaction 拦截校验
+    closeDedupTopToast();
+    const autoDupDraft = {
+      id: 'draft-auto-dup',
+      merchant: '自动入账重复测试',
+      amount: 66.00,
+      confidence: 99,
+      isParsing: false,
+      orderId: dupTestOrder
+    };
+    draftQueue = [autoDupDraft];
+    currentDraftIndex = 0;
+    renderDraftQueue();
+
+    const autoCommitResult = commitDraftTransaction(autoDupDraft, false);
+    assert(autoCommitResult === false, "Group 35: commitDraftTransaction returns false on duplicate order");
+    assert(!dedupToastEl.classList.contains('hidden'), "Group 35: commitDraftTransaction triggers dedup-top-toast on duplicate");
+    assert(draftQueue.length === 1, "Group 35: duplicate draft kept in draftQueue by commitDraftTransaction");
+
+    // 强制提交 force = true
+    const forceCommitResult = commitDraftTransaction(autoDupDraft, true);
+    assert(forceCommitResult === true, "Group 35: commitDraftTransaction returns true on force = true");
+    assert(draftQueue.length === 0, "Group 35: draft removed from draftQueue after force commit");
+
+    // 8. 清理测试产生的单号并重置演示草稿
+    closeDedupTopToast();
+    committedOrderIds.delete(dupTestOrder);
+    committedOrderIds.delete(intraBatchOrder);
+    resetDemoDrafts();
+
+
+    // ==========================================
+    // Group 36: 月度净支出分栏、动态 SVG 环形饼图与分类占比列表及账单卡片优化验证
+    // ==========================================
+    switchTab('transactions');
+
+    // 1. 结构验证：月份切换按钮、净支出双 ID 兼容与左右分栏
+    const btnSelectMonth = document.getElementById('btn-select-month');
+    assert(btnSelectMonth !== null, "Group 36: #btn-select-month exists on summary card");
+    const monthlyNetEl = document.getElementById('monthly-net-expense');
+    const totalNetEl = document.getElementById('total-net-expense');
+    assert(monthlyNetEl !== null, "Group 36: #monthly-net-expense exists with prominent styling");
+    assert(totalNetEl !== null, "Group 36: #total-net-expense exists for backward compatibility");
+    assert(monthlyNetEl.innerText.trim() === totalNetEl.innerText.trim(), "Group 36: #monthly-net-expense and #total-net-expense are in sync (" + monthlyNetEl.innerText + ")");
+
+    // 2. 右侧图表容器与 SVG 实心饼状图验证
+    const chartPanel = document.getElementById('monthly-chart-panel');
+    assert(chartPanel !== null, "Group 36: #monthly-chart-panel exists");
+    const pieChart = document.getElementById('monthly-pie-chart');
+    assert(pieChart !== null, "Group 36: #monthly-pie-chart exists");
+    const pieSvg = pieChart.querySelector('svg');
+    assert(pieSvg !== null, "Group 36: #monthly-pie-chart contains SVG");
+
+    // 验证实心饼图：存在实心扇区 <path class="pie-slice"> 或完整实心圆 <circle class="pie-slice">，且 fill 不为 none
+    const pieSlices = pieSvg.querySelectorAll('.pie-slice');
+    assert(pieSlices.length >= 1, "Group 36: SVG solid pie chart has .pie-slice elements rendered (found " + pieSlices.length + ")");
+    pieSlices.forEach(slice => {
+      const fill = slice.getAttribute('fill') || '';
+      assert(fill !== '' && fill !== 'none' && fill !== 'transparent', "Group 36: Pie slice has solid fill (" + fill + ")");
+    });
+
+    // 3. 右侧各分类数据列表与格式验证 (分类名(XX%):紧凑金额) 及无遮罩验证 (<= 4 项)
+    const pieLegend = document.getElementById('monthly-pie-legend');
+    assert(pieLegend !== null, "Group 36: #monthly-pie-legend exists");
+    const legendItems = pieLegend.querySelectorAll('.monthly-pie-legend-item');
+    assert(legendItems.length > 0, "Group 36: #monthly-pie-legend contains category items (found " + legendItems.length + ")");
+    assert(legendItems.length <= 4, "Group 36: Initial October data has <= 4 categories (found " + legendItems.length + ")");
+    assert(!pieLegend.classList.contains('pie-legend-fade-bottom'), "Group 36: #monthly-pie-legend has no fade mask when items <= 4");
+
+    let totalPercentage = 0;
+    const legendRegex = /^([^(\s]+)\s*\((\d+)%\):([\d.]+)$/;
+    legendItems.forEach(item => {
+      const text = item.innerText.trim();
+      assert(legendRegex.test(text), "Group 36: Legend item matches format '${分类名}(${百分比}%):${紧凑金额}', got: '" + text + "'");
+      const match = text.match(legendRegex);
+      const catName = match[1];
+      const pct = parseInt(match[2], 10);
+      const amtStr = match[3];
+      totalPercentage += pct;
+
+      // 验证紧凑金额：去除尾部多余 0，最多 2 位小数
+      if (amtStr.includes('.')) {
+        assert(!amtStr.endsWith('0'), "Group 36: Compact amount has no trailing zeros ('" + amtStr + "')");
+        const decPart = amtStr.split('.')[1];
+        assert(decPart.length <= 2, "Group 36: Compact amount has at most 2 decimal places ('" + amtStr + "')");
+      }
+    });
+    assert(totalPercentage === 100, "Group 36: Sum of category breakdown percentages is exactly 100% (got " + totalPercentage + "%)");
+
+    // 4. 账单卡片 (.tx-item) 细节验证
+    const allTxCards = Array.from(document.querySelectorAll('.tx-item:not(.soft-deleted)'));
+    assert(allTxCards.length > 0, "Group 36: Active transaction cards exist");
+    allTxCards.forEach(card => {
+      const btnInCard = card.querySelector('button');
+      assert(btnInCard === null, "Group 36: tx-item card contains NO button: " + card.id);
+      const sourceTagInCard = card.querySelector('.tx-source-tag');
+      assert(sourceTagInCard !== null, "Group 36: tx-item contains .tx-source-tag: " + card.id);
+      assert(sourceTagInCard.innerText.trim().length > 0, "Group 36: tx-source-tag has non-empty text: " + sourceTagInCard.innerText);
+
+      // 中间底行检查：不应出现 "• 自动识别"
+      const middleRow = card.querySelector('.min-w-0.flex-1 .text-xs');
+      if (middleRow) {
+        assert(!middleRow.innerText.includes('• 自动识别'), "Group 36: Middle row of tx-item does not include '• 自动识别'");
+      }
+    });
+
+    // 5. 动态联动测试：新增一笔流水后饼图与分类列表实时重算
+    insertTransactionToList({
+      id: "tx-test-breakdown-add",
+      merchant: "测试医疗诊所",
+      amount: 150.00,
+      amountInCents: 15000,
+      catName: "医疗健康",
+      parentCat: "医疗健康",
+      category: "医疗健康",
+      channel: "微信",
+      account: "微信钱包",
+      txTime: "2026-10-26 18:00:00",
+      orderTime: "2026-10-26 18:00:00",
+      txDate: "2026-10-26",
+      timeOnly: "18:00",
+      orderId: "TEST_MED_ORDER_20261026",
+      badge: "自动识别"
+    });
+    adjustMonthlyTotals(150.00);
+
+    const legendItemsAfterAdd = Array.from(pieLegend.querySelectorAll('.monthly-pie-legend-item'));
+    const hasMedCat = legendItemsAfterAdd.some(it => it.innerText.includes('医疗健康'));
+    assert(hasMedCat, "Group 36: Added '医疗健康' transaction dynamically reflected in pie legend");
+
+    // 重新校验 100% 闭合
+    let newTotalPct = 0;
+    legendItemsAfterAdd.forEach(item => {
+      const m = item.innerText.trim().match(legendRegex);
+      if (m) newTotalPct += parseInt(m[2], 10);
+    });
+    assert(newTotalPct === 100, "Group 36: Total percentage remains 100% after adding new transaction");
+
+    // 5.1 内部滚动与底部渐变遮罩交互验证（分类数量 > 4 时自动激活遮罩，滚动到底部解除）
+    assert(legendItemsAfterAdd.length > 4, "Group 36: Category count is > 4 after adding '医疗健康' (found " + legendItemsAfterAdd.length + ")");
+    assert(pieLegend.classList.contains('pie-legend-fade-bottom'), "Group 36: #monthly-pie-legend automatically activates .pie-legend-fade-bottom when items > 4");
+    assert(pieLegend.scrollHeight > pieLegend.clientHeight, "Group 36: #monthly-pie-legend supports vertical scrolling (scrollHeight " + pieLegend.scrollHeight + " > clientHeight " + pieLegend.clientHeight + ")");
+
+    // 模拟滚动到底部：自动移除 .pie-legend-fade-bottom 遮罩
+    pieLegend.scrollTop = pieLegend.scrollHeight - pieLegend.clientHeight;
+    if (typeof pieLegend.onscroll === 'function') pieLegend.onscroll();
+    assert(!pieLegend.classList.contains('pie-legend-fade-bottom'), "Group 36: .pie-legend-fade-bottom removed when scrolled to bottom");
+
+    // 模拟滚动回顶部：重新激活 .pie-legend-fade-bottom 遮罩
+    pieLegend.scrollTop = 0;
+    if (typeof pieLegend.onscroll === 'function') pieLegend.onscroll();
+    assert(pieLegend.classList.contains('pie-legend-fade-bottom'), "Group 36: .pie-legend-fade-bottom restored when scrolled back up");
+
+    // 6. 动态联动测试：删除流水后饼图与分类列表实时重算
+    deleteTxItem('tx-test-breakdown-add');
+    const legendItemsAfterDel = Array.from(pieLegend.querySelectorAll('.monthly-pie-legend-item'));
+    const hasMedAfterDel = legendItemsAfterDel.some(it => it.innerText.includes('医疗健康'));
+    assert(!hasMedAfterDel, "Group 36: Deleted '医疗健康' transaction dynamically removed from pie legend");
+    assert(legendItemsAfterDel.length <= 4, "Group 36: Category count restored to <= 4 after deleting '医疗健康' (found " + legendItemsAfterDel.length + ")");
+    assert(!pieLegend.classList.contains('pie-legend-fade-bottom'), "Group 36: .pie-legend-fade-bottom automatically removed when category count returns to <= 4");
+
+    // 7. 动态联动测试：切换月份空数据与有数据状态
+    selectMonthYear(2026, 11);
+    const emptyLegendText = pieLegend.innerText.trim();
+    assert(emptyLegendText.includes('暂无支出数据'), "Group 36: Empty month shows '暂无支出数据' in legend");
+    const emptySvgCircle = pieChart.querySelector('svg circle');
+    assert(emptySvgCircle !== null, "Group 36: Empty month renders placeholder circle in chart");
+    assert(!pieLegend.classList.contains('pie-legend-fade-bottom'), "Group 36: Empty month has no fade mask");
+
+    // 切回 2026 年 10 月
+    selectMonthYear(2026, 10);
+    assert(pieLegend.querySelectorAll('.monthly-pie-legend-item').length > 0, "Group 36: Restored to October, pie legend restored");
+    const restoredSlices = pieChart.querySelectorAll('.pie-slice');
+    assert(restoredSlices.length >= 1, "Group 36: Restored to October, solid pie slices restored (found " + restoredSlices.length + ")");
+
+    // 8. 动态联动测试：分类管理中删除分类与恢复
+    if (window.DomainRegistry && typeof window.DomainRegistry.removeCategory === 'function') {
+      window.DomainRegistry.removeCategory('休闲娱乐');
+      syncAllCategoryUIs();
+      const legendAfterCatRemove = Array.from(pieLegend.querySelectorAll('.monthly-pie-legend-item'));
+      assert(!legendAfterCatRemove.some(it => it.innerText.includes('休闲娱乐')), "Group 36: Removed category '休闲娱乐' not in breakdown");
+      
+      // 还原分类
+      if (typeof resetCategoriesToDefault === 'function') resetCategoriesToDefault(); else if (window.DomainRegistry && window.DomainRegistry.resetCategories) window.DomainRegistry.resetCategories();
+      syncAllCategoryUIs();
+    }
+
+        const failed = window.__TEST_RESULTS__.filter(r => !r.pass);
     const passed = window.__TEST_RESULTS__.filter(r => r.pass);
     const summary = "SUMMARY: " + passed.length + " PASSED, " + failed.length + " FAILED";
     console.log(summary);
@@ -828,38 +1540,42 @@ window.addEventListener('DOMContentLoaded', () => {
 """
 
 test_html = html.replace('</body>', test_script + '\n</body>')
-test_file = os.path.abspath('tools/test_runner.html')
-with open(test_file, 'w', encoding='utf-8') as f:
-    f.write(test_html)
+test_file = os.path.abspath('singwallet_test_runner.html')
 
-edge_exe = r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
-cmd = [
-    edge_exe,
-    '--headless',
-    '--disable-gpu',
-    '--dump-dom',
-    'file:///' + test_file.replace('\\', '/')
-]
+try:
+    with open(test_file, 'w', encoding='utf-8') as f:
+        f.write(test_html)
 
-res = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
+    edge_exe = r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+    cmd = [
+        edge_exe,
+        '--headless',
+        '--disable-gpu',
+        '--dump-dom',
+        'file:///' + test_file.replace('\\', '/')
+    ]
 
-dump_m = re.search(r'<div id="test-results-dump">([^<]+)</div>', res.stdout)
-if dump_m:
-    results = json.loads(dump_m.group(1))
-    passed = [r for r in results if r['pass']]
-    failed = [r for r in results if not r['pass']]
-    print(f"RESULTS: {len(passed)} PASSED, {len(failed)} FAILED")
-    for r in failed:
-        print("  [FAIL]", r['msg'])
-    if not failed:
-        print("  >>> ALL TEST ASSERTIONS PASSED PERFECTLY! <<<")
-else:
-    title_m = re.search(r'<title>([^<]+)</title>', res.stdout)
-    print("Edge Result Title:", title_m.group(1) if title_m else "None")
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
 
-# Cleanup test_runner.html
-if os.path.exists(test_file):
-    try:
-        os.remove(test_file)
-    except Exception:
-        pass
+    dump_m = re.search(r'<div id="test-results-dump">([^<]+)</div>', res.stdout)
+    if dump_m:
+        results = json.loads(dump_m.group(1))
+        passed = [r for r in results if r['pass']]
+        failed = [r for r in results if not r['pass']]
+        print(f"RESULTS: {len(passed)} PASSED, {len(failed)} FAILED")
+        for r in failed:
+            print("  [FAIL]", r['msg'])
+        if not failed:
+            print("  >>> ALL TEST ASSERTIONS PASSED PERFECTLY! <<<")
+        else:
+            sys.exit(1)
+    else:
+        title_m = re.search(r'<title>([^<]+)</title>', res.stdout)
+        print("Edge Result Title:", title_m.group(1) if title_m else "None")
+        sys.exit(1)
+finally:
+    if os.path.exists(test_file):
+        try:
+            os.remove(test_file)
+        except Exception:
+            pass

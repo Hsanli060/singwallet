@@ -1,37 +1,14 @@
 // lib/presentation/screens/drafts/widgets/category_suggestion_card.dart
 import 'package:flutter/material.dart';
 import '../../../../data/models/models.dart';
+import '../../../theme/app_icon_registry.dart';
 
 /// Helper to resolve category icons from iconKey or category name.
 IconData resolveCategoryIcon(String? iconKey, String categoryName) {
-  final key = (iconKey ?? '').toLowerCase();
-  final name = categoryName.toLowerCase();
-
-  if (key.contains('food') || name.contains('餐饮') || name.contains('吃') || name.contains('美食')) {
-    return Icons.restaurant;
-  }
-  if (key.contains('transport') || name.contains('交通') || name.contains('出行') || name.contains('车')) {
-    return Icons.directions_subway;
-  }
-  if (key.contains('shop') || name.contains('购物') || name.contains('超市') || name.contains('日用')) {
-    return Icons.shopping_bag_outlined;
-  }
-  if (key.contains('entertainment') || name.contains('娱乐') || name.contains('玩') || name.contains('影')) {
-    return Icons.sports_esports_outlined;
-  }
-  if (key.contains('bill') || name.contains('生活缴费') || name.contains('账单') || name.contains('水电') || name.contains('费')) {
-    return Icons.receipt_long_outlined;
-  }
-  if (key.contains('medical') || name.contains('医疗') || name.contains('药') || name.contains('健康')) {
-    return Icons.medical_services_outlined;
-  }
-  if (key.contains('income') || name.contains('收入') || name.contains('工资') || name.contains('红包')) {
-    return Icons.savings_outlined;
-  }
-  if (key.contains('other') || name.contains('其他')) {
-    return Icons.more_horiz;
-  }
-  return Icons.category_outlined;
+  return AppIconRegistry.resolveCategoryIcon(
+    iconKey: iconKey,
+    categoryName: categoryName,
+  );
 }
 
 /// Category Suggestion Card displaying AI/rule classification with confidence %

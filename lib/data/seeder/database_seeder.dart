@@ -1,5 +1,6 @@
 // lib/data/seeder/database_seeder.dart
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import '../../core/constants/domain_metadata.dart';
 import '../models/models.dart';
 
 /// Seeds default system categories and accounts into SQLite database.
@@ -9,130 +10,17 @@ import '../models/models.dart';
 class DatabaseSeeder {
   DatabaseSeeder._();
 
-  /// Default categories satisfying foreign key constraints in `transactions`
-  /// and classification rules.
-  static final List<Category> defaultCategories = [
-    Category(
-      id: 'cat_food',
-      name: '餐饮美食',
-      applicableType: 'expense',
-      iconKey: 'restaurant',
-      sortOrder: 1,
-      createdAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-      updatedAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-    ),
-    Category(
-      id: 'cat_transport',
-      name: '交通出行',
-      applicableType: 'expense',
-      iconKey: 'directions_car',
-      sortOrder: 2,
-      createdAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-      updatedAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-    ),
-    Category(
-      id: 'cat_shopping',
-      name: '日常购物',
-      applicableType: 'expense',
-      iconKey: 'shopping_bag',
-      sortOrder: 3,
-      createdAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-      updatedAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-    ),
-    Category(
-      id: 'cat_entertainment',
-      name: '休闲娱乐',
-      applicableType: 'expense',
-      iconKey: 'sports_esports',
-      sortOrder: 4,
-      createdAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-      updatedAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-    ),
-    Category(
-      id: 'cat_bills',
-      name: '生活缴费',
-      applicableType: 'expense',
-      iconKey: 'receipt_long',
-      sortOrder: 5,
-      createdAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-      updatedAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-    ),
-    Category(
-      id: 'cat_medical',
-      name: '医疗健康',
-      applicableType: 'expense',
-      iconKey: 'local_hospital',
-      sortOrder: 6,
-      createdAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-      updatedAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-    ),
-    Category(
-      id: 'cat_other',
-      name: '其他支出',
-      applicableType: 'both',
-      iconKey: 'more_horiz',
-      sortOrder: 99,
-      createdAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-      updatedAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-    ),
-    Category(
-      id: 'cat_income',
-      name: '工资收入',
-      applicableType: 'income',
-      iconKey: 'account_balance_wallet',
-      sortOrder: 100,
-      createdAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-      updatedAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-    ),
-  ];
+  /// Default categories derived directly from [DomainMetadata] as single source of truth.
+  static final List<Category> defaultCategories =
+      DomainMetadata.categories.map((c) => c.toCategory()).toList();
 
-  /// Default accounts for common Chinese payment channels and methods.
-  static final List<Account> defaultAccounts = [
-    Account(
-      id: 'acc_wechat',
-      name: '微信支付',
-      kind: 'e_wallet',
-      createdAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-      updatedAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-    ),
-    Account(
-      id: 'acc_alipay',
-      name: '支付宝',
-      kind: 'e_wallet',
-      createdAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-      updatedAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-    ),
-    Account(
-      id: 'acc_bank',
-      name: '银行卡',
-      kind: 'debit_card',
-      createdAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-      updatedAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-    ),
-    Account(
-      id: 'acc_cash',
-      name: '现金',
-      kind: 'cash',
-      createdAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-      updatedAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-    ),
-  ];
+  /// Default accounts derived directly from [DomainMetadata].
+  static final List<Account> defaultAccounts =
+      DomainMetadata.accounts.map((a) => a.toAccount()).toList();
 
-  /// Default project labels for orthogonal budgeting.
-  static final List<Project> defaultProjects = [
-    Project(
-      id: 'proj_travel',
-      name: '旅行出游',
-      createdAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-      updatedAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-    ),
-    Project(
-      id: 'proj_home',
-      name: '家居装修',
-      createdAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-      updatedAt: DateTime.utc(2026, 1, 1).toIso8601String(),
-    ),
-  ];
+  /// Default project labels derived directly from [DomainMetadata].
+  static final List<Project> defaultProjects =
+      DomainMetadata.projects.map((p) => p.toProject()).toList();
 
   /// Executes idempotent seeding against [db].
   ///

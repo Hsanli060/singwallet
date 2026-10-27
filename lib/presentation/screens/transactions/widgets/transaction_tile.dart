@@ -5,6 +5,7 @@ import '../../../../core/utils/currency_utils.dart';
 import '../../../../data/models/models.dart';
 import '../../../providers/rule_account_providers.dart';
 import '../../../providers/transaction_providers.dart';
+import '../../../theme/app_icon_registry.dart';
 
 /// Rich transaction tile displaying category icon, merchant title,
 /// account capsule, type badge, project label, refund indicator, and formatted amount.
@@ -23,47 +24,19 @@ class TransactionTile extends ConsumerWidget {
   });
 
   static IconData getIconData(String? iconKey) {
-    switch (iconKey) {
-      case 'restaurant':
-        return Icons.restaurant;
-      case 'directions_car':
-        return Icons.directions_car;
-      case 'shopping_bag':
-        return Icons.shopping_bag;
-      case 'sports_esports':
-        return Icons.sports_esports;
-      case 'receipt_long':
-        return Icons.receipt_long;
-      case 'local_hospital':
-        return Icons.local_hospital;
-      case 'more_horiz':
-        return Icons.more_horiz;
-      case 'account_balance_wallet':
-        return Icons.account_balance_wallet;
-      case 'flight':
-        return Icons.flight;
-      case 'home':
-        return Icons.home;
-      default:
-        return Icons.category_outlined;
-    }
+    return AppIconRegistry.resolveCategoryIconByKey(iconKey);
   }
 
   static String getChannelDisplayName(String channel) {
-    switch (channel) {
-      case 'wechat':
-        return '微信';
-      case 'alipay':
-        return '支付宝';
-      case 'bank':
-      case 'unionpay':
-        return '银行卡';
-      case 'cash':
-        return '现金';
-      case 'other':
-      default:
-        return '其他';
-    }
+    return AppIconRegistry.resolveChannelDisplayName(channel);
+  }
+
+  static Color getChannelColor(String channel, [ThemeData? theme]) {
+    return AppIconRegistry.resolveChannelColor(channel, theme);
+  }
+
+  static IconData getChannelIcon(String channel) {
+    return AppIconRegistry.resolveChannelIcon(channel);
   }
 
   void _handleDelete(BuildContext context, WidgetRef ref) {

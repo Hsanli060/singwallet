@@ -48,3 +48,6 @@ app.*.map.json
 .widget_preview/
 
 __pycache__/
+
+# Scratch and temporary debug files
+scratch/

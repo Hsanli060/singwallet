@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../providers/draft_providers.dart';
+import '../../theme/app_icon_registry.dart';
 import 'draft_confirmation_screen.dart';
 
 /// Screen displaying pending OCR bill drafts in NEEDS_REVIEW or IMPORTED state.
@@ -16,50 +17,14 @@ import 'draft_confirmation_screen.dart';
 class DraftsQueueScreen extends ConsumerWidget {
   const DraftsQueueScreen({super.key});
 
-  IconData _getChannelIcon(String channel) {
-    switch (channel.toLowerCase()) {
-      case 'wechat':
-        return Icons.chat_bubble_outline;
-      case 'alipay':
-        return Icons.payment;
-      case 'bank_card':
-        return Icons.credit_card;
-      case 'cash':
-        return Icons.money;
-      default:
-        return Icons.receipt_outlined;
-    }
-  }
+  IconData _getChannelIcon(String channel) =>
+      AppIconRegistry.resolveChannelIcon(channel);
 
-  Color _getChannelColor(String channel, ThemeData theme) {
-    switch (channel.toLowerCase()) {
-      case 'wechat':
-        return const Color(0xFF07C160);
-      case 'alipay':
-        return const Color(0xFF1677FF);
-      case 'bank_card':
-        return const Color(0xFFFF9800);
-      case 'cash':
-        return const Color(0xFF4CAF50);
-      default:
-        return theme.colorScheme.primary;
-    }
-  }
+  Color _getChannelColor(String channel, ThemeData theme) =>
+      AppIconRegistry.resolveChannelColor(channel, theme);
 
-  String _getChannelLabel(String channel) {
-    switch (channel.toLowerCase()) {
-      case 'wechat':
-        return '微信支付';
-      case 'alipay':
-        return '支付宝';
-      case 'bank_card':
-        return '银行卡';
-      case 'cash':
-        return '现金';
-      default:
-        return '其他渠道';
-    }
-  }
+  String _getChannelLabel(String channel) =>
+      AppIconRegistry.resolveChannelLabel(channel);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
