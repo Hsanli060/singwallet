@@ -11,6 +11,8 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.35); border-radius: 6px; }
     ::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.65); }
+    .scrollbar-none::-webkit-scrollbar { display: none; }
+    .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
     .tap-highlight:active { transform: scale(0.96); transition: transform 0.08s ease; }
     .animate-fadeIn { animation: fadeIn 0.15s ease-out; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
@@ -279,7 +281,7 @@
         </div>
 
         <!-- Filter Chips Bar (Dynamically Computed from Current Month Transactions) -->
-        <div class="flex space-x-2 overflow-x-auto py-1 text-xs" id="filter-chips">
+        <div class="flex items-center space-x-2 overflow-x-auto py-1 text-xs scrollbar-none" id="filter-chips">
           <!-- Dynamically populated by updateDynamicCategoryChips() -->
         </div>
 
@@ -296,7 +298,7 @@
         </div>
 
         <!-- Compound Active Filters Capsules Bar (Quick dismissal for drawer filters) -->
-        <div id="active-filters-bar" class="hidden flex items-center space-x-1.5 overflow-x-auto py-1 text-xs animate-fadeIn">
+        <div id="active-filters-bar" class="hidden flex items-center space-x-1.5 overflow-x-auto py-1 text-xs animate-fadeIn scrollbar-none">
           <!-- Populated by updateActiveFilterCapsules() -->
         </div>
 
@@ -569,66 +571,66 @@
                 <input type="hidden" id="select-draft-category" value="餐饮美食">
                 <button type="button" class="custom-dropdown-trigger px-3.5 py-2 text-xs font-medium rounded-xl" onclick="toggleCustomDropdown('select-draft-category', event)">
                   <div class="flex items-center space-x-2 truncate">
-                    <span id="suggested-icon" class="w-4 h-4 inline-block shrink-0"></span>
+                    <span id="suggested-icon" class="text-sm shrink-0">🍔</span>
                     <span class="custom-dropdown-label truncate font-semibold text-slate-100" id="label-select-draft-category">餐饮美食</span>
                     <span id="suggested-name" class="hidden">推荐分类：餐饮美食</span>
                   </div>
                   <svg class="w-4 h-4 dropdown-chevron ml-1 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M19 9l-7 7-7-7"/></svg>
                 </button>
                 <div class="custom-dropdown-menu rounded-2xl backdrop-blur-xl shadow-2xl" id="menu-select-draft-category" style="min-width: 100%; max-height: 220px;">
-                  <div class="custom-dropdown-option rounded-xl selected" tabindex="0" data-value="餐饮美食" onclick="onDraftCategorySelect('', '餐饮美食', event)">
-                    <div class="flex items-center space-x-2.5">
-                      <div class="w-4 h-4 shrink-0" data-cat-icon="餐饮美食"></div>
-                      <span class="opt-text truncate font-medium text-xs">餐饮美食</span>
+                  <div class="custom-dropdown-option rounded-xl selected" tabindex="0" data-value="餐饮美食" onclick="onDraftCategorySelect('🍔', '餐饮美食', event)">
+                    <div class="flex items-center space-x-2">
+                      <span class="shrink-0 text-sm">🍔</span>
+                      <span class="opt-text truncate font-medium">餐饮美食</span>
                     </div>
                     <span class="opt-check">✓</span>
                   </div>
-                  <div class="custom-dropdown-option rounded-xl " tabindex="0" data-value="交通出行" onclick="onDraftCategorySelect('', '交通出行', event)">
-                    <div class="flex items-center space-x-2.5">
-                      <div class="w-4 h-4 shrink-0" data-cat-icon="交通出行"></div>
-                      <span class="opt-text truncate font-medium text-xs">交通出行</span>
+                  <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="交通出行" onclick="onDraftCategorySelect('🚗', '交通出行', event)">
+                    <div class="flex items-center space-x-2">
+                      <span class="shrink-0 text-sm">🚗</span>
+                      <span class="opt-text truncate font-medium">交通出行</span>
                     </div>
                     <span class="opt-check">✓</span>
                   </div>
-                  <div class="custom-dropdown-option rounded-xl " tabindex="0" data-value="日常购物" onclick="onDraftCategorySelect('', '日常购物', event)">
-                    <div class="flex items-center space-x-2.5">
-                      <div class="w-4 h-4 shrink-0" data-cat-icon="日常购物"></div>
-                      <span class="opt-text truncate font-medium text-xs">日常购物</span>
+                  <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="日常购物" onclick="onDraftCategorySelect('🛒', '日常购物', event)">
+                    <div class="flex items-center space-x-2">
+                      <span class="shrink-0 text-sm">🛒</span>
+                      <span class="opt-text truncate font-medium">日常购物</span>
                     </div>
                     <span class="opt-check">✓</span>
                   </div>
-                  <div class="custom-dropdown-option rounded-xl " tabindex="0" data-value="休闲娱乐" onclick="onDraftCategorySelect('', '休闲娱乐', event)">
-                    <div class="flex items-center space-x-2.5">
-                      <div class="w-4 h-4 shrink-0" data-cat-icon="休闲娱乐"></div>
-                      <span class="opt-text truncate font-medium text-xs">休闲娱乐</span>
+                  <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="休闲娱乐" onclick="onDraftCategorySelect('🎮', '休闲娱乐', event)">
+                    <div class="flex items-center space-x-2">
+                      <span class="shrink-0 text-sm">🎮</span>
+                      <span class="opt-text truncate font-medium">休闲娱乐</span>
                     </div>
                     <span class="opt-check">✓</span>
                   </div>
-                  <div class="custom-dropdown-option rounded-xl " tabindex="0" data-value="生活缴费" onclick="onDraftCategorySelect('', '生活缴费', event)">
-                    <div class="flex items-center space-x-2.5">
-                      <div class="w-4 h-4 shrink-0" data-cat-icon="生活缴费"></div>
-                      <span class="opt-text truncate font-medium text-xs">生活缴费</span>
+                  <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="生活缴费" onclick="onDraftCategorySelect('⚡', '生活缴费', event)">
+                    <div class="flex items-center space-x-2">
+                      <span class="shrink-0 text-sm">⚡</span>
+                      <span class="opt-text truncate font-medium">生活缴费</span>
                     </div>
                     <span class="opt-check">✓</span>
                   </div>
-                  <div class="custom-dropdown-option rounded-xl " tabindex="0" data-value="医疗健康" onclick="onDraftCategorySelect('', '医疗健康', event)">
-                    <div class="flex items-center space-x-2.5">
-                      <div class="w-4 h-4 shrink-0" data-cat-icon="医疗健康"></div>
-                      <span class="opt-text truncate font-medium text-xs">医疗健康</span>
+                  <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="医疗健康" onclick="onDraftCategorySelect('💊', '医疗健康', event)">
+                    <div class="flex items-center space-x-2">
+                      <span class="shrink-0 text-sm">💊</span>
+                      <span class="opt-text truncate font-medium">医疗健康</span>
                     </div>
                     <span class="opt-check">✓</span>
                   </div>
-                  <div class="custom-dropdown-option rounded-xl " tabindex="0" data-value="其他支出" onclick="onDraftCategorySelect('', '其他支出', event)">
-                    <div class="flex items-center space-x-2.5">
-                      <div class="w-4 h-4 shrink-0" data-cat-icon="其他支出"></div>
-                      <span class="opt-text truncate font-medium text-xs">其他支出</span>
+                  <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="其他支出" onclick="onDraftCategorySelect('📦', '其他支出', event)">
+                    <div class="flex items-center space-x-2">
+                      <span class="shrink-0 text-sm">📦</span>
+                      <span class="opt-text truncate font-medium">其他支出</span>
                     </div>
                     <span class="opt-check">✓</span>
                   </div>
-                  <div class="custom-dropdown-option rounded-xl " tabindex="0" data-value="工资收入" onclick="onDraftCategorySelect('', '工资收入', event)">
-                    <div class="flex items-center space-x-2.5">
-                      <div class="w-4 h-4 shrink-0" data-cat-icon="工资收入"></div>
-                      <span class="opt-text truncate font-medium text-xs">工资收入</span>
+                  <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="工资收入" onclick="onDraftCategorySelect('💰', '工资收入', event)">
+                    <div class="flex items-center space-x-2">
+                      <span class="shrink-0 text-sm">💰</span>
+                      <span class="opt-text truncate font-medium">工资收入</span>
                     </div>
                     <span class="opt-check">✓</span>
                   </div>
@@ -955,34 +957,13 @@
             </div>
             <div class="flex flex-wrap gap-1.5" id="filter-modal-cats">
               <span onclick="toggleModalCat(this, 'all')" class="modal-cat-tag active-tag px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight">全部</span>
-              <span onclick="toggleModalCat(this, '餐饮美食')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1.5">
-                <span class="w-3.5 h-3.5 inline-block shrink-0" data-cat-icon="餐饮美食"></span>
-                <span>餐饮美食</span>
-              </span>
-              <span onclick="toggleModalCat(this, '日常购物')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1.5">
-                <span class="w-3.5 h-3.5 inline-block shrink-0" data-cat-icon="日常购物"></span>
-                <span>日常购物</span>
-              </span>
-              <span onclick="toggleModalCat(this, '交通出行')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1.5">
-                <span class="w-3.5 h-3.5 inline-block shrink-0" data-cat-icon="交通出行"></span>
-                <span>交通出行</span>
-              </span>
-              <span onclick="toggleModalCat(this, '休闲娱乐')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1.5">
-                <span class="w-3.5 h-3.5 inline-block shrink-0" data-cat-icon="休闲娱乐"></span>
-                <span>休闲娱乐</span>
-              </span>
-              <span onclick="toggleModalCat(this, '生活缴费')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1.5">
-                <span class="w-3.5 h-3.5 inline-block shrink-0" data-cat-icon="生活缴费"></span>
-                <span>生活缴费</span>
-              </span>
-              <span onclick="toggleModalCat(this, '医疗健康')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1.5">
-                <span class="w-3.5 h-3.5 inline-block shrink-0" data-cat-icon="医疗健康"></span>
-                <span>医疗健康</span>
-              </span>
-              <span onclick="toggleModalCat(this, '其他支出')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1.5">
-                <span class="w-3.5 h-3.5 inline-block shrink-0" data-cat-icon="其他支出"></span>
-                <span>其他支出</span>
-              </span>
+              <span onclick="toggleModalCat(this, '餐饮美食')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1"><span>🍔</span><span>餐饮美食</span></span>
+              <span onclick="toggleModalCat(this, '日常购物')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1"><span>🛒</span><span>日常购物</span></span>
+              <span onclick="toggleModalCat(this, '交通出行')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1"><span>🚗</span><span>交通出行</span></span>
+              <span onclick="toggleModalCat(this, '休闲娱乐')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1"><span>🎮</span><span>休闲娱乐</span></span>
+              <span onclick="toggleModalCat(this, '生活缴费')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1"><span>⚡</span><span>生活缴费</span></span>
+              <span onclick="toggleModalCat(this, '医疗健康')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1"><span>💊</span><span>医疗健康</span></span>
+              <span onclick="toggleModalCat(this, '其他支出')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1"><span>📦</span><span>其他支出</span></span>
             </div>
           </div>
 
@@ -1020,36 +1001,36 @@
           <button onclick="closeCategoryModal()" class="text-xs text-slate-400 hover:text-white">取消</button>
         </div>
         <div class="grid grid-cols-4 gap-2 text-xs" id="category-modal-grid">
-          <div data-category-name="餐饮美食" onclick="selectCategory('', '餐饮美食', '快捷网格选择')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
-            <div class="w-9 h-9 rounded-xl bg-slate-900/80 border border-indigo-400/20 flex items-center justify-center p-1 mb-1.5 shadow-inner" data-cat-icon="餐饮美食"></div>
+          <div data-category-name="餐饮美食" onclick="selectCategory('🍔', '餐饮美食', '外卖正餐小吃')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
+            <span class="text-2xl block mb-1">🍔</span>
             <span class="font-medium text-slate-200 text-[11px] block whitespace-nowrap">餐饮美食</span>
           </div>
-          <div data-category-name="交通出行" onclick="selectCategory('', '交通出行', '快捷网格选择')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
-            <div class="w-9 h-9 rounded-xl bg-slate-900/80 border border-indigo-400/20 flex items-center justify-center p-1 mb-1.5 shadow-inner" data-cat-icon="交通出行"></div>
+          <div data-category-name="交通出行" onclick="selectCategory('🚗', '交通出行', '打车公交地铁')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
+            <span class="text-2xl block mb-1">🚗</span>
             <span class="font-medium text-slate-200 text-[11px] block whitespace-nowrap">交通出行</span>
           </div>
-          <div data-category-name="日常购物" onclick="selectCategory('', '日常购物', '快捷网格选择')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
-            <div class="w-9 h-9 rounded-xl bg-slate-900/80 border border-indigo-400/20 flex items-center justify-center p-1 mb-1.5 shadow-inner" data-cat-icon="日常购物"></div>
+          <div data-category-name="日常购物" onclick="selectCategory('🛒', '日常购物', '商超便利网购')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
+            <span class="text-2xl block mb-1">🛒</span>
             <span class="font-medium text-slate-200 text-[11px] block whitespace-nowrap">日常购物</span>
           </div>
-          <div data-category-name="休闲娱乐" onclick="selectCategory('', '休闲娱乐', '快捷网格选择')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
-            <div class="w-9 h-9 rounded-xl bg-slate-900/80 border border-indigo-400/20 flex items-center justify-center p-1 mb-1.5 shadow-inner" data-cat-icon="休闲娱乐"></div>
+          <div data-category-name="休闲娱乐" onclick="selectCategory('🎮', '休闲娱乐', '影音游戏聚会')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
+            <span class="text-2xl block mb-1">🎮</span>
             <span class="font-medium text-slate-200 text-[11px] block whitespace-nowrap">休闲娱乐</span>
           </div>
-          <div data-category-name="生活缴费" onclick="selectCategory('', '生活缴费', '快捷网格选择')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
-            <div class="w-9 h-9 rounded-xl bg-slate-900/80 border border-indigo-400/20 flex items-center justify-center p-1 mb-1.5 shadow-inner" data-cat-icon="生活缴费"></div>
+          <div data-category-name="生活缴费" onclick="selectCategory('⚡', '生活缴费', '水电气网物业')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
+            <span class="text-2xl block mb-1">⚡</span>
             <span class="font-medium text-slate-200 text-[11px] block whitespace-nowrap">生活缴费</span>
           </div>
-          <div data-category-name="医疗健康" onclick="selectCategory('', '医疗健康', '快捷网格选择')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
-            <div class="w-9 h-9 rounded-xl bg-slate-900/80 border border-indigo-400/20 flex items-center justify-center p-1 mb-1.5 shadow-inner" data-cat-icon="医疗健康"></div>
+          <div data-category-name="医疗健康" onclick="selectCategory('💊', '医疗健康', '门诊药品体检')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
+            <span class="text-2xl block mb-1">💊</span>
             <span class="font-medium text-slate-200 text-[11px] block whitespace-nowrap">医疗健康</span>
           </div>
-          <div data-category-name="其他支出" onclick="selectCategory('', '其他支出', '快捷网格选择')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
-            <div class="w-9 h-9 rounded-xl bg-slate-900/80 border border-indigo-400/20 flex items-center justify-center p-1 mb-1.5 shadow-inner" data-cat-icon="其他支出"></div>
+          <div data-category-name="其他支出" onclick="selectCategory('📦', '其他支出', '杂项人情支出')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
+            <span class="text-2xl block mb-1">📦</span>
             <span class="font-medium text-slate-200 text-[11px] block whitespace-nowrap">其他支出</span>
           </div>
-          <div data-category-name="工资收入" onclick="selectCategory('', '工资收入', '快捷网格选择')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
-            <div class="w-9 h-9 rounded-xl bg-slate-900/80 border border-indigo-400/20 flex items-center justify-center p-1 mb-1.5 shadow-inner" data-cat-icon="工资收入"></div>
+          <div data-category-name="工资收入" onclick="selectCategory('💰', '工资收入', '薪资兼职理财')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
+            <span class="text-2xl block mb-1">💰</span>
             <span class="font-medium text-slate-200 text-[11px] block whitespace-nowrap">工资收入</span>
           </div>
         </div>
@@ -1150,7 +1131,7 @@
 
     <!-- ================= 全局弹窗 4: 手动快速记账 & 截图智能识别 (图1优化：快记一手界面严格按图1排布) ================= -->
     <div id="manual-add-modal" class="hidden absolute inset-0 bg-black/75 z-40 flex items-center justify-center p-3.5 backdrop-blur-sm overflow-hidden" onclick="if(event.target===this) closeManualAddModal()">
-      <div id="manual-add-dialog" class="bg-slate-900 border-2 border-indigo-500/40 rounded-3xl p-4 max-w-xs w-full shadow-2xl space-y-2.5 animate-fadeIn overflow-y-auto max-h-[760px] scrollbar-none">
+      <div id="manual-add-dialog" class="bg-slate-900 border-2 border-indigo-500/40 rounded-3xl p-4 max-w-xs w-full shadow-2xl space-y-2.5 animate-fadeIn">
         
         <!-- Header -->
         <div class="flex items-center justify-between pb-1.5 border-b border-slate-800">
@@ -1382,13 +1363,18 @@
           </div>
 
           <!-- 兼容旧逻辑隐藏字段与测试套件 -->
-          <input type="hidden" id="manual-account" value="微信 · 钱包">
+          <label style="display: none;" class="block font-medium text-slate-400 mb-0.5 text-[11px]">支付类型</label>
           <div style="display: none;" id="dropdown-wrap-manual-account" data-id="manual-account" aria-hidden="true">
+            <input type="hidden" id="manual-account" value="微信 · 钱包">
             <span id="label-manual-account">微信 · 钱包</span>
-            <div id="menu-manual-account" class="custom-dropdown-menu rounded-2xl backdrop-blur-xl">
-              <div class="custom-dropdown-option rounded-xl selected" tabindex="0" data-value="微信 · 钱包"><span class="opt-check">✓</span></div>
-              <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="支付宝 · 余额"><span class="opt-check">✓</span></div>
-              <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="微信 · 招商银行(8848)"><span class="opt-check">✓</span></div>
+            <div id="menu-manual-account" class="custom-dropdown-menu menu-dropup rounded-2xl backdrop-blur-xl">
+              <div class="custom-dropdown-option rounded-xl selected" tabindex="0" data-value="微信 · 钱包"><span class="opt-text truncate">微信 · 钱包</span><span class="opt-check">✓</span></div>
+              <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="微信 · 零钱通"><span class="opt-text truncate">微信 · 零钱通</span><span class="opt-check">✓</span></div>
+              <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="微信 · 招商银行(8848)"><span class="opt-text truncate">微信 · 招商银行(8848)</span><span class="opt-check">✓</span></div>
+              <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="支付宝 · 余额"><span class="opt-text truncate">支付宝 · 余额</span><span class="opt-check">✓</span></div>
+              <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="支付宝 · 余额宝"><span class="opt-text truncate">支付宝 · 余额宝</span><span class="opt-check">✓</span></div>
+              <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="支付宝 · 建设银行(1234)"><span class="opt-text truncate">支付宝 · 建设银行(1234)</span><span class="opt-check">✓</span></div>
+              <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="云闪付 · 工商银行(5678)"><span class="opt-text truncate">云闪付 · 工商银行(5678)</span><span class="opt-check">✓</span></div>
             </div>
           </div>
         </div>
@@ -1925,20 +1911,20 @@
     `
   };
 
-    window.renderSquircleIcon = function(catName, size = 'w-10 h-10', iconPadding = 'p-1.5') {
+    window.renderSquircleIcon = function(catName, size = 'w-10 h-10', iconPadding = '') {
       const parent = typeof resolveParentCategory === 'function' ? resolveParentCategory(catName) : catName;
-      const svgContent = (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[parent]) || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || '';
+      const emoji = (parentCategoryIcons && parentCategoryIcons[parent]) || '📦';
       return `
-        <div class="${size} rounded-2xl bg-gradient-to-br from-indigo-500/20 via-slate-800/90 to-purple-500/10 border border-indigo-400/30 flex items-center justify-center shadow-lg shadow-indigo-500/15 backdrop-blur-md shrink-0 ${iconPadding}">
-          ${svgContent}
+        <div class="${size} rounded-2xl bg-slate-700/50 flex items-center justify-center text-lg shrink-0 border border-slate-600/40 shadow-sm">
+          ${emoji}
         </div>
       `;
     };
 
     window.getSmallCatSvg = function(catName) {
       const parent = typeof resolveParentCategory === 'function' ? resolveParentCategory(catName) : catName;
-      const svg = (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[parent]) || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || '';
-      return `<span class="w-full h-full flex items-center justify-center">${svg}</span>`;
+      const emoji = (parentCategoryIcons && parentCategoryIcons[parent]) || '📦';
+      return `<span class="w-full h-full flex items-center justify-center text-sm">${emoji}</span>`;
     };
     // ==============================================================================
 
@@ -2029,7 +2015,7 @@
           account: '钱包',
           category: '日常购物',
           categoryName: '日常购物',
-          categoryIcon: '',
+          categoryIcon: '🛒',
           confidence: 95,
           rule: '智能分类 "日常购物" (置信度 95%)',
           orderId: '4200003143202610252738865252',
@@ -2057,7 +2043,7 @@
           account: '钱包',
           category: '日常购物',
           categoryName: '日常购物',
-          categoryIcon: '',
+          categoryIcon: '🛒',
           confidence: 98,
           rule: '规则命中 "淘宝*" -> 日常购物',
           orderId: '4500000566202610259735455478',
@@ -2086,7 +2072,7 @@
           account: '钱包',
           category: '餐饮美食',
           categoryName: '餐饮美食',
-          categoryIcon: '',
+          categoryIcon: '🍔',
           confidence: 98,
           rule: '规则命中 "早餐店*" -> 餐饮美食',
           orderId: '4500000527202610268642917303',
@@ -2115,7 +2101,7 @@
           account: '钱包',
           category: '日常购物',
           categoryName: '日常购物',
-          categoryIcon: '',
+          categoryIcon: '🛒',
           confidence: 96,
           rule: '规则命中 "拼多多*" -> 日常购物',
           orderId: '4500000570202610254022722547',
@@ -2223,8 +2209,8 @@
       const merchant = '星巴克甄选（国贸店）';
       const amount = 38.00;
       const catName = '休闲娱乐';
-      const catIcon = (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['餐饮美食']) || '';
       const parentCat = '休闲娱乐';
+      const catIcon = (parentCategoryIcons && parentCategoryIcons[parentCat]) || '🎮';
       const orderId = '420000' + Date.now();
       const txTime = '2026-10-26 15:45:00';
       
@@ -2321,7 +2307,7 @@
       if (!draft) return;
       currentDraftCategory = {
         name: draft.categoryName || draft.category || '日常购物',
-        icon: draft.categoryIcon || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['日常购物']) || '',
+        icon: draft.categoryIcon || (parentCategoryIcons && parentCategoryIcons[draft.categoryName || '日常购物']) || '🛒',
         tag: (draft.categoryName || draft.category || '日常购物').slice(0, 2)
       };
 
@@ -2386,7 +2372,7 @@
 
       // Category card
       const catName = draft.categoryName || draft.category || '餐饮美食';
-      const catIcon = draft.categoryIcon || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[catName]) || '';
+      const catIcon = draft.categoryIcon || (parentCategoryIcons && parentCategoryIcons[catName]) || '🍔';
       currentDraftCategory = {
         name: catName,
         icon: catIcon,
@@ -2399,7 +2385,7 @@
       const labelDraftCat = document.getElementById('label-select-draft-category');
       const inputDraftCat = document.getElementById('select-draft-category');
 
-      if (sugIcon) { sugIcon.className = 'w-4 h-4 inline-block shrink-0'; sugIcon.innerHTML = catIcon; }
+      if (sugIcon) { sugIcon.className = 'text-sm shrink-0'; sugIcon.innerText = catIcon; }
       if (sugName) sugName.innerText = `推荐分类：${catName}`;
       if (labelDraftCat) labelDraftCat.innerText = catName;
       if (inputDraftCat) inputDraftCat.value = catName;
@@ -2510,7 +2496,7 @@
           account: '钱包',
           category: '日常购物',
           categoryName: '日常购物',
-          categoryIcon: '',
+          categoryIcon: '🛒',
           confidence: 95,
           rule: '智能分类 "日常购物" (置信度 95%)',
           orderId: '4200003143202610252738865252',
@@ -2538,7 +2524,7 @@
           account: '钱包',
           category: '日常购物',
           categoryName: '日常购物',
-          categoryIcon: '',
+          categoryIcon: '🛒',
           confidence: 98,
           rule: '规则命中 "淘宝*" -> 日常购物',
           orderId: '4500000566202610259735455478',
@@ -2567,7 +2553,7 @@
           account: '钱包',
           category: '餐饮美食',
           categoryName: '餐饮美食',
-          categoryIcon: '',
+          categoryIcon: '🍔',
           confidence: 98,
           rule: '规则命中 "早餐店*" -> 餐饮美食',
           orderId: '4500000527202610268642917303',
@@ -2596,7 +2582,7 @@
           account: '钱包',
           category: '日常购物',
           categoryName: '日常购物',
-          categoryIcon: '',
+          categoryIcon: '🛒',
           confidence: 96,
           rule: '规则命中 "拼多多*" -> 日常购物',
           orderId: '4500000570202610254022722547',
@@ -2622,15 +2608,25 @@
     }
 
     
-    const CATEGORY_ICON_MAP = window.FAITHFUL_CAT_SVGS;
+    const CATEGORY_ICON_MAP = {
+      '餐饮美食': '🍔',
+      '日常购物': '🛒',
+      '交通出行': '🚗',
+      '休闲娱乐': '🎮',
+      '生活缴费': '⚡',
+      '医疗健康': '💊',
+      '其他支出': '📦',
+      '工资收入': '💰'
+    };
 
-        function onDraftCategorySelect(dummyIcon, name, event) {
+    function onDraftCategorySelect(dummyIcon, name, event) {
       if (event) event.stopPropagation();
-      selectCategory('', name, '下拉选择');
+      const catIcon = dummyIcon || CATEGORY_ICON_MAP[name] || '🍔';
+      selectCategory(catIcon, name, '下拉选择');
       const sug = document.getElementById('suggested-icon');
       if (sug) {
-        sug.className = "w-4 h-4 inline-block shrink-0";
-        sug.innerHTML = (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[name]) || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || '';
+        sug.className = "text-sm shrink-0";
+        sug.innerText = catIcon;
       }
       const label = document.getElementById('label-select-draft-category');
       if (label) label.innerText = name;
@@ -2651,7 +2647,7 @@
 
     let currentDraftCategory = {
       name: '餐饮美食',
-      icon: (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['餐饮美食']) || '',
+      icon: '🍔',
       tag: '餐饮'
     };
 
@@ -2679,7 +2675,7 @@
     }
 
     function selectCategory(icon, name, ruleText = '下拉选择') {
-      const catIcon = icon || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[name]) || '';
+      const catIcon = icon || CATEGORY_ICON_MAP[name] || (parentCategoryIcons && parentCategoryIcons[name]) || '🍔';
       currentDraftCategory = {
         name: name,
         icon: catIcon,
@@ -2691,7 +2687,10 @@
         draftQueue[currentDraftIndex].rule = `用户指定分类: ${name}`;
       }
       const iconEl = document.getElementById('suggested-icon');
-      if (iconEl) iconEl.innerText = catIcon;
+      if (iconEl) {
+        iconEl.className = 'text-sm shrink-0';
+        iconEl.innerText = catIcon;
+      }
       const nameEl = document.getElementById('suggested-name');
       if (nameEl) nameEl.innerText = `推荐分类：${name}`;
       const labelEl = document.getElementById('label-select-draft-category');
@@ -2775,7 +2774,16 @@
       '收入': '工资收入'
     };
 
-    const parentCategoryIcons = window.FAITHFUL_CAT_SVGS;
+    const parentCategoryIcons = {
+      '餐饮美食': '🍔',
+      '日常购物': '🛒',
+      '交通出行': '🚗',
+      '休闲娱乐': '🎮',
+      '生活缴费': '⚡',
+      '医疗健康': '💊',
+      '其他支出': '📦',
+      '工资收入': '💰'
+    };
 
     const CORE_PARENT_CATEGORIES = ['餐饮美食', '交通出行', '日常购物', '休闲娱乐', '生活缴费', '医疗健康', '其他支出', '工资收入'];
 
@@ -2998,10 +3006,11 @@
 
       if (hasCats) {
         Array.from(selectedFilterCats).forEach(cat => {
-          const icon = (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[cat]) || window.SYSTEM_SVGS['tag'];
+          const icon = (parentCategoryIcons && parentCategoryIcons[cat]) || '🏷️';
           html += `
-            <span class="flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-indigo-900/80 text-indigo-200 border border-indigo-600/60 shrink-0">
-              <span>${icon} ${cat}</span>
+            <span class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-indigo-900/80 text-indigo-200 border border-indigo-600/60 shrink-0">
+              <span class="shrink-0">${icon}</span>
+              <span>${cat}</span>
               <button onclick="removeCatFilter('${cat}')" class="hover:text-red-300 ml-1 font-bold text-xs" title="移除该分类">✕</button>
             </span>
           `;
@@ -3094,23 +3103,25 @@
       // 1. 全部流水
       const isAll = (currentFilterKey === 'all' && !activeDayFilter && selectedFilterType === 'all' && selectedFilterCats.has('all') && selectedFilterAccount === 'all' && selectedDatePreset === 'all');
       html += `
-        <span onclick="filterTransactions('all', this)" class="chip-item px-3 py-1.5 rounded-xl ${isAll ? 'bg-indigo-600 text-white font-medium' : 'bg-slate-800 border border-slate-700 text-slate-300'} shrink-0 cursor-pointer tap-highlight shadow-sm">全部流水</span>
+        <span onclick="filterTransactions('all', this)" class="chip-item inline-flex items-center px-3 py-1.5 rounded-xl ${isAll ? 'bg-indigo-600 text-white font-medium' : 'bg-slate-800 border border-slate-700 text-slate-300'} shrink-0 cursor-pointer tap-highlight shadow-sm transition-all text-xs">全部流水</span>
       `;
 
       // 2. 仅看支出
       const isExpense = (currentFilterKey === 'expense' || selectedFilterType === 'expense');
       html += `
-        <span onclick="filterTransactions('expense', this)" class="chip-item px-3 py-1.5 rounded-xl ${isExpense ? 'bg-indigo-600 text-white font-medium' : 'bg-slate-800 border border-slate-700 text-slate-300'} shrink-0 cursor-pointer tap-highlight hover:text-white">仅看支出</span>
+        <span onclick="filterTransactions('expense', this)" class="chip-item inline-flex items-center px-3 py-1.5 rounded-xl ${isExpense ? 'bg-indigo-600 text-white font-medium' : 'bg-slate-800 border border-slate-700 text-slate-300'} shrink-0 cursor-pointer tap-highlight hover:text-white transition-all text-xs">仅看支出</span>
       `;
 
       // 4. 8大顶级父类中该月存在的分类
       for (const [parentCat, count] of Object.entries(parentCount)) {
         if (parentCat === '工资收入') continue;
-        const icon = (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[parentCat]) || window.SYSTEM_SVGS['tag'];
+        const icon = (parentCategoryIcons && parentCategoryIcons[parentCat]) || '🏷️';
         const isSelected = (currentFilterKey === parentCat || selectedFilterCats.has(parentCat));
         html += `
-          <span onclick="filterTransactions('${parentCat}', this)" class="chip-item px-3 py-1.5 rounded-xl ${isSelected ? 'bg-indigo-600 text-white font-medium' : 'bg-slate-800 border border-slate-700 text-slate-300'} shrink-0 cursor-pointer tap-highlight hover:text-white">
-            ${icon} ${parentCat} <span class="opacity-70 text-[10px]">(${count})</span>
+          <span onclick="filterTransactions('${parentCat}', this)" class="chip-item inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl ${isSelected ? 'bg-indigo-600 text-white font-medium' : 'bg-slate-800 border border-slate-700 text-slate-300'} shrink-0 cursor-pointer tap-highlight hover:text-white transition-all text-xs">
+            <span class="shrink-0">${icon}</span>
+            <span>${parentCat}</span>
+            <span class="opacity-70 text-[10px]">(${count})</span>
           </span>
         `;
       }
@@ -3700,7 +3711,8 @@
       const timeShort = timeOnly && timeOnly.includes(':') ? timeOnly.split(':').slice(0, 2).join(':') : timeOnly;
       const cleanAcc = (txData.account || txData.channel || '微信钱包').replace('支付 · ', '');
       const parentCat = resolveParentCategory(txData.catName);
-      const iconSquircle = window.renderSquircleIcon ? window.renderSquircleIcon(parentCat, 'w-10 h-10', 'p-1.5') : `<div class="w-10 h-10 rounded-2xl bg-slate-700/50 flex items-center justify-center p-1.5">${(window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[parentCat]) || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || ''}</div>`;
+      const icon = (parentCategoryIcons && parentCategoryIcons[parentCat]) || txData.catIcon || '📦';
+      const iconSquircle = window.renderSquircleIcon ? window.renderSquircleIcon(parentCat, 'w-10 h-10') : `<div class="w-10 h-10 rounded-2xl bg-slate-700/50 flex items-center justify-center text-lg shrink-0 border border-slate-600/40 shadow-sm">${icon}</div>`;
 
       newTx.innerHTML = `
         <div class="flex items-center space-x-3 min-w-0 flex-1 mr-2.5">
@@ -3709,18 +3721,19 @@
             <div class="flex items-center">
               <span class="font-semibold text-sm text-slate-100 truncate">${txData.merchant}</span>
             </div>
-            <div class="text-xs text-slate-400 mt-1 flex items-center space-x-1.5">
+            <div class="text-xs text-slate-400 mt-1 flex items-center space-x-1.5 truncate">
               <span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 shrink-0">${txData.catName}</span>
-              <span class="text-slate-400 font-mono text-[11px] shrink-0">${timeShort}</span>
+              <span class="text-slate-400 font-mono text-[11px] shrink-0">${timeOnly}</span>
               <span class="text-slate-600 shrink-0">•</span>
               <span class="text-slate-400 text-[11px] whitespace-nowrap">${cleanAcc}</span>
+              ${txData.badge ? `<span class="text-slate-600 shrink-0">•</span><span class="text-emerald-400 text-[10px] shrink-0">${txData.badge}</span>` : ''}
             </div>
           </div>
         </div>
         <div class="text-right shrink-0">
           <div class="font-bold text-base text-white font-mono tracking-tight whitespace-nowrap">-¥ ${txData.amount.toFixed(2)}</div>
-          <div class="flex items-center justify-end mt-0.5 min-h-[18px]">
-            ${txData.badge ? `<span class="text-emerald-400 text-[11px] font-medium leading-none">${txData.badge}</span>` : `<span class="text-emerald-400/80 text-[10px] font-medium">已入账</span>`}
+          <div class="flex items-center justify-end mt-0.5">
+            <button onclick="event.stopPropagation(); deleteTransaction('${newTx.id}', '${txData.merchant}', ${txData.amount})" class="text-[11px] text-slate-500 hover:text-rose-400 transition-colors tap-highlight px-1 py-0.5 rounded hover:bg-rose-500/10">删除</button>
           </div>
         </div>
       `;
@@ -3783,7 +3796,7 @@
       const channel = document.getElementById('select-channel')?.value || "微信";
       const account = document.getElementById('select-account')?.value || "钱包";
       const catName = currentDraftCategory.name || "餐饮美食";
-      const catIcon = currentDraftCategory.icon || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['餐饮美食']) || '';
+      const catIcon = currentDraftCategory.icon || (parentCategoryIcons && parentCategoryIcons[parentCat]) || '🍔';
       const parentCat = resolveParentCategory(catName);
 
       if (amount <= 0 || isNaN(amount)) {
@@ -4339,19 +4352,42 @@
       const endpointIn = document.getElementById('vlm-endpoint');
       const modelIn = document.getElementById('vlm-model');
       if (provider === 'gemini') {
-        if (endpointIn) endpointIn.placeholder = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
-        if (modelIn) modelIn.placeholder = 'gemini-1.5-flash';
+        if (endpointIn) {
+          endpointIn.value = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+          endpointIn.placeholder = endpointIn.value;
+        }
+        if (modelIn) {
+          modelIn.value = 'gemini-1.5-flash';
+          modelIn.placeholder = modelIn.value;
+        }
       } else if (provider === 'openai') {
-        if (endpointIn) endpointIn.placeholder = 'https://api.openai.com/v1/chat/completions';
-        if (modelIn) modelIn.placeholder = 'gpt-4o-mini';
+        if (endpointIn) {
+          endpointIn.value = 'https://api.openai.com/v1/chat/completions';
+          endpointIn.placeholder = endpointIn.value;
+        }
+        if (modelIn) {
+          modelIn.value = 'gpt-4o-mini';
+          modelIn.placeholder = modelIn.value;
+        }
       } else if (provider === 'qwen') {
-        if (endpointIn) endpointIn.placeholder = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
-        if (modelIn) modelIn.placeholder = 'qwen-vl-plus';
+        if (endpointIn) {
+          endpointIn.value = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
+          endpointIn.placeholder = endpointIn.value;
+        }
+        if (modelIn) {
+          modelIn.value = 'qwen-vl-plus';
+          modelIn.placeholder = modelIn.value;
+        }
       } else {
-        if (endpointIn) endpointIn.placeholder = 'http://localhost:8000/v1/chat/completions';
-        if (modelIn) modelIn.placeholder = 'default';
+        if (endpointIn) {
+          endpointIn.value = 'http://localhost:8000/v1/chat/completions';
+          endpointIn.placeholder = endpointIn.value;
+        }
+        if (modelIn) {
+          modelIn.value = 'default';
+          modelIn.placeholder = modelIn.value;
+        }
       }
-      // Keep input boxes clean without forcing default strings
       saveLlmConfigFromInputs(false);
     }
 
@@ -5128,7 +5164,7 @@
         payment: paymentObj,
         category: cat,
         categoryName: cat,
-        categoryIcon: parentCategoryIcons[resolveParentCategory(cat)] || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || '',
+        categoryIcon: (parentCategoryIcons && parentCategoryIcons[resolveParentCategory(cat)]) || '📦',
         confidence: lastUploadedData.engine === 'llm' ? 99 : 97,
         rule: tag,
         orderId: orderId,
@@ -5191,9 +5227,24 @@
     function updateManualAccountCombined() {
       const channel = document.getElementById('manual-pay-channel')?.value || '微信';
       const sub = document.getElementById('manual-pay-sub')?.value || '钱包';
+      const combined = `${channel} · ${sub}`;
       const accInput = document.getElementById('manual-account');
       if (accInput) {
-        accInput.value = `${channel} · ${sub}`;
+        accInput.value = combined;
+      }
+      const label = document.getElementById('label-manual-account');
+      if (label) {
+        label.textContent = combined;
+      }
+      const menu = document.getElementById('menu-manual-account');
+      if (menu) {
+        menu.querySelectorAll('.custom-dropdown-option').forEach(opt => {
+          if (opt.getAttribute('data-value') === combined) {
+            opt.classList.add('selected');
+          } else {
+            opt.classList.remove('selected');
+          }
+        });
       }
     }
 
@@ -5283,7 +5334,7 @@
       adjustMonthlyTotals(amount);
 
       const parentCat = resolveParentCategory(cat);
-      const icon = parentCategoryIcons[parentCat] || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || '';
+      const icon = (parentCategoryIcons && parentCategoryIcons[parentCat]) || '📦';
 
       const txDate = txTime.split(' ')[0] || `${currentActiveYear}-${currentActiveMonth}-26`;
       const timeOnly = txTime.includes(' ') ? txTime.split(' ')[1] : '16:30:00';
@@ -5629,15 +5680,14 @@
         `;
         items.forEach(tx => {
             const parentCat = resolveParentCategory(tx.cat);
-            const icon = parentCategoryIcons[parentCat] || tx.icon || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || '';
+            const icon = (parentCategoryIcons && parentCategoryIcons[parentCat]) || tx.icon || '📦';
+            const iconSquircle = window.renderSquircleIcon ? window.renderSquircleIcon(parentCat, 'w-10 h-10') : `<div class="w-10 h-10 rounded-2xl bg-slate-700/50 flex items-center justify-center text-lg shrink-0 border border-slate-600/40 shadow-sm">${icon}</div>`;
             const timeShort = tx.time && tx.time.includes(':') ? tx.time.split(':').slice(0, 2).join(':') : (tx.time || '');
             const cleanAcc = (tx.channel || '钱包').replace('支付 · ', '');
             html += `
             <div data-cat="${tx.cat}" data-parent="${parentCat}" data-type="expense" data-date="${tx.date}" data-account="${tx.channel}" data-channel="${tx.channel}" class="tx-item flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 shadow-md hover:border-indigo-500 transition-all cursor-pointer tap-highlight animate-fadeIn" id="${tx.id}" onclick="viewTransactionDetail('${tx.name}', '${tx.amount.toFixed(2)}', '${parentCat}（${tx.cat}）', '${tx.channel}', '${groupName} ${tx.time}', '${tx.id}_ORDER')">
               <div class="flex items-center space-x-3 min-w-0 flex-1 mr-2.5">
-                <div class="w-10 h-10 rounded-2xl bg-slate-700/50 flex items-center justify-center text-lg shrink-0 border border-slate-600/40 shadow-sm">
-                  ${icon}
-                </div>
+                ${iconSquircle}
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center">
                     <span class="font-semibold text-sm text-slate-100 truncate">${tx.name}</span>
@@ -5904,6 +5954,11 @@
         if (id === 'manual-pay-sub' && typeof onManualSubChange === 'function') {
           onManualSubChange(value);
         }
+        if (id === 'manual-account' && typeof value === 'string' && value.includes(' · ')) {
+          const parts = value.split(' · ');
+          selectCustomDropdownOption('manual-pay-channel', parts[0]);
+          selectCustomDropdownOption('manual-pay-sub', parts[1]);
+        }
         if (typeof input.dispatchEvent === 'function') {
           input.dispatchEvent(new Event('change', { bubbles: true }));
           input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -6098,20 +6153,14 @@
         `;
       }
 
-      // 6. Populate all [data-cat-icon] placeholders with pure vector SVG
-      document.querySelectorAll('[data-cat-icon]').forEach(el => {
-        const catName = el.getAttribute('data-cat-icon');
-        const parent = typeof resolveParentCategory === 'function' ? resolveParentCategory(catName) : catName;
-        const svg = window.FAITHFUL_CAT_SVGS[parent] || window.FAITHFUL_CAT_SVGS['其他支出'];
-        el.innerHTML = svg;
-      });
+      // 6. Keep category icons as native emojis (preserved from Screenshot 1 & 2)
 
       // 7. Suggested Icon in Draft View
       const curCat = document.getElementById('select-draft-category')?.value || '餐饮美食';
       const sugIcon = document.getElementById('suggested-icon');
       if (sugIcon) {
-        sugIcon.className = "w-4 h-4 inline-block shrink-0";
-        sugIcon.innerHTML = window.FAITHFUL_CAT_SVGS[curCat] || window.FAITHFUL_CAT_SVGS['餐饮美食'];
+        sugIcon.className = "text-sm shrink-0";
+        sugIcon.innerText = (typeof CATEGORY_ICON_MAP !== 'undefined' && CATEGORY_ICON_MAP[curCat]) || '🍔';
       }
 
       // 8. Insert Demo Transaction (China Railway) if list is empty
@@ -6134,6 +6183,9 @@
           orderId: "CR420000314320261023200800",
           badge: "手动录入"
         });
+        if (typeof updateDynamicCategoryChips === 'function') {
+          updateDynamicCategoryChips();
+        }
       }
     }
 
