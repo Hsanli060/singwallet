@@ -522,20 +522,14 @@
    * 获取指定服务商的默认 Endpoint
    */
   function getDefaultEndpointForProvider(provider) {
-    if (provider === 'gemini_native' || provider === 'gemini') return 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
-    if (provider === 'anthropic_messages' || provider === 'anthropic') return 'https://api.anthropic.com/v1/messages';
-    if (provider === 'openai_responses') return 'https://api.openai.com/v1/responses';
-    return 'https://api.openai.com/v1/chat/completions';
+    return '';
   }
 
   /**
    * 获取指定服务商的默认模型 Model
    */
   function getDefaultModelForProvider(provider) {
-    if (provider === 'gemini_native' || provider === 'gemini') return 'gemini-1.5-flash';
-    if (provider === 'anthropic_messages' || provider === 'anthropic') return 'claude-3-5-sonnet-20241022';
-    if (provider === 'openai_responses') return 'gpt-4o';
-    return 'gpt-4o-mini';
+    return '';
   }
 
   /**
@@ -770,6 +764,236 @@
   }
 
   // 领域元数据配置对象 (SSOT)
+  
+  /**
+   * 应用版本元数据与 OTA 模拟发版配置 (SSOT Domain Layer)
+   */
+  const APP_VERSION_META = {
+    packageId: 'com.singwallet.app',
+    signingFingerprint: 'SHA256:8F:4A:2C:91:E7:0B:3D:66:SINGWALLET:RELEASE',
+    currentVersion: '1.0.0',
+    buildNumber: 100,
+    dbSchemaVersion: 2,
+    latestMockRelease: {
+      version: '1.1.0',
+      buildNumber: 110,
+      publishedAt: '2026-10-27',
+      apkSize: '18.4 MB',
+      downloadUrl: 'https://github.com/singwallet/singwallet/releases/download/v1.1.0/singwallet-v1.1.0-release.apk',
+      changelog: [
+        '新增月度净支出面板实心饼状图与动态分类占比统计',
+        '新增自定义账单分类双列网格管理与大模型输出约束联动',
+        '新增快记一笔后台异步草稿解析任务队列与极简进度条',
+        '优化 SQLite v2 增量迁移引擎与全量 JSON 备份恢复机制'
+      ]
+    }
+  };
+
+  /**
+   * 纯函数语义化版本比较器 (Semver Comparator)
+   * 自动去除前缀 'v'/'V'，按 '.' 拆分主/次/修订号比较。
+   * @param {string} v1
+   * @param {string} v2
+   * @returns {number} 若 v1 > v2 返回 1；v1 < v2 返回 -1；相等返回 0
+   */
+  function compareVersions(v1, v2) {
+    const clean1 = String(v1 || '').trim().replace(/^[vV]/, '');
+    const clean2 = String(v2 || '').trim().replace(/^[vV]/, '');
+    const p1 = clean1.split('.').map(n => parseInt(n, 10) || 0);
+    const p2 = clean2.split('.').map(n => parseInt(n, 10) || 0);
+    const len = Math.max(p1.length, p2.length, 3);
+    for (let i = 0; i < len; i++) {
+      const num1 = p1[i] || 0;
+      const num2 = p2[i] || 0;
+      if (num1 > num2) return 1;
+      if (num1 < num2) return -1;
+    }
+    return 0;
+  }
+
+  /**
+   * 协议兼容 OTA 更新载荷解析器 (GitHub Releases API 与 自定义 version.json)
+   * @param {Object} [payload] 远端响应 Payload
+   * @param {string} [currentVersion='1.0.0'] 当前版本号
+   * @returns {{ hasUpdate: boolean, currentVersion: string, latestVersion: string, changelog: Array<string>, downloadUrl: string, apkSize: string, publishedAt: string, preserveDataGuaranteed: boolean }}
+   */
+  function parseOtaReleasePayload(payload, currentVersion = '1.0.0') {
+    const defaultRelease = APP_VERSION_META.latestMockRelease;
+    const curVer = String(currentVersion || APP_VERSION_META.currentVersion || '1.0.0').trim().replace(/^[vV]/, '');
+
+    if (!payload || typeof payload !== 'object') {
+      return {
+        hasUpdate: false,
+        currentVersion: curVer,
+        latestVersion: curVer,
+        changelog: [],
+        downloadUrl: '',
+        apkSize: '',
+        publishedAt: '',
+        preserveDataGuaranteed: true
+      };
+    }
+
+    let latestVersion = '';
+    let changelog = [];
+    let downloadUrl = '';
+    let apkSize = '';
+    let publishedAt = '';
+
+    // a) GitHub Releases API 格式
+    if (payload.tag_name || Array.isArray(payload.assets)) {
+      latestVersion = String(payload.tag_name || payload.name || '').trim().replace(/^[vV]/, '');
+      publishedAt = payload.published_at ? String(payload.published_at).slice(0, 10) : (defaultRelease.publishedAt || '');
+
+      if (payload.body) {
+        changelog = String(payload.body)
+          .split(/\r?\n/)
+          .map(line => line.trim().replace(/^[-*•\d.]+\s*/, ''))
+          .filter(line => line.length > 0 && !line.startsWith('http') && !line.startsWith('#'));
+      }
+
+      if (Array.isArray(payload.assets) && payload.assets.length > 0) {
+        const apkAsset = payload.assets.find(a => (a.name && a.name.endsWith('.apk')) || (a.browser_download_url && a.browser_download_url.endsWith('.apk'))) || payload.assets[0];
+        if (apkAsset) {
+          downloadUrl = apkAsset.browser_download_url || apkAsset.url || '';
+          if (apkAsset.size) {
+            apkSize = (apkAsset.size / (1024 * 1024)).toFixed(1) + ' MB';
+          }
+        }
+      }
+    }
+    // b) 自定义 version.json 格式
+    else if (payload.version || payload.latestVersion || payload.changelog) {
+      latestVersion = String(payload.version || payload.latestVersion || '').trim().replace(/^[vV]/, '');
+      downloadUrl = payload.downloadUrl || payload.apkUrl || payload.url || '';
+      apkSize = payload.apkSize || (payload.size ? (payload.size / (1024 * 1024)).toFixed(1) + ' MB' : '');
+      publishedAt = payload.publishedAt || payload.releaseDate || payload.date || '';
+
+      if (Array.isArray(payload.changelog)) {
+        changelog = payload.changelog.map(item => String(item).trim()).filter(Boolean);
+      } else if (typeof payload.changelog === 'string') {
+        changelog = payload.changelog
+          .split(/\r?\n/)
+          .map(line => line.trim().replace(/^[-*•\d.]+\s*/, ''))
+          .filter(Boolean);
+      }
+    }
+
+    // 兜底回退
+    if (!latestVersion) latestVersion = defaultRelease.version;
+    if (changelog.length === 0) changelog = [...defaultRelease.changelog];
+    if (!downloadUrl) downloadUrl = defaultRelease.downloadUrl;
+    if (!apkSize) apkSize = defaultRelease.apkSize;
+    if (!publishedAt) publishedAt = defaultRelease.publishedAt;
+
+    return {
+      hasUpdate: compareVersions(latestVersion, curVer) > 0,
+      currentVersion: curVer,
+      latestVersion: latestVersion,
+      changelog: changelog,
+      downloadUrl: downloadUrl,
+      apkSize: apkSize,
+      publishedAt: publishedAt,
+      preserveDataGuaranteed: true
+    };
+  }
+
+  /**
+   * 将当前应用完整状态打包成标准备份 JSON 快照对象
+   * @param {Object} [appState]
+   * @returns {Object}
+   */
+  function exportFullBackupSnapshot(appState = {}) {
+    const state = appState || {};
+    return {
+      backupMagic: 'SINGWALLET_BACKUP_V2',
+      packageId: APP_VERSION_META.packageId,
+      appVersion: state.appVersion || APP_VERSION_META.currentVersion,
+      dbSchemaVersion: APP_VERSION_META.dbSchemaVersion,
+      exportedAt: new Date().toISOString(),
+      data: {
+        customCategories: Array.isArray(state.customCategories) ? [...state.customCategories] : [...CORE_PARENT_CATEGORIES],
+        vlmConfig: (state.vlmConfig && typeof state.vlmConfig === 'object') ? state.vlmConfig : {},
+        transactions: Array.isArray(state.transactions) ? state.transactions : [],
+        monthlyData: (state.monthlyData && typeof state.monthlyData === 'object') ? state.monthlyData : {},
+        draftQueue: Array.isArray(state.draftQueue) ? state.draftQueue : []
+      }
+    };
+  }
+
+  /**
+   * 校验并执行增量无损备份恢复迁移 (模拟 onUpgrade v1 -> v2)
+   * @param {string|Object} rawInput JSON 字符串或对象
+   * @returns {{ valid: boolean, error?: string, migratedFromVersion?: number, targetSchemaVersion?: number, data?: Object }}
+   */
+  function validateAndMigrateBackupSnapshot(rawInput) {
+    let parsed = rawInput;
+    if (typeof rawInput === 'string') {
+      try {
+        parsed = JSON.parse(rawInput);
+      } catch (e) {
+        return { valid: false, error: '无效的备份文件格式' };
+      }
+    }
+
+    if (!parsed || typeof parsed !== 'object') {
+      return { valid: false, error: '无效的备份文件格式' };
+    }
+
+    // 必须包含 data 节点或根级 transactions / customCategories
+    const hasDataObj = parsed.data && typeof parsed.data === 'object';
+    const hasRootTx = Array.isArray(parsed.transactions);
+    const hasRootCats = Array.isArray(parsed.customCategories);
+
+    if (!hasDataObj && !hasRootTx && !hasRootCats) {
+      return { valid: false, error: '无效的备份文件格式' };
+    }
+
+    const sourceData = hasDataObj ? parsed.data : parsed;
+    const oldVer = parsed.dbSchemaVersion || (parsed.backupMagic === 'SINGWALLET_BACKUP_V2' ? 2 : 1);
+
+    // 1. 自定义分类无损保留
+    let customCategories = [...CORE_PARENT_CATEGORIES];
+    if (Array.isArray(sourceData.customCategories) && sourceData.customCategories.length > 0) {
+      customCategories = [...sourceData.customCategories];
+    }
+
+    // 2. VLM 配置保留
+    const vlmConfig = (sourceData.vlmConfig && typeof sourceData.vlmConfig === 'object')
+      ? sourceData.vlmConfig
+      : {};
+
+    // 3. 历史流水增量迁移与规范化 (补齐缺失 orderId 为 '')
+    const rawTxList = Array.isArray(sourceData.transactions) ? sourceData.transactions : [];
+    const transactions = rawTxList.map(tx => {
+      if (!tx || typeof tx !== 'object') return tx;
+      return {
+        ...tx,
+        orderId: (tx.orderId !== undefined && tx.orderId !== null) ? String(tx.orderId) : ''
+      };
+    });
+
+    // 4. 月度数据与异步草稿队列
+    const monthlyData = (sourceData.monthlyData && typeof sourceData.monthlyData === 'object')
+      ? sourceData.monthlyData
+      : {};
+    const draftQueue = Array.isArray(sourceData.draftQueue) ? sourceData.draftQueue : [];
+
+    return {
+      valid: true,
+      migratedFromVersion: Number(oldVer) || 1,
+      targetSchemaVersion: APP_VERSION_META.dbSchemaVersion,
+      data: {
+        customCategories,
+        vlmConfig,
+        transactions,
+        monthlyData,
+        draftQueue
+      }
+    };
+  }
+
+  // 领域元数据配置对象 (SSOT)
   const SINGWALLET_DOMAIN_CONFIG = {
     categories: CORE_CATEGORIES,
     parentCategories: CORE_PARENT_CATEGORIES,
@@ -785,14 +1009,19 @@
     partitionDraftsByDedup: partitionDraftsByDedup,
     CATEGORY_CHART_PALETTE: CATEGORY_CHART_PALETTE,
     formatCompactAmount: formatCompactAmount,
-    computeCategoryBreakdown: computeCategoryBreakdown
+    computeCategoryBreakdown: computeCategoryBreakdown,
+    APP_VERSION_META: APP_VERSION_META,
+    compareVersions: compareVersions,
+    parseOtaReleasePayload: parseOtaReleasePayload,
+    exportFullBackupSnapshot: exportFullBackupSnapshot,
+    validateAndMigrateBackupSnapshot: validateAndMigrateBackupSnapshot
   };
 
-  // 领域注册管理中心 (DomainRegistry)
+  // 领域注册管理中心 (DomainRegistry / SingWalletDomain)
   const DomainRegistry = {
     getConfig: () => SINGWALLET_DOMAIN_CONFIG,
     getCategories: () => CORE_CATEGORIES,
-    getParentCategories: () => CORE_PARENT_CATEGORIES,
+    getParentCategories: () => [...CORE_PARENT_CATEGORIES],
     get activeCategories() { return CORE_PARENT_CATEGORIES; },
     getCategoryByName: (name) => {
       const parent = resolveParentCategory(name);
@@ -814,7 +1043,12 @@
     partitionDraftsByDedup: partitionDraftsByDedup,
     CATEGORY_CHART_PALETTE: CATEGORY_CHART_PALETTE,
     formatCompactAmount: formatCompactAmount,
-    computeCategoryBreakdown: computeCategoryBreakdown
+    computeCategoryBreakdown: computeCategoryBreakdown,
+    APP_VERSION_META: APP_VERSION_META,
+    compareVersions: compareVersions,
+    parseOtaReleasePayload: parseOtaReleasePayload,
+    exportFullBackupSnapshot: exportFullBackupSnapshot,
+    validateAndMigrateBackupSnapshot: validateAndMigrateBackupSnapshot
   };
 
   // 挂载至全局 window 对象 (SingWalletDomain 作为 SSOT 统一领域中心)
@@ -840,5 +1074,14 @@
   window.CATEGORY_CHART_PALETTE = CATEGORY_CHART_PALETTE;
   window.formatCompactAmount = formatCompactAmount;
   window.computeCategoryBreakdown = computeCategoryBreakdown;
+  window.APP_VERSION_META = APP_VERSION_META;
+  window.compareVersions = compareVersions;
+  window.parseOtaReleasePayload = parseOtaReleasePayload;
+  window.exportFullBackupSnapshot = exportFullBackupSnapshot;
+  window.validateAndMigrateBackupSnapshot = validateAndMigrateBackupSnapshot;
 
-})(typeof window !== 'undefined' ? window : this);
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = DomainRegistry;
+  }
+
+})(typeof window !== 'undefined' ? window : (typeof global !== 'undefined' ? global : this));

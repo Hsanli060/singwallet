@@ -241,7 +241,7 @@ class SmartTransactionForm extends StatelessWidget {
                   controller: merchantController,
                   decoration: InputDecoration(
                     labelText: '商户 / 交易对手',
-                    hintText: '例如: 星巴克、麦当劳、全家便利店',
+                    hintText: '请输入商户或交易对手名称',
                     prefixIcon: const Icon(Icons.storefront_outlined),
                     suffixIcon: value.text.isNotEmpty
                         ? IconButton(

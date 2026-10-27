@@ -9,17 +9,6 @@
 </head>
 <body class="bg-slate-900 text-slate-100 antialiased min-h-screen flex flex-col items-center justify-center p-3 select-none">
 
-  <!-- Top Simulator Status Banner -->
-  <div class="mb-3 text-center max-w-[420px] w-full bg-slate-800/80 border border-slate-700 rounded-2xl px-4 py-2.5 shadow-lg backdrop-blur text-xs flex items-center justify-between">
-    <div class="flex items-center space-x-2">
-      <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-      <span class="font-semibold text-slate-200">SingWallet 离线记账引擎 v1.0</span>
-    </div>
-    <span class="text-[11px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full font-mono">
-      374/374 单元测试已通过
-    </span>
-  </div>
-
   <!-- Mobile Device Outer Shell -->
   <div class="relative w-full max-w-[410px] h-[820px] bg-slate-950 border-4 border-slate-700 rounded-[50px] shadow-2xl flex flex-col overflow-hidden ring-8 ring-slate-800/50">
     
@@ -47,11 +36,7 @@
               <button type="button" onclick="closeLlmTopError()" class="text-slate-400 hover:text-white text-xs px-1 tap-highlight">✕</button>
             </div>
             <p id="llm-error-msg" class="text-[11px] text-slate-200 mt-1 font-mono break-words"></p>
-            <div id="llm-error-action-wrap" class="hidden mt-2 pt-1 border-t border-rose-500/30 flex items-center justify-between">
-              <span class="text-[10px] text-rose-200">可一键填入演示体验密钥体验</span>
-              <button type="button" onclick="fillVlmDemoKey(); closeLlmTopError(); showToast('已填入体验密钥，请重新上传测试');" class="px-2 py-0.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-bold shadow tap-highlight">一键体验演示</button>
-            </div>
-          </div>
+</div>
         </div>
       </div>
 
@@ -96,6 +81,7 @@
             <button onclick="openTrashDialog()" class="relative w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 hover:text-white tap-highlight transition-all" title="回收站 (30天保留)">
               <div class="w-4 h-4" id="top-bar-trash-icon"></div>
               <span id="trash-badge" class="hidden absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400"></span>
+              <span id="trash-dot" class="hidden absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400"></span>
             </button>
           </div>
         </div>
@@ -122,7 +108,7 @@
             <div id="monthly-chart-panel" class="flex items-center gap-2.5 flex-1 min-w-0 justify-end">
               <div id="monthly-pie-chart" class="w-16 h-16 shrink-0 flex items-center justify-center">
                 <svg viewBox="0 0 64 64" class="w-16 h-16 pointer-events-none">
-                  <circle cx="32" cy="32" r="28" fill="rgba(255, 255, 255, 0.14)"></circle>
+                  <circle cx="32" cy="32" r="22" fill="none" stroke="rgba(255, 255, 255, 0.16)" stroke-width="10"></circle>
                 </svg>
               </div>
               <div id="monthly-pie-legend" class="flex flex-col gap-1 min-w-0 max-h-[76px] overflow-y-auto scrollbar-none text-[10px]">
@@ -225,9 +211,11 @@
           <div class="space-y-3" id="transactions-list">
             <!-- Clean Empty State (Waiting for drafts confirmation) -->
             <div id="tx-empty-state" class="py-16 text-center space-y-3">
-              <div class="w-16 h-16 rounded-3xl bg-slate-800/80 border border-slate-700/80 text-indigo-400 flex items-center justify-center p-3.5 mx-auto shadow-inner" id="empty-state-ledger-icon"></div>
-              <div class="space-y-1">
-                <h4 class="text-white font-bold text-sm">暂无正式入账流水</h4>
+              <div id="empty-state-ledger" class="space-y-3">
+                <div class="w-16 h-16 rounded-3xl bg-slate-800/80 border border-slate-700/80 text-indigo-400 flex items-center justify-center p-3.5 mx-auto shadow-inner" id="empty-state-ledger-icon"></div>
+                <div class="space-y-1">
+                  <h4 class="text-white font-bold text-sm">暂无账单记录</h4>
+                </div>
               </div>
             </div>
           </div>
@@ -256,8 +244,8 @@
             <button onclick="openConfidenceModal()" class="flex items-center space-x-1 px-2 py-1 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-slate-700 hover:border-indigo-500 tap-highlight transition-all shadow-sm" title="设置自动入账置信度">
               <span id="draft-conf-threshold-btn-label" class="font-mono text-emerald-400 text-[11px] font-bold">≥95%</span>
             </button>
-            <span id="draft-badge" class="px-2.5 py-1 text-xs font-semibold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-              待确认 3 笔
+            <span id="draft-badge" class="px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              待确认 0 笔
             </span>
           </div>
         </div>
@@ -281,11 +269,11 @@
         </div>
 
         <!-- Multi-Draft Carousel / Switcher Bar (图3优化：最上方展示不动，“一键入账……”占满一行，左侧文字去掉) -->
-        <div id="draft-queue-bar" class="space-y-2">
+        <div id="draft-queue-bar" class="space-y-2 hidden">
           <!-- 保持 JS 兼容的隐藏队列计数器 -->
-          <span id="draft-queue-count" class="hidden">3</span>
+          <span id="draft-queue-count" class="hidden">0</span>
           <button onclick="batchConfirmHighConfidenceDrafts()" class="w-full text-emerald-400 hover:text-emerald-300 text-xs font-semibold flex items-center justify-center space-x-1.5 tap-highlight bg-emerald-500/10 hover:bg-emerald-500/20 py-2.5 px-3 rounded-xl border border-emerald-500/30 transition-all shadow-sm">
-            <span>一键入账高置信度 (<span id="batch-high-label">≥95%</span> 共 <span id="batch-high-count">2</span> 笔)</span>
+            <span>一键入账高置信度 (<span id="batch-high-label">≥95%</span> 共 <span id="batch-high-count">0</span> 笔)</span>
           </button>
           <div class="flex space-x-2 overflow-x-auto pb-1 scrollbar-none" id="draft-pills-container">
             <!-- Dynamically populated draft pills -->
@@ -293,7 +281,7 @@
         </div>
 
         <!-- Draft Content Container (Hidden if queue empty) -->
-        <div id="draft-content-container" class="space-y-4">
+        <div id="draft-content-container" class="space-y-4 hidden">
           <!-- 保持 JS 兼容的隐藏字段 -->
           <span id="draft-img-title" class="hidden"></span>
           <div style="display: none !important;" aria-hidden="true"><span id="draft-img-status"></span></div>
@@ -304,21 +292,21 @@
 
             <!-- OCR Box 1: Amount (Read-Only Visual Evidence) -->
             <div class="relative px-3 py-1.5 rounded-lg border border-emerald-400/80 bg-emerald-500/10 text-center">
-              <span id="draft-ocr-amount" class="text-2xl font-black text-white tracking-tight">¥ 88.50</span>
+              <span id="draft-ocr-amount" class="text-2xl font-black text-white tracking-tight">¥ 0.00</span>
             </div>
 
             <!-- OCR Box 2: Merchant (Read-Only Visual Evidence) -->
             <div class="mt-3 relative px-2.5 py-1 rounded border border-indigo-400/80 bg-indigo-500/10 text-xs text-indigo-100">
-              <span id="draft-ocr-merchant">收款商户：麦当劳（王府井店）</span>
+              <span id="draft-ocr-merchant">收款商户：--</span>
             </div>
 
             <!-- OCR Box 3: Order ID (Read-Only Visual Evidence) -->
             <div id="draft-ocr-order" class="mt-2 text-[11px] text-slate-400 font-mono border border-slate-700/80 bg-slate-800/60 px-2.5 py-0.5 rounded select-text">
-              单号: 4200001234202610220098765432
+              单号: --
             </div>
 
             <div id="draft-ocr-time" class="text-[11px] text-slate-500 mt-2">
-              订单时间: 2026-10-25 13:29:53
+              订单时间: --
             </div>
           </div>
 
@@ -330,14 +318,14 @@
               <label class="block text-xs font-medium text-slate-400 mb-1">实付金额 (元)</label>
               <div class="relative">
                 <span class="absolute left-3 top-2.5 text-2xl font-bold text-slate-300">¥</span>
-                <input id="input-amount" type="text" value="88.50" class="w-full pl-9 pr-3 py-2 text-2xl font-black rounded-xl bg-slate-900 border border-slate-700 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all">
+                <input id="input-amount" type="text" value="" placeholder="0.00" class="w-full pl-9 pr-3 py-2 text-2xl font-black rounded-xl bg-slate-900 border border-slate-700 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all">
               </div>
             </div>
 
             <!-- Merchant -->
             <div>
               <label class="block text-xs font-medium text-slate-400 mb-1">商户名称</label>
-              <input id="input-merchant" type="text" value="麦当劳（王府井店）" class="w-full px-3 py-2 text-sm rounded-xl bg-slate-900 border border-slate-700 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all">
+              <input id="input-merchant" type="text" value="" placeholder="请输入商户名称" class="w-full px-3 py-2 text-sm rounded-xl bg-slate-900 border border-slate-700 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all">
             </div>
 
             <!-- Platform / Transaction Order ID (OCR Extracted & Editable) -->
@@ -345,7 +333,7 @@
               <div class="flex items-center justify-between mb-1">
                 <label class="block text-xs font-medium text-slate-400">平台单号 / 交易单号</label>
               </div>
-              <input id="input-order" type="text" value="4200003143202610252738865252" placeholder="微信/支付宝交易单号" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-700 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-mono tracking-tight">
+              <input id="input-order" type="text" value="" placeholder="微信/支付宝交易单号" class="w-full px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-700 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-mono tracking-tight">
             </div>
 
             <!-- Order Time (OCR Extracted & Editable) -->
@@ -353,7 +341,7 @@
               <div class="flex items-center justify-between mb-1">
                 <label class="block text-xs font-medium text-slate-400">订单时间</label>
               </div>
-              <input id="input-time" type="text" value="2026-10-25 14:19:38" placeholder="YYYY-MM-DD HH:mm:ss" class="w-full px-3 py-2 text-sm rounded-xl bg-slate-900 border border-slate-700 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-mono">
+              <input id="input-time" type="text" value="" placeholder="YYYY-MM-DD HH:mm:ss" class="w-full px-3 py-2 text-sm rounded-xl bg-slate-900 border border-slate-700 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-mono">
             </div>
 
             <!-- Channel & Account (Pure HTML/CSS Custom Dropdown Components) -->
@@ -520,22 +508,18 @@
         </div>
 
         <!-- Draft Empty State (shown when queue is empty) -->
-        <div id="draft-empty-state" class="hidden text-center py-12 px-4 space-y-3 bg-slate-900/60 rounded-3xl border border-slate-800">
+        <div id="draft-empty-state" class="text-center py-12 px-4 space-y-3 bg-slate-900/60 rounded-3xl border border-slate-800">
           <div class="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center p-3.5" id="draft-empty-check-icon"></div>
-          <h3 class="text-base font-bold text-white">暂无待确认草稿</h3>
-          <p class="text-xs text-slate-400 max-w-xs mx-auto">所有账单已完成确认入账，无积压条目。所有已确认记录均保留原始识别存证。</p>
+          <h3 class="text-base font-bold text-white">当前暂无待确认的账单草稿</h3>
+          <p class="text-xs text-slate-400 max-w-xs mx-auto">请点击首页「快记一手」上传账单截图，AI 将自动提取并填入草稿。</p>
           <div class="pt-2 flex justify-center space-x-2">
-            <button onclick="resetDemoDrafts()" class="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs text-white font-medium shadow tap-highlight">
-              <span class="flex items-center space-x-1.5"><span class="w-3.5 h-3.5 inline-block" id="btn-reset-drafts-icon"></span><span>恢复 3 笔演示草稿</span></span>
-            </button>
             <button onclick="switchTab('transactions')" class="px-3.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-300 font-medium tap-highlight">
               返回流水列表
             </button>
           </div>
         </div>
       </div>
-
-      <!-- ================= 页面 3: 规则与账户中心 ================= -->
+<!-- ================= 页面 3: 规则与账户中心 ================= -->
       <div id="view-rules-accounts" data-alias="view-rules" class="hidden h-full overflow-y-auto p-4 pb-24 space-y-4 animate-fadeIn">
         
         <!-- Header -->
@@ -651,6 +635,83 @@
           </div>
         </div>
 
+        <!-- ================= 数据备份 (Data Backup) 模块卡片 ================= -->
+        <div id="data-backup-card" class="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-4 space-y-3 shadow-lg">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-700/60">
+            <h4 class="font-bold text-xs text-slate-200 whitespace-nowrap">数据备份</h4>
+            <span id="backup-stats-label" class="text-[11px] text-slate-400 font-mono whitespace-nowrap">0 笔账单 · 8 个分类</span>
+          </div>
+
+          <!-- 双列对称胶囊按钮 -->
+          <div class="grid grid-cols-2 gap-2.5">
+            <button type="button" id="btn-export-backup" onclick="exportFullBackupSnapshot()" class="py-2 px-3 rounded-xl bg-slate-900/90 hover:bg-slate-700/80 border border-slate-700/80 hover:border-indigo-500/50 text-slate-200 text-xs font-medium transition-all flex items-center justify-center gap-1.5 tap-highlight">
+              <span class="w-4 h-4 shrink-0" data-ui-icon="backupExport"></span>
+              <span>导出备份</span>
+            </button>
+            <input type="file" id="input-import-backup" accept=".json" class="hidden" onchange="handleBackupFileUpload(event)">
+            <button type="button" id="btn-import-backup" onclick="document.getElementById('input-import-backup').click()" class="py-2 px-3 rounded-xl bg-slate-900/90 hover:bg-slate-700/80 border border-slate-700/80 hover:border-indigo-500/50 text-slate-200 text-xs font-medium transition-all flex items-center justify-center gap-1.5 tap-highlight">
+              <span class="w-4 h-4 shrink-0" data-ui-icon="backupImport"></span>
+              <span>导入恢复</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- ================= 应用版本与 OTA 更新 (OTA Updates) 模块卡片 ================= -->
+        <div id="ota-update-card" class="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-4 space-y-3 shadow-lg">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-700/60">
+            <h4 class="font-bold text-xs text-slate-200 whitespace-nowrap">应用版本</h4>
+            <span id="app-current-version-badge" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-700/60 text-slate-300 font-mono whitespace-nowrap">v1.0.0</span>
+          </div>
+
+          <!-- 一体化输入与检查更新胶囊栏 -->
+          <div class="flex items-center bg-slate-900/90 border border-slate-700/70 focus-within:border-indigo-500/70 rounded-xl p-1 transition-colors">
+            <input id="ota-feed-url-input" type="text" placeholder="更新源地址 (选填)" class="flex-1 bg-transparent px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none min-w-0 font-mono">
+            <button type="button" id="btn-check-ota-update" onclick="checkOtaUpdate()" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-xs font-semibold transition-all shrink-0 tap-highlight">
+              <span id="btn-check-ota-text">检查更新</span>
+            </button>
+          </div>
+
+          <!-- 新版本提示框 #ota-check-result-box (默认 hidden，仅在检测到新版本时展开) -->
+          <div id="ota-check-result-box" class="hidden rounded-xl p-3 bg-indigo-950/40 border border-indigo-500/40 space-y-2.5 animate-fadeIn">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span class="text-xs font-bold text-white" id="ota-version-title">发现新版本 v1.1.0</span>
+              </div>
+              <span class="text-[10px] font-mono text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded">Release</span>
+            </div>
+
+            <!-- 精简更新日志列表 -->
+            <div class="space-y-1 text-[11px] text-slate-300">
+              <div class="text-[10px] text-indigo-300 font-semibold mb-0.5">更新日志：</div>
+              <ul id="ota-changelog-list" class="space-y-1 pl-1 text-[11px] text-slate-300 list-disc list-inside">
+                <li>SQLite 数据库无损迁移至 v2 (全量兼容历史字段)</li>
+                <li>新增全量 JSON 数据备份与一键恢复</li>
+                <li>AI 视觉凭证识别精准度提升与极速响应</li>
+                <li>包名与官方签名指纹锁定，支持无感覆盖升级</li>
+              </ul>
+            </div>
+
+            <!-- 极简下载进度条容器 (初始隐藏) -->
+            <div id="ota-download-progress-wrap" class="hidden space-y-1.5 pt-1">
+              <div class="flex items-center justify-between text-[10px] text-slate-300 font-mono">
+                <span id="ota-download-status-text">正在下载更新...</span>
+                <span id="ota-download-progress-text">0%</span>
+              </div>
+              <div class="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-700/60">
+                <div id="ota-download-progress-bar" class="bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-400 h-1.5 rounded-full transition-all duration-150" style="width: 0%;"></div>
+              </div>
+            </div>
+
+            <!-- 立即更新按钮 -->
+            <div class="pt-1">
+              <button type="button" id="btn-trigger-ota-upgrade" onclick="executeOtaInPlaceUpgrade()" class="w-full py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold tap-highlight text-center shadow transition-all flex items-center justify-center gap-1.5">
+                <span class="w-4 h-4 shrink-0" data-ui-icon="otaDownload"></span>
+                <span>立即更新</span>
+              </button>
+            </div>
+          </div>
+        </div>
 
       </div>
     </div>
@@ -882,7 +943,7 @@
           <!-- 未选择图片占位提示 -->
           <div id="manual-image-empty-placeholder" class="py-1.5 flex flex-col items-center justify-center space-y-1">
             <div class="w-8 h-8 rounded-xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center p-1.5 group-hover:scale-105 transition-transform" id="manual-cam-icon"></div>
-            <p class="text-[10px] text-slate-400">点击上传凭据截图，AI 自动提取关键要素</p>
+            <p class="text-[10px] text-slate-400">上传账单截图（由 AI 视觉模型自动解析）</p>
           </div>
 
           <!-- 大模型视觉深度解析动态观测卡片 (实时计时器 + 动态步骤 + 脉冲呼吸动画) -->
@@ -1120,14 +1181,14 @@
         <div class="space-y-2 text-xs">
           <div class="text-center py-2">
             <span class="text-xs text-slate-400">实付金额 (分精确)</span>
-            <h2 id="detail-amount" class="text-3xl font-black text-white mt-0.5">-¥ 88.50</h2>
+            <h2 id="detail-amount" class="text-3xl font-black text-white mt-0.5">-¥ 0.00</h2>
           </div>
           <div class="space-y-2 p-3 rounded-2xl bg-slate-800/80 border border-slate-700">
-            <div class="flex justify-between"><span class="text-slate-400">商户名称</span><span id="detail-merchant" class="font-semibold text-white">麦当劳</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">商户名称</span><span id="detail-merchant" class="font-semibold text-white">--</span></div>
             <div class="flex justify-between"><span class="text-slate-400">分类归属</span><span id="detail-cat" class="font-semibold text-slate-200">餐饮美食</span></div>
             <div class="flex justify-between"><span class="text-slate-400">支付类型</span><span id="detail-channel" class="font-semibold text-slate-200">微信 · 钱包</span></div>
-            <div class="flex justify-between"><span class="text-slate-400">交易时间</span><span id="detail-time" class="font-semibold text-slate-200">2026-10-26</span></div>
-            <div class="flex justify-between"><span class="text-slate-400">平台单号</span><span id="detail-order" class="font-mono text-[11px] text-slate-300">420000...</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">交易时间</span><span id="detail-time" class="font-semibold text-slate-200">--</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">平台单号</span><span id="detail-order" class="font-mono text-[11px] text-slate-300">--</span></div>
           </div>
         </div>
         <button onclick="closeTxDetailModal()" class="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold">
@@ -1196,33 +1257,6 @@
         </div>
       </div>
     </div>
-
-    <!-- ================= 全局弹窗 10: 退款关联机制 (无 alert / prompt) ================= -->
-    <div id="refund-demo-modal" class="hidden absolute inset-0 bg-black/75 z-40 flex items-center justify-center p-6 backdrop-blur-sm">
-      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 max-w-xs w-full shadow-2xl space-y-3 animate-fadeIn">
-        <div class="flex items-center justify-between pb-2 border-b border-slate-800">
-          <h3 class="font-bold text-sm text-white">退款关联与级联机制</h3>
-          <button onclick="closeRefundDemoModal()" class="text-xs text-slate-400">关闭</button>
-        </div>
-        <div class="text-xs text-slate-300 space-y-2 bg-slate-800/80 p-3 rounded-2xl border border-slate-700">
-          <div class="font-semibold text-white">已就绪原支出账目：</div>
-          <div class="p-2 bg-slate-900 rounded-xl text-slate-300">
-            <div>商户：盒马鲜生生鲜超市</div>
-            <div>原扣款：¥ 230.00 (招商银行卡)</div>
-            <div>可挂载退款限额：≤ ¥230.00</div>
-          </div>
-          <div class="text-[11px] text-slate-400 leading-relaxed">
-            • 底层数据表：<span class="font-mono text-indigo-400">refund_links</span><br>
-            • 外键策略：<span class="font-mono text-emerald-400">ON DELETE CASCADE</span><br>
-            • 效果：即便原消费删除，退款单依然完整独立存续，资金流水永不失真。
-          </div>
-        </div>
-        <button onclick="executeRefundLinkDemo()" class="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold">
-          模拟挂载一笔 ¥50.00 退款
-        </button>
-      </div>
-    </div>
-
     <!-- Undo SnackBar (Floating Bottom Notification) -->
     <div id="undo-snackbar" class="hidden absolute bottom-20 left-4 right-4 bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-2xl shadow-2xl z-30 flex items-center justify-between text-xs animate-fadeIn">
       <span id="snackbar-text">账目已移入回收站</span>
@@ -1237,9 +1271,9 @@
           <h3 class="font-bold text-base text-white">疑似重复交易预警</h3>
           <p class="text-xs text-slate-400 mt-1.5">检测到 24 小时内存在相同商户与相同金额的流水记录：</p>
           <div class="mt-2 p-2.5 bg-slate-800 rounded-xl text-left text-xs font-mono space-y-0.5 border border-slate-700">
-            <div>商户: 麦当劳（王府井店）</div>
-            <div>金额: ¥88.50</div>
-            <div>时间: 10-26 14:30</div>
+            <div>商户: <span id="dedup-modal-merchant">--</span></div>
+            <div>金额: <span id="dedup-modal-amount">--</span></div>
+            <div>时间: <span id="dedup-modal-time">--</span></div>
           </div>
         </div>
         <div class="grid grid-cols-2 gap-2 pt-1">
@@ -1261,7 +1295,7 @@
           <button onclick="closeTrashModal()" class="text-xs text-slate-400">关闭</button>
         </div>
         <div id="trash-items" class="space-y-2 max-h-48 overflow-y-auto text-xs text-slate-300">
-          <p class="text-center py-4 text-slate-500">回收站暂无数据</p>
+          <p class="text-center py-4 text-slate-500">回收站为空</p>
         </div>
         <button onclick="closeTrashModal()" class="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold">
           完成
@@ -1277,7 +1311,8 @@
       </button>
 
       <button onclick="switchTab('drafts')" id="nav-btn-drafts" class="relative flex flex-col items-center justify-center h-full text-slate-400 hover:text-white tap-highlight">
-        <span id="draft-nav-dot" class="absolute top-2 right-8 w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+        <span id="draft-nav-dot" class="hidden absolute top-2 right-8 w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+        <span id="nav-draft-badge" class="hidden absolute top-1 right-6 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[10px] font-bold text-white flex items-center justify-center">0</span>
         <div class="w-5 h-5 mx-auto mb-0.5" id="nav-icon-drafts"></div>
         <span class="text-[11px] mt-0.5">草稿箱</span>
       </button>

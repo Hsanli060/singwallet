@@ -223,7 +223,7 @@ void main() {
       ));
       await pumpAsync(tester);
 
-      expect(find.text('暂无流水记录'), findsOneWidget);
+      expect(find.text('暂无账单记录'), findsOneWidget);
       expect(find.byIcon(Icons.receipt_long_outlined), findsOneWidget);
     });
   });
@@ -423,7 +423,7 @@ void main() {
       await pumpAsync(tester);
 
       // Active screen has no items
-      expect(find.text('暂无流水记录'), findsOneWidget);
+      expect(find.text('暂无账单记录'), findsOneWidget);
 
       // Open TrashBinDialog
       await tester.tap(find.byIcon(Icons.delete_sweep_outlined));

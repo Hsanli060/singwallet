@@ -152,7 +152,7 @@ class _ClassificationRulesTabState extends ConsumerState<ClassificationRulesTab>
                         controller: patternController,
                         decoration: const InputDecoration(
                           labelText: '商户关键字 / 通配符 *',
-                          hintText: '如：星巴克、瑞幸*、美团',
+                          hintText: '如：商户名、关键词*、平台名称',
                           border: OutlineInputBorder(),
                         ),
                         validator: (val) {

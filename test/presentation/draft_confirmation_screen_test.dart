@@ -147,8 +147,8 @@ void main() {
         ),
       );
 
-      // Verify mock canvas text
-      expect(find.text('OCR 证据快照模拟视口'), findsOneWidget);
+      // Verify canvas text
+      expect(find.text('OCR 证据快照预览'), findsOneWidget);
       expect(find.text('2 个文本证据锚点就绪'), findsOneWidget);
 
       // Tap on the first bounding box using relative offset
@@ -445,7 +445,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('待确认草稿箱'), findsOneWidget);
-      expect(find.text('暂无待确认草稿'), findsOneWidget);
+      expect(find.text('当前暂无待确认草稿'), findsOneWidget);
       expect(find.text('截图或分享导入的账单将显示在此处，等待确认入账'), findsOneWidget);
     });
 

@@ -28,6 +28,231 @@ window.addEventListener('DOMContentLoaded', () => {
   try {
     console.log("=== COMPREHENSIVE BROWSER DROPDOWN TEST SUITE ===");
 
+    // ========================================================
+    // Group 0: Clean App Initial State (100% 干净账本/草稿/回收站验证)
+    // ========================================================
+    console.log("=== Group 0: Clean App Initial State Verification ===");
+
+    // 1. 验证流水账本初始状态为 0 笔账单，净支出为 ¥ 0.00
+    const initialTxItems = document.querySelectorAll('#transactions-list .tx-item');
+    assert(initialTxItems.length === 0, "Group 0: Initial transaction list is completely clean (found " + initialTxItems.length + ")");
+    const txEmptyState = document.getElementById('tx-empty-state');
+    assert(txEmptyState !== null && !txEmptyState.classList.contains('hidden'), "Group 0: Transactions empty state #tx-empty-state is visible");
+    const emptyStateLedger = document.getElementById('empty-state-ledger');
+    assert(emptyStateLedger !== null && emptyStateLedger.innerText.includes('暂无账单记录'), "Group 0: #empty-state-ledger displays '暂无账单记录'");
+
+    const initialMonthlyNet = document.getElementById('monthly-net-expense');
+    assert(initialMonthlyNet !== null && (initialMonthlyNet.innerText.trim() === '¥ 0.00' || initialMonthlyNet.innerText.trim() === '0.00'), "Group 0: #monthly-net-expense is ¥ 0.00 (got: " + initialMonthlyNet.innerText + ")");
+    const initialTotalExp = document.getElementById('total-expense');
+    assert(initialTotalExp !== null && (initialTotalExp.innerText.trim() === '¥ 0.00' || initialTotalExp.innerText.trim() === '0.00'), "Group 0: #total-expense is ¥ 0.00");
+
+    // 2. 验证草稿箱初始为空且表单与一键入账按钮隐藏
+    assert(draftQueue.length === 0, "Group 0: Initial draftQueue is empty (found " + draftQueue.length + ")");
+    const draftEmptyState = document.getElementById('draft-empty-state');
+    assert(draftEmptyState !== null && !draftEmptyState.classList.contains('hidden'), "Group 0: #draft-empty-state is visible initially");
+    assert(draftEmptyState.innerText.includes('当前暂无待确认的账单草稿'), "Group 0: #draft-empty-state indicates '当前暂无待确认的账单草稿'");
+    const draftQueueBar = document.getElementById('draft-queue-bar');
+    assert(draftQueueBar !== null && draftQueueBar.classList.contains('hidden'), "Group 0: #draft-queue-bar (batch confirm button) is hidden initially");
+    const draftContentBox = document.getElementById('draft-content-container');
+    assert(draftContentBox !== null && draftContentBox.classList.contains('hidden'), "Group 0: #draft-content-container is hidden initially");
+
+    // 3. 验证底部导航栏草稿角标初始为 0 且隐藏
+    const navDraftBadge = document.getElementById('nav-draft-badge');
+    assert(navDraftBadge !== null, "Group 0: #nav-draft-badge exists on bottom nav");
+    assert(navDraftBadge.classList.contains('hidden') || navDraftBadge.style.display === 'none', "Group 0: #nav-draft-badge is hidden initially");
+    assert(navDraftBadge.innerText.trim() === '0', "Group 0: #nav-draft-badge has text '0'");
+    const draftNavDot = document.getElementById('draft-nav-dot');
+    assert(draftNavDot !== null && (draftNavDot.classList.contains('hidden') || draftNavDot.style.display === 'none'), "Group 0: #draft-nav-dot is hidden initially");
+
+    // 4. 验证回收站初始为空且黄点隐藏
+    const trashDot = document.getElementById('trash-dot');
+    assert(trashDot !== null && (trashDot.classList.contains('hidden') || trashDot.style.display === 'none'), "Group 0: #trash-dot is hidden initially");
+    const trashBadge = document.getElementById('trash-badge');
+    assert(trashBadge !== null && (trashBadge.classList.contains('hidden') || trashBadge.style.display === 'none'), "Group 0: #trash-badge is hidden initially");
+    const trashItemsEl = document.getElementById('trash-items');
+    assert(trashItemsEl !== null && trashItemsEl.innerText.includes('回收站为空'), "Group 0: #trash-items indicates '回收站为空'");
+
+    // 5. 验证顶部调试横幅已彻底移除且初始 DOM 不含预置商户名
+    const pageText = document.body.innerText;
+    assert(!pageText.includes('374/374 单元测试已通过'), "Group 0: Top simulator debug banner is completely removed from DOM");
+    assert(!pageText.includes('SingWallet 离线记账引擎 v1.0'), "Group 0: Top banner title is removed from outer layout");
+    assert(!pageText.includes('麦当劳（王府井店）'), "Group 0: No hardcoded demo merchant '麦当劳（王府井店）' in initial DOM");
+    assert(!pageText.includes('杭州市拱墅区'), "Group 0: No hardcoded demo merchant '杭州市拱墅区' in initial DOM");
+
+    // 6. 验证饼状图初始状态为半透明空心圆环与“暂无支出数据”
+    const initPieSvg = document.getElementById('monthly-pie-chart')?.querySelector('svg');
+    assert(initPieSvg !== null, "Group 0: #monthly-pie-chart SVG exists");
+    const initCircle = initPieSvg.querySelector('circle');
+    assert(initCircle !== null, "Group 0: #monthly-pie-chart renders initial circle element");
+    assert(initCircle.getAttribute('fill') === 'none', "Group 0: Initial circle has fill='none' (hollow donut placeholder)");
+    assert(initCircle.getAttribute('stroke-width') === '10', "Group 0: Initial circle has stroke-width='10'");
+    const initLegend = document.getElementById('monthly-pie-legend');
+    assert(initLegend !== null && initLegend.innerText.includes('暂无支出数据'), "Group 0: #monthly-pie-legend displays '暂无支出数据'");
+
+    // ================= Test Helpers =================
+    function injectTestDrafts() {
+      draftQueue = [
+        {
+          id: 'draft-bill-1',
+          merchant: '杭州市拱墅区世臻便利店',
+          merchantHeader: '世纪华购',
+          amount: 70.00,
+          amountInCents: 7000,
+          channel: '微信',
+          account: '钱包',
+          category: '日常购物',
+          categoryName: '日常购物',
+          confidence: 95,
+          rule: '智能分类 "日常购物" (置信度 95%)',
+          orderId: '4200003143202610252738865252',
+          orderTime: '2026-10-25 13:29:53',
+          time: '2026-10-25 13:29:53',
+          payment: { channel: '微信', sub_type: '钱包', display_name: '微信 · 钱包' }
+        },
+        {
+          id: 'draft-bill-2',
+          merchant: '淘宝平台商户',
+          merchantHeader: '淘宝平台商户',
+          amount: 15.77,
+          amountInCents: 1577,
+          channel: '微信',
+          account: '钱包',
+          category: '日常购物',
+          categoryName: '日常购物',
+          confidence: 98,
+          rule: '规则命中 "淘宝*" -> 日常购物',
+          orderId: '4500000566202610259735455478',
+          orderTime: '2026-10-25 18:41:54',
+          time: '2026-10-25 18:41:54',
+          payment: { channel: '微信', sub_type: '钱包', display_name: '微信 · 钱包' }
+        },
+        {
+          id: 'draft-bill-3',
+          merchant: '杭州市拱墅区辰市早餐店',
+          merchantHeader: '辰市早餐店',
+          amount: 4.00,
+          amountInCents: 400,
+          channel: '微信',
+          account: '钱包',
+          category: '餐饮美食',
+          categoryName: '餐饮美食',
+          confidence: 98,
+          rule: '规则命中 "早餐店*" -> 餐饮美食',
+          orderId: '4500000527202610268642917303',
+          orderTime: '2026-10-26 08:01:25',
+          time: '2026-10-26 08:01:25',
+          payment: { channel: '微信', sub_type: '钱包', display_name: '微信 · 钱包' }
+        },
+        {
+          id: 'draft-bill-4',
+          merchant: '拼多多',
+          merchantHeader: '拼多多',
+          amount: 14.75,
+          amountInCents: 1475,
+          channel: '微信',
+          account: '钱包',
+          category: '日常购物',
+          categoryName: '日常购物',
+          confidence: 96,
+          rule: '规则命中 "拼多多*" -> 日常购物',
+          orderId: '4500000570202610254022722547',
+          orderTime: '2026-10-25 14:19:38',
+          time: '2026-10-25 14:19:38',
+          payment: { channel: '微信', sub_type: '钱包', display_name: '微信 · 钱包' }
+        }
+      ];
+      currentDraftIndex = 0;
+      renderDraftQueue();
+    }
+    window.resetDemoDrafts = injectTestDrafts;
+
+    function injectTestTransactions() {
+      insertTransactionToList({
+        id: "item-tx-food-demo",
+        merchant: "测试餐厅",
+        amount: 48.00,
+        amountInCents: 4800,
+        catName: "餐饮美食",
+        parentCat: "餐饮美食",
+        category: "餐饮美食",
+        channel: "微信",
+        account: "微信钱包",
+        txTime: "2026-10-25 12:30:00",
+        orderTime: "2026-10-25 12:30:00",
+        txDate: "2026-10-25",
+        timeOnly: "12:30",
+        orderId: "MD420000314320261025123000",
+        badge: "自动识别"
+      });
+      insertTransactionToList({
+        id: "item-tx-shop-demo",
+        merchant: "测试超市",
+        amount: 126.80,
+        amountInCents: 12680,
+        catName: "日常购物",
+        parentCat: "日常购物",
+        category: "日常购物",
+        channel: "支付宝",
+        account: "支付宝余额",
+        txTime: "2026-10-24 16:45:00",
+        orderTime: "2026-10-24 16:45:00",
+        txDate: "2026-10-24",
+        timeOnly: "16:45",
+        orderId: "HM420000314320261024164500",
+        badge: "自动识别"
+      });
+      insertTransactionToList({
+        id: "item-tx-cr-demo",
+        merchant: "测试高铁",
+        amount: 333.50,
+        amountInCents: 33350,
+        catName: "交通出行",
+        parentCat: "交通出行",
+        category: "交通出行",
+        channel: "微信",
+        account: "微信钱包",
+        txTime: "2026-10-23 20:08:00",
+        orderTime: "2026-10-23 20:08:00",
+        txDate: "2026-10-23",
+        timeOnly: "20:08",
+        orderId: "CR420000314320261023200800",
+        badge: "手动录入"
+      });
+      adjustMonthlyTotals(508.30);
+      if (typeof updateDynamicCategoryChips === 'function') updateDynamicCategoryChips();
+      if (typeof renderMonthlyCategoryChart === 'function') renderMonthlyCategoryChart();
+    }
+
+    function cleanAllTestData() {
+      const txList = document.getElementById('transactions-list');
+      if (txList) {
+        txList.querySelectorAll('.day-group, .tx-item').forEach(el => el.remove());
+        const emptyState = document.getElementById('tx-empty-state');
+        if (emptyState) emptyState.classList.remove('hidden');
+      }
+      for (let m = 1; m <= 12; m++) {
+        const k = `2026-${String(m).padStart(2, '0')}`;
+        allMonthlyData[k] = { net: '0.00', exp: '0.00', ref: '0.00', inc: '0.00', txs: [] };
+      }
+      const monthlyNet = document.getElementById('monthly-net-expense');
+      const totalNet = document.getElementById('total-net-expense');
+      const totalExp = document.getElementById('total-expense');
+      const totalRef = document.getElementById('total-refund');
+      const totalInc = document.getElementById('total-income');
+      if (monthlyNet) monthlyNet.innerText = '¥ 0.00';
+      if (totalNet) totalNet.innerText = '¥ 0.00';
+      if (totalExp) totalExp.innerText = '¥ 0.00';
+      if (totalRef) totalRef.innerText = '-¥ 0.00';
+      if (totalInc) totalInc.innerText = '¥ 0.00';
+      draftQueue = [];
+      currentDraftIndex = 0;
+      renderDraftQueue();
+      if (typeof updateDynamicCategoryChips === 'function') updateDynamicCategoryChips();
+      if (typeof renderMonthlyCategoryChart === 'function') renderMonthlyCategoryChart();
+      try { localStorage.clear(); } catch(e) {}
+    }
+
+
     // Group 1: Verify all 8 custom dropdown containers and hidden inputs
     const dropdownIds = [
       'quick-date-dropdown',
@@ -113,6 +338,7 @@ window.addEventListener('DOMContentLoaded', () => {
     assert(lqtOpt && lqtOpt.classList.contains('selected'), "零钱通 option has selected class after .value assignment");
 
     // Group 7: Switching drafts updates channel & account dropdowns
+    injectTestDrafts();
     loadDraftData(draftQueue[1]); // draft-bill-2: channel='微信', account='钱包'
     assert(chanInput.value === '微信', "Draft 2: chanInput value is 微信");
     assert(document.getElementById('label-select-channel').textContent.trim() === '微信', "Draft 2: chanLabel is 微信");
@@ -304,6 +530,7 @@ window.addEventListener('DOMContentLoaded', () => {
     assert(subwayTx !== undefined, "Subway transaction directly committed to ledger");
 
     // Group 22: 账单卡片删除按钮移除、tx-source-tag 呈现与 deleteTxItem / 撤回 / 还原恢复验证
+    if (document.querySelectorAll("#transactions-list .tx-item:not(.soft-deleted)").length === 0) injectTestTransactions();
     const netBeforeDel = parseFloat(document.getElementById('total-net-expense').innerText.replace(/[¥\s,]/g, ''));
     const expBeforeDel = parseFloat(document.getElementById('total-expense').innerText.replace(/[¥\s,]/g, ''));
     
@@ -368,6 +595,7 @@ window.addEventListener('DOMContentLoaded', () => {
     assert(dedupToast.classList.contains('hidden'), "Dedup toast closed when switching tab");
 
     // Group 24: 批量入账单号自动注册防重与全月数据模型联动
+    if (draftQueue.length === 0) injectTestDrafts();
     switchTab('drafts');
     resetDemoDrafts();
     // 为避免前面 Group 17 拼多多已入账单号导致的重复拦截，将草稿分配唯一单号以验证纯净草稿批量入账能力
@@ -1194,6 +1422,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // ==========================================
     // Group 35: 账单去重 (Order ID Deduplication) 领域与一键批量入账全场景专项验证
+    if (draftQueue.length === 0) injectTestDrafts();
+    if (document.querySelectorAll("#transactions-list .tx-item:not(.soft-deleted)").length === 0) injectTestTransactions();
     // ==========================================
     switchTab('drafts');
 
@@ -1368,6 +1598,7 @@ window.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // Group 36: 月度净支出分栏、动态 SVG 环形饼图与分类占比列表及账单卡片优化验证
     // ==========================================
+    if (document.querySelectorAll("#transactions-list .tx-item:not(.soft-deleted)").length === 0) injectTestTransactions();
     switchTab('transactions');
 
     // 1. 结构验证：月份切换按钮、净支出双 ID 兼容与左右分栏
@@ -1387,12 +1618,16 @@ window.addEventListener('DOMContentLoaded', () => {
     const pieSvg = pieChart.querySelector('svg');
     assert(pieSvg !== null, "Group 36: #monthly-pie-chart contains SVG");
 
-    // 验证实心饼图：存在实心扇区 <path class="pie-slice"> 或完整实心圆 <circle class="pie-slice">，且 fill 不为 none
+    // 验证空心圆环图：存在空心圆环扇区 <circle class="pie-slice">，fill 为 none，stroke 为有效颜色值且 stroke-width 为 10
     const pieSlices = pieSvg.querySelectorAll('.pie-slice');
-    assert(pieSlices.length >= 1, "Group 36: SVG solid pie chart has .pie-slice elements rendered (found " + pieSlices.length + ")");
+    assert(pieSlices.length >= 1, "Group 36: SVG donut chart has .pie-slice elements rendered (found " + pieSlices.length + ")");
     pieSlices.forEach(slice => {
+      assert(slice.tagName.toLowerCase() === 'circle', "Group 36: Pie slice is circle element (" + slice.tagName + ")");
       const fill = slice.getAttribute('fill') || '';
-      assert(fill !== '' && fill !== 'none' && fill !== 'transparent', "Group 36: Pie slice has solid fill (" + fill + ")");
+      assert(fill === 'none', "Group 36: Pie slice has fill='none' (" + fill + ")");
+      const stroke = slice.getAttribute('stroke') || '';
+      assert(stroke !== '' && stroke !== 'none' && stroke !== 'transparent', "Group 36: Pie slice has valid stroke color (" + stroke + ")");
+      assert(slice.getAttribute('stroke-width') === '10', "Group 36: Pie slice has stroke-width='10'");
     });
 
     // 3. 右侧各分类数据列表与格式验证 (分类名(XX%):紧凑金额) 及无遮罩验证 (<= 4 项)
@@ -1507,7 +1742,7 @@ window.addEventListener('DOMContentLoaded', () => {
     selectMonthYear(2026, 10);
     assert(pieLegend.querySelectorAll('.monthly-pie-legend-item').length > 0, "Group 36: Restored to October, pie legend restored");
     const restoredSlices = pieChart.querySelectorAll('.pie-slice');
-    assert(restoredSlices.length >= 1, "Group 36: Restored to October, solid pie slices restored (found " + restoredSlices.length + ")");
+    assert(restoredSlices.length >= 1, "Group 36: Restored to October, donut pie slices restored (found " + restoredSlices.length + ")");
 
     // 8. 动态联动测试：分类管理中删除分类与恢复
     if (window.DomainRegistry && typeof window.DomainRegistry.removeCategory === 'function') {
@@ -1520,6 +1755,138 @@ window.addEventListener('DOMContentLoaded', () => {
       if (typeof resetCategoriesToDefault === 'function') resetCategoriesToDefault(); else if (window.DomainRegistry && window.DomainRegistry.resetCategories) window.DomainRegistry.resetCategories();
       syncAllCategoryUIs();
     }
+
+    
+    // ================= Group 37: App OTA Update & Three Iron Rules (Data Backup/Restore & Non-Destructive Upgrade) =================
+    console.log("=== Group 37: App OTA Update & Three Iron Rules ===");
+
+    // Ensure version badge is clean for testing
+    try { localStorage.removeItem('singwallet_app_version'); } catch(e) {}
+    if (typeof initAppVersionBadge === 'function') initAppVersionBadge();
+
+    // 1. 断言 #data-backup-card 与 #ota-update-card 存在于 #view-rules-accounts 中，且包含 com.singwallet.app、SQLite v2 无损迁移、#app-current-version-badge
+    const rulesContainer = document.getElementById('view-rules-accounts') || document.getElementById('view-rules');
+    assert(!!rulesContainer, "Group 37: #view-rules-accounts container exists");
+
+    const dataBackupCard = document.getElementById('data-backup-card');
+    assert(!!dataBackupCard, "Group 37: #data-backup-card exists in #view-rules-accounts");
+    assert(rulesContainer.contains(dataBackupCard), "Group 37: #data-backup-card is nested inside #view-rules-accounts");
+
+    const otaUpdateCard = document.getElementById('ota-update-card');
+    assert(!!otaUpdateCard, "Group 37: #ota-update-card exists in #view-rules-accounts");
+    assert(rulesContainer.contains(otaUpdateCard), "Group 37: #ota-update-card is nested inside #view-rules-accounts");
+
+    // 领域层铁律配置锁定（不作为冗余文字堆砌在 UI 界面）
+    assert(window.SingWalletDomain && window.SingWalletDomain.APP_VERSION_META && window.SingWalletDomain.APP_VERSION_META.packageId === 'com.singwallet.app', "Group 37: Domain packageId locked to 'com.singwallet.app'");
+    assert(dataBackupCard.querySelector('h4') && dataBackupCard.querySelector('h4').classList.contains('whitespace-nowrap') && dataBackupCard.querySelector('h4').innerText === '数据备份', "Group 37: #data-backup-card title is cleanly '数据备份' with no line wrap");
+    assert(otaUpdateCard.querySelector('h4') && otaUpdateCard.querySelector('h4').classList.contains('whitespace-nowrap') && otaUpdateCard.querySelector('h4').innerText === '应用版本', "Group 37: #ota-update-card title is cleanly '应用版本' with no line wrap");
+    assert(document.getElementById('btn-export-backup') && document.getElementById('btn-export-backup').innerText.trim() === '导出备份', "Group 37: #btn-export-backup button text is cleanly '导出备份'");
+    assert(document.getElementById('btn-import-backup') && document.getElementById('btn-import-backup').innerText.trim() === '导入恢复', "Group 37: #btn-import-backup button text is cleanly '导入恢复'");
+    assert(document.getElementById('btn-check-ota-update') && document.getElementById('btn-check-ota-text') && document.getElementById('btn-check-ota-text').innerText.trim() === '检查更新', "Group 37: #btn-check-ota-update button text is cleanly '检查更新'");
+
+    const versionBadge = document.getElementById('app-current-version-badge');
+    assert(!!versionBadge, "Group 37: #app-current-version-badge exists");
+    assert(otaUpdateCard.contains(versionBadge), "Group 37: #app-current-version-badge is inside #ota-update-card");
+    assert(versionBadge.innerText.includes('v1.0.0'), "Group 37: initial version is v1.0.0 (found " + versionBadge.innerText + ")");
+
+    // 2. 测试备份导出与无损恢复（铁律 3）
+    // 2.1 先添加一个自定义分类（数码外设）
+    if (window.DomainRegistry && typeof window.DomainRegistry.addCategory === 'function') {
+      window.DomainRegistry.addCategory('数码外设');
+    }
+    syncAllCategoryUIs();
+    const catsAfterAdd = window.DomainRegistry ? window.DomainRegistry.getParentCategories() : [];
+    assert(catsAfterAdd.includes('数码外设'), "Group 37: Custom category '数码外设' successfully added");
+    const customCatListEl = document.getElementById('custom-categories-list');
+    assert(customCatListEl && customCatListEl.innerText.includes('数码外设'), "Group 37: '数码外设' rendered in custom-categories-list");
+
+    // 2.2 调用导出备份函数获取 JSON 快照
+    assert(typeof window.exportFullBackupSnapshot === 'function', "Group 37: window.exportFullBackupSnapshot exists");
+    const backupSnapshot = window.exportFullBackupSnapshot();
+    assert(!!backupSnapshot, "Group 37: exportFullBackupSnapshot returned backup snapshot");
+    assert(backupSnapshot.packageId === 'com.singwallet.app', "Group 37: backup snapshot has packageId 'com.singwallet.app'");
+    assert(backupSnapshot.dbSchema === 'sqlite_v2', "Group 37: backup snapshot has dbSchema 'sqlite_v2'");
+    assert(backupSnapshot.data && backupSnapshot.data.categories && backupSnapshot.data.categories.includes('数码外设'), "Group 37: backup snapshot contains '数码外设'");
+
+    // 2.3 随后删除该自定义分类
+    if (window.DomainRegistry && typeof window.DomainRegistry.removeCategory === 'function') {
+      window.DomainRegistry.removeCategory('数码外设');
+    }
+    syncAllCategoryUIs();
+    const catsAfterDelete = window.DomainRegistry ? window.DomainRegistry.getParentCategories() : [];
+    assert(!catsAfterDelete.includes('数码外设'), "Group 37: '数码外设' deleted from parent categories");
+    assert(customCatListEl && !customCatListEl.innerText.includes('数码外设'), "Group 37: '数码外设' no longer in UI list");
+
+    // 2.4 调用 window.importBackupFromJson(snapshot) 恢复备份
+    assert(typeof window.importBackupFromJson === 'function', "Group 37: window.importBackupFromJson exists");
+    const restoreResult = window.importBackupFromJson(backupSnapshot);
+    assert(restoreResult === true, "Group 37: importBackupFromJson returned true");
+
+    // 2.5 断言自定义分类「数码外设」、账单流水、实心饼状图数据 100% 恢复如初
+    const catsAfterRestore = window.DomainRegistry ? window.DomainRegistry.getParentCategories() : [];
+    assert(catsAfterRestore.includes('数码外设'), "Group 37: '数码外设' 100% restored in parent categories");
+    assert(customCatListEl && customCatListEl.innerText.includes('数码外设'), "Group 37: '数码外设' 100% restored in UI list");
+    const txItemsAfterRestore = document.querySelectorAll('#transactions-list .tx-item:not(.soft-deleted)');
+    assert(txItemsAfterRestore.length >= 3, "Group 37: transactions intact after restore (found " + txItemsAfterRestore.length + ")");
+    const pieSlicesAfterRestore = document.querySelectorAll('#monthly-pie-chart .pie-slice');
+    assert(pieSlicesAfterRestore.length >= 1, "Group 37: donut pie chart slices 100% restored");
+
+    // 3. 测试 OTA 一键检查更新与无损覆盖升级（方式 2 + 铁律 1/2）
+    // 升级前状态快照
+    const preUpgradeTxCount = document.querySelectorAll('#transactions-list .tx-item:not(.soft-deleted)').length;
+    const preUpgradeCategories = [...(window.DomainRegistry ? window.DomainRegistry.getParentCategories() : [])];
+    const preUpgradeVlm = JSON.stringify(window.vlmConfig || {});
+
+    // 3.1 验证点击 #btn-check-ota-update (未配置自定义地址时优雅提示已是最新版本，不强行弹假更新)
+    const btnCheckOta = document.getElementById('btn-check-ota-update');
+    assert(!!btnCheckOta, "Group 37: #btn-check-ota-update exists");
+    btnCheckOta.click();
+
+    const otaResultBox = document.getElementById('ota-check-result-box');
+    assert(!!otaResultBox, "Group 37: #ota-check-result-box exists");
+    assert(otaResultBox.classList.contains('hidden'), "Group 37: #ota-check-result-box remains hidden when no new release configured");
+
+    // 3.1.2 模拟传入 mockPayload 检查更新 (远端发布 v1.1.0)
+    window.checkOtaUpdate({
+      version: '1.1.0',
+      apkSize: '18.4 MB',
+      changelog: [
+        'SQLite 数据库无损迁移至 v2 (全量兼容历史字段)',
+        '新增全量 JSON 数据备份与一键恢复',
+        'AI 视觉凭证识别精准度提升与极速响应',
+        '包名与官方签名指纹锁定，支持无感覆盖升级'
+      ]
+    });
+    assert(!otaResultBox.classList.contains('hidden'), "Group 37: #ota-check-result-box is visible after check with new release payload");
+    assert(otaResultBox.innerText.includes('v1.1.0'), "Group 37: #ota-check-result-box indicates new version v1.1.0");
+    const changelogList = document.getElementById('ota-changelog-list');
+    assert(!!changelogList, "Group 37: #ota-changelog-list exists");
+    assert(changelogList.querySelectorAll('li').length >= 3, "Group 37: changelog contains detailed release notes");
+
+    // 3.2 点击 #btn-trigger-ota-upgrade（或调用 window.executeOtaInPlaceUpgrade()）
+    const btnTriggerUpgrade = document.getElementById('btn-trigger-ota-upgrade');
+    assert(!!btnTriggerUpgrade, "Group 37: #btn-trigger-ota-upgrade exists");
+    btnTriggerUpgrade.click();
+
+    // 3.3 断言版本号徽章 #app-current-version-badge 更新为 v1.1.0
+    assert(versionBadge.innerText.includes('v1.1.0'), "Group 37: #app-current-version-badge updated to v1.1.0 (found " + versionBadge.innerText + ")");
+    assert(localStorage.getItem('singwallet_app_version') === '1.1.0', "Group 37: localStorage singwallet_app_version updated to '1.1.0'");
+
+    // 3.4 验证铁律：升级前后账单流水数量、自定义分类、VLM 配置 100% 无损一致
+    const postUpgradeTxCount = document.querySelectorAll('#transactions-list .tx-item:not(.soft-deleted)').length;
+    const postUpgradeCategories = window.DomainRegistry ? window.DomainRegistry.getParentCategories() : [];
+    const postUpgradeVlm = JSON.stringify(window.vlmConfig || {});
+
+    assert(postUpgradeTxCount === preUpgradeTxCount, "Group 37: Iron Rule 1/2 Verified: Transaction count 100% preserved (" + postUpgradeTxCount + " == " + preUpgradeTxCount + ")");
+    assert(JSON.stringify(postUpgradeCategories) === JSON.stringify(preUpgradeCategories), "Group 37: Iron Rule 1/2 Verified: Custom categories 100% preserved");
+    assert(postUpgradeVlm === preUpgradeVlm, "Group 37: Iron Rule 1/2 Verified: VLM API config 100% preserved");
+
+    // 4. 测试收尾：清理全部测试数据，确保 App 还原为 100% 干净状态
+    cleanAllTestData();
+    assert(document.querySelectorAll('#transactions-list .tx-item').length === 0, "Group 37 Post-Cleanup: Transactions restored to 0");
+    assert(draftQueue.length === 0, "Group 37 Post-Cleanup: draftQueue restored to 0");
+    assert(document.getElementById('monthly-net-expense').innerText.includes('0.00'), "Group 37 Post-Cleanup: Net expense restored to 0.00");
+
 
         const failed = window.__TEST_RESULTS__.filter(r => !r.pass);
     const passed = window.__TEST_RESULTS__.filter(r => r.pass);
@@ -1534,6 +1901,10 @@ window.addEventListener('DOMContentLoaded', () => {
   } catch(e) {
     console.error("TEST EXECUTION ERROR: " + e.message + "\\n" + e.stack);
     document.title = "TEST CRASHED: " + e.message;
+    const errDiv = document.createElement('div');
+    errDiv.id = 'test-error-stack';
+    errDiv.innerText = e.stack || e.message;
+    document.body.appendChild(errDiv);
   }
 });
 </script>
@@ -1546,18 +1917,30 @@ try:
     with open(test_file, 'w', encoding='utf-8') as f:
         f.write(test_html)
 
+    import tempfile
+    import shutil
+    temp_dir = tempfile.mkdtemp()
     edge_exe = r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
     cmd = [
         edge_exe,
         '--headless',
         '--disable-gpu',
+        '--user-data-dir=' + temp_dir,
         '--dump-dom',
         'file:///' + test_file.replace('\\', '/')
     ]
 
-    res = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
+    try:
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore')
+        try:
+            stdout, stderr = p.communicate(timeout=6)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            stdout, stderr = p.communicate()
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
-    dump_m = re.search(r'<div id="test-results-dump">([^<]+)</div>', res.stdout)
+    dump_m = re.search(r'<div id="test-results-dump">([^<]+)</div>', stdout)
     if dump_m:
         results = json.loads(dump_m.group(1))
         passed = [r for r in results if r['pass']]
@@ -1570,7 +1953,10 @@ try:
         else:
             sys.exit(1)
     else:
-        title_m = re.search(r'<title>([^<]+)</title>', res.stdout)
+        err_m = re.search(r'<div id="test-error-stack">([\s\S]*?)</div>', stdout)
+        if err_m:
+            print("CRASH STACK:\n", err_m.group(1))
+        title_m = re.search(r'<title>([^<]+)</title>', stdout)
         print("Edge Result Title:", title_m.group(1) if title_m else "None")
         sys.exit(1)
 finally:

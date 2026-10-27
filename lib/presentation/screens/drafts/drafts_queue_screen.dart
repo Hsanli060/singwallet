@@ -83,7 +83,7 @@ class DraftsQueueScreen extends ConsumerWidget {
                           ),
                           const SizedBox(height: 16),
                           const Text(
-                            '暂无待确认草稿',
+                            '当前暂无待确认草稿',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w600,

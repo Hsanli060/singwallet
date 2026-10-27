@@ -107,17 +107,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
       const RulesAccountsScreen(),
     ];
 
-    const appTitleWidget = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text('SingWallet'),
-        SizedBox(width: 8),
-        Text(
-          'SingWallet Core Initialized',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
-        ),
-      ],
-    );
+    const appTitleWidget = Text('SingWallet');
 
     if (isWide) {
       return Scaffold(

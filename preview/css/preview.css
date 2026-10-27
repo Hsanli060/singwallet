@@ -225,3 +225,8 @@
   -webkit-mask-image: linear-gradient(to bottom, #000 68%, transparent 100%);
 }
 
+
+/* OTA Download Progress Bar Transition */
+#ota-download-progress-bar {
+  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}

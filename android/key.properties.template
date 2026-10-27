@@ -1,0 +1,29 @@
+# ==============================================================================
+# SingWallet Android Release Signing Configuration Template
+# ==============================================================================
+# 【铁律 1】：每次打包发布 APK 必须使用同一份 release.jks 密钥证书与相同的 Application ID (com.singwallet.app)！
+# 任何证书变动都会导致 Android 系统拒绝“覆盖安装（Update）”，用户只能卸载重装，导致本地数据清空！
+#
+# 使用指南：
+# 1. 生成固定 Release Keystore（如尚无）：
+#    keytool -genkey -v -keystore android/app/singwallet-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias singwallet
+#
+# 2. 复制此文件为 android/key.properties：
+#    cp android/key.properties.template android/key.properties
+#
+# 3. 填入真实签名密码与密钥路径：
+#    storePassword=<YourStorePassword>
+#    keyPassword=<YourKeyPassword>
+#    keyAlias=singwallet
+#    storeFile=app/singwallet-release.jks
+#
+# 4. 安全注意：
+#    - android/key.properties 与 *.jks 文件已在 .gitignore 中忽略，切勿提交到公共代码仓库！
+#    - 在 GitHub Actions CI/CD 流水线中，请通过 GitHub Repository Secrets 配置：
+#      ANDROID_KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
+# ==============================================================================
+
+storePassword=singwallet_release_store_password
+keyPassword=singwallet_release_key_password
+keyAlias=singwallet
+storeFile=singwallet-release.jks

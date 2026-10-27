@@ -119,7 +119,7 @@ class _TransactionGroupListState extends ConsumerState<TransactionGroupList> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    '暂无流水记录',
+                    '暂无账单记录',
                     style: theme.textTheme.titleMedium?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                       fontWeight: FontWeight.w600,
@@ -127,7 +127,7 @@ class _TransactionGroupListState extends ConsumerState<TransactionGroupList> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '草稿箱确认或手动录入的账单将在此处展示',
+                    '确认入账或手动记账的账单将在此处展示',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.outline,
                     ),

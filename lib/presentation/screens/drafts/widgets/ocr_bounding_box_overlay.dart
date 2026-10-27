@@ -232,14 +232,14 @@ class _OcrBoundingBoxOverlayState extends State<OcrBoundingBoxOverlay> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // Layer 1: Background image or fallback mock canvas
+                // Layer 1: Background image or fallback evidence canvas
                 if (hasValidLocalImage)
                   Image.file(
                     File(widget.imagePath!),
                     fit: BoxFit.contain,
                   )
                 else
-                  _buildMockCanvas(theme, viewportSize),
+                  _buildEvidenceCanvas(theme, viewportSize),
 
                 // Layer 2: Bounding box highlight rectangles
                 CustomPaint(
@@ -295,7 +295,7 @@ class _OcrBoundingBoxOverlayState extends State<OcrBoundingBoxOverlay> {
     );
   }
 
-  Widget _buildMockCanvas(ThemeData theme, Size viewportSize) {
+  Widget _buildEvidenceCanvas(ThemeData theme, Size viewportSize) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -307,7 +307,7 @@ class _OcrBoundingBoxOverlayState extends State<OcrBoundingBoxOverlay> {
           ),
           const SizedBox(height: 8),
           Text(
-            'OCR 证据快照模拟视口',
+            'OCR 证据快照预览',
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,

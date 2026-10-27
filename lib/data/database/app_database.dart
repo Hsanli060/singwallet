@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import '../local/database_helper.dart';
 import 'schema.dart';
 
 /// Database management helper for SingWallet.
@@ -80,7 +81,7 @@ class AppDatabase {
           await batch.commit(noResult: true);
         },
         onUpgrade: (db, oldVersion, newVersion) async {
-          // Reserved for future schema migrations
+          await DatabaseHelper.onUpgrade(db, oldVersion, newVersion);
         },
         onOpen: (db) async {
           if (path != inMemoryDatabasePath) {
@@ -114,6 +115,9 @@ class AppDatabase {
             batch.execute(sql);
           }
           await batch.commit(noResult: true);
+        },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          await DatabaseHelper.onUpgrade(db, oldVersion, newVersion);
         },
       ),
     );

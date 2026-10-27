@@ -138,124 +138,25 @@
   }
 
   // ================= 多待确认草稿队列 & 高置信度免确认入账机制 =================
-  function createInitialDraftQueue() {
-    return [
-      {
-        id: 'draft-bill-1',
-        merchant: '杭州市拱墅区世臻便利店',
-        merchantHeader: '世纪华购',
-        amount: 70.00,
-        amountInCents: 7000,
-        channel: '微信',
-        account: '钱包',
-        category: '日常购物',
-        categoryName: '日常购物',
-        categoryIcon: getAppCatIcon('日常购物'),
-        confidence: 95,
-        rule: '智能分类 "日常购物" (置信度 95%)',
-        orderId: '4200003143202610252738865252',
-        orderTime: '2026-10-25 13:29:53',
-        time: '2026-10-25 13:29:53',
-        payment: {
-          channel: '微信',
-          channel_key: 'wechat',
-          sub_type: '钱包',
-          bank_name: null,
-          card_last_4: null,
-          display_name: '微信 · 钱包'
-        },
-        imgSrc: 'bill_1.jpg',
-        imgTitle: '微信支付 · 世纪华购 (-¥70.00)',
-        tag: '离线引擎识别'
-      },
-      {
-        id: 'draft-bill-2',
-        merchant: '淘宝平台商户',
-        merchantHeader: '淘宝平台商户',
-        amount: 15.77,
-        amountInCents: 1577,
-        channel: '微信',
-        account: '钱包',
-        category: '日常购物',
-        categoryName: '日常购物',
-        categoryIcon: getAppCatIcon('日常购物'),
-        confidence: 98,
-        rule: '规则命中 "淘宝*" -> 日常购物',
-        orderId: '4500000566202610259735455478',
-        merchantOrderNo: '1318060072610254387125221313',
-        orderTime: '2026-10-25 18:41:54',
-        time: '2026-10-25 18:41:54',
-        payment: {
-          channel: '微信',
-          channel_key: 'wechat',
-          sub_type: '钱包',
-          bank_name: null,
-          card_last_4: null,
-          display_name: '微信 · 钱包'
-        },
-        imgSrc: 'bill_2.jpg',
-        imgTitle: '微信支付 · 淘宝平台商户 (-¥15.77)',
-        tag: '离线引擎识别'
-      },
-      {
-        id: 'draft-bill-3',
-        merchant: '杭州市拱墅区辰市早餐店',
-        merchantHeader: '辰市早餐店',
-        amount: 4.00,
-        amountInCents: 400,
-        channel: '微信',
-        account: '钱包',
-        category: '餐饮美食',
-        categoryName: '餐饮美食',
-        categoryIcon: getAppCatIcon('餐饮美食'),
-        confidence: 98,
-        rule: '规则命中 "早餐店*" -> 餐饮美食',
-        orderId: '4500000527202610268642917303',
-        merchantOrderNo: 'SPS20261026080118661907348642',
-        orderTime: '2026-10-26 08:01:25',
-        time: '2026-10-26 08:01:25',
-        payment: {
-          channel: '微信',
-          channel_key: 'wechat',
-          sub_type: '钱包',
-          bank_name: null,
-          card_last_4: null,
-          display_name: '微信 · 钱包'
-        },
-        imgSrc: 'bill_3.jpg',
-        imgTitle: '微信支付 · 辰市早餐店 (-¥4.00)',
-        tag: '离线引擎识别'
-      },
-      {
-        id: 'draft-bill-4',
-        merchant: '拼多多',
-        merchantHeader: '拼多多',
-        amount: 14.75,
-        amountInCents: 1475,
-        channel: '微信',
-        account: '钱包',
-        category: '日常购物',
-        categoryName: '日常购物',
-        categoryIcon: getAppCatIcon('日常购物'),
-        confidence: 96,
-        rule: '规则命中 "拼多多*" -> 日常购物',
-        orderId: '4500000570202610254022722547',
-        merchantOrderNo: 'XP1926102514101861805207000558',
-        orderTime: '2026-10-25 14:19:38',
-        time: '2026-10-25 14:19:38',
-        payment: {
-          channel: '微信',
-          channel_key: 'wechat',
-          sub_type: '钱包',
-          bank_name: null,
-          card_last_4: null,
-          display_name: '微信 · 钱包'
-        },
-        imgSrc: 'bill_4.jpg',
-        imgTitle: '微信支付 · 拼多多 (-¥14.75)',
-        tag: '离线引擎识别'
+  function loadStoredDrafts() {
+    try {
+      const raw = localStorage.getItem('singwallet_user_drafts');
+      if (raw) {
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) return list;
       }
-    ];
+    } catch (e) {}
+    return [];
+  }
+
+  function saveStoredDrafts() {
+    try {
+      localStorage.setItem('singwallet_user_drafts', JSON.stringify(draftQueue));
+    } catch (e) {}
+  }
+
+  function createInitialDraftQueue() {
+    return loadStoredDrafts();
   }
 
   let draftQueue = createInitialDraftQueue();
@@ -387,16 +288,24 @@
     const batchCountEl = document.getElementById('batch-high-count');
     const emptyState = document.getElementById('draft-empty-state');
     const draftContent = document.getElementById('draft-content-container');
+    const bar = document.getElementById('draft-queue-bar');
 
     if (countEl) countEl.innerText = draftQueue.length;
     updateDraftBadge();
 
     if (draftQueue.length === 0) {
       if (container) container.innerHTML = '';
+      if (bar) bar.classList.add('hidden');
       if (emptyState) emptyState.classList.remove('hidden');
       if (draftContent) draftContent.classList.add('hidden');
+      saveStoredDrafts();
       return;
     }
+
+    if (bar) bar.classList.remove('hidden');
+    if (emptyState) emptyState.classList.add('hidden');
+    if (draftContent) draftContent.classList.remove('hidden');
+    saveStoredDrafts();
 
     if (emptyState) emptyState.classList.add('hidden');
     if (draftContent) draftContent.classList.remove('hidden');
@@ -596,16 +505,34 @@
   function updateDraftBadge() {
     const badge = document.getElementById('draft-badge');
     const dot = document.getElementById('draft-nav-dot');
+    const navBadge = document.getElementById('nav-draft-badge');
     const count = draftQueue.length;
     if (badge) {
       if (count > 0) {
         badge.innerText = `待确认 ${count} 笔`;
         badge.className = "px-2.5 py-1 text-xs font-semibold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30";
-        if (dot) dot.style.display = 'block';
       } else {
         badge.innerText = `待确认 0 笔`;
         badge.className = "px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30";
-        if (dot) dot.style.display = 'none';
+      }
+    }
+    if (dot) {
+      if (count > 0) {
+        dot.style.display = 'block';
+        dot.classList.remove('hidden');
+      } else {
+        dot.style.display = 'none';
+        dot.classList.add('hidden');
+      }
+    }
+    if (navBadge) {
+      navBadge.innerText = String(count);
+      if (count > 0) {
+        navBadge.classList.remove('hidden');
+        navBadge.style.display = 'flex';
+      } else {
+        navBadge.classList.add('hidden');
+        navBadge.style.display = 'none';
       }
     }
   }
@@ -1850,6 +1777,7 @@
       badge: txData.badge,
       orderId: txData.orderId
     });
+    saveUserTransactionsToStorage();
     if (typeof renderMonthlyCategoryChart === 'function') {
       renderMonthlyCategoryChart();
     }
@@ -1994,6 +1922,18 @@
 
   let lastDeletedId = null;
   let deletedItems = [];
+  function updateTrashBadge() {
+    const trashBadge = document.getElementById('trash-badge');
+    const trashDot = document.getElementById('trash-dot');
+    if (deletedItems.length > 0) {
+      if (trashBadge) trashBadge.classList.remove('hidden');
+      if (trashDot) trashDot.classList.remove('hidden');
+    } else {
+      if (trashBadge) trashBadge.classList.add('hidden');
+      if (trashDot) trashDot.classList.add('hidden');
+    }
+  }
+
 
   function deleteTransaction(itemId, name, amount) {
     const item = document.getElementById(itemId);
@@ -2012,8 +1952,8 @@
       if (snackText) snackText.innerText = `已移入回收站: ${name} (-¥${amount.toFixed(2)})`;
       if (bar) bar.classList.remove('hidden');
 
-      const trashBadge = document.getElementById('trash-badge');
-      if (trashBadge) trashBadge.classList.remove('hidden');
+      updateTrashBadge();
+      saveUserTransactionsToStorage();
       applyActiveFilters();
       updateDynamicCategoryChips();
       if (typeof renderMonthlyCategoryChart === 'function') renderMonthlyCategoryChart();
@@ -2040,8 +1980,8 @@
       if (undoBar) undoBar.classList.add('hidden');
       deletedItems.pop();
       if (deletedItems.length === 0) {
-        const trashBadge = document.getElementById('trash-badge');
-        if (trashBadge) trashBadge.classList.add('hidden');
+        updateTrashBadge();
+      saveUserTransactionsToStorage();
       }
       lastDeletedId = null;
       applyActiveFilters();
@@ -2055,7 +1995,7 @@
     const container = document.getElementById('trash-items');
     if (container) {
       if (deletedItems.length === 0) {
-        container.innerHTML = '<p class="text-center py-4 text-slate-500">回收站暂无数据 (30天内自动清理)</p>';
+        container.innerHTML = '<p class="text-center py-4 text-slate-500">回收站为空</p>';
       } else {
         container.innerHTML = deletedItems.map(item => `
           <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-800 border border-slate-700">
@@ -2082,8 +2022,8 @@
     }
     deletedItems = deletedItems.filter(i => i.id !== id);
     if (deletedItems.length === 0) {
-      const trashBadge = document.getElementById('trash-badge');
-      if (trashBadge) trashBadge.classList.add('hidden');
+      updateTrashBadge();
+      saveUserTransactionsToStorage();
     }
     openTrashDialog();
     applyActiveFilters();
@@ -2271,189 +2211,59 @@
     if (modal) modal.classList.add('hidden');
   }
 
-  // Rules Management
-  function openAddRuleModal() {
-    if (typeof closeAllCustomDropdowns === 'function') closeAllCustomDropdowns();
-    const patternInput = document.getElementById('rule-pattern-input');
-    if (patternInput) patternInput.value = '';
-    const matchTypeInput = document.getElementById('rule-match-type');
-    if (matchTypeInput) matchTypeInput.value = 'prefix';
-    const targetCatInput = document.getElementById('rule-target-cat');
-    if (targetCatInput) targetCatInput.value = '餐饮美食';
-    const modal = document.getElementById('add-rule-modal');
-    if (modal) modal.classList.remove('hidden');
-  }
-
-  function closeAddRuleModal() {
-    if (typeof closeAllCustomDropdowns === 'function') closeAllCustomDropdowns();
-    const modal = document.getElementById('add-rule-modal');
-    if (modal) modal.classList.add('hidden');
-  }
-
-  function saveNewRule() {
-    const pattern = document.getElementById('rule-pattern-input')?.value?.trim();
-    const targetCat = document.getElementById('rule-target-cat')?.value || '餐饮美食';
-    const matchType = document.getElementById('rule-match-type')?.value || 'prefix';
-    if (!pattern) {
-      showToast(`${getAppStatusIcon('warning')} 请输入匹配关键词或通配符`);
-      return;
-    }
-    closeAddRuleModal();
-    showToast(`规则 "${pattern}" (${matchType}) 已添加至 6 级决策链，优先级 4`);
-
-    const container = document.getElementById('rules-list-container');
-    if (container) {
-      const newRuleDiv = document.createElement('div');
-      newRuleDiv.className = "flex items-center justify-between p-3 rounded-xl bg-slate-800/90 border border-slate-700 animate-fadeIn";
-      newRuleDiv.innerHTML = `
-        <div class="flex items-center space-x-2.5">
-          <span class="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 font-bold text-[11px] flex items-center justify-center">4</span>
-          <div>
-            <div class="flex items-center space-x-1.5">
-              <span class="font-semibold text-xs text-white">${pattern}</span>
-              <span class="text-[10px] px-1 rounded bg-purple-500/20 text-purple-300 font-medium">${targetCat}</span>
-            </div>
-            <p class="text-[11px] text-slate-400">自定义商户规则</p>
-          </div>
-        </div>
-        <input type="checkbox" checked onchange="toggleRule(this, '${pattern}')" class="w-4 h-4 rounded text-indigo-600 cursor-pointer">
-      `;
-      container.appendChild(newRuleDiv);
-    }
-  }
-
-  function toggleRule(cb, ruleName) {
-    showToast(`规则 [${ruleName}] 已${cb.checked ? '启用' : '停用'}`);
-  }
-
-  function triggerRerunRules() {
-    showToast(`${getAppStatusIcon('refresh')} 已依 6 级规则对未确认草稿执行重算 (0笔变更)`);
-  }
-
-  // Accounts Edit (Custom Modal without prompt)
-  let currentEditingAccount = null;
-
-  function editAccountBalance(accName, curVal) {
-    currentEditingAccount = accName;
-    const title = document.getElementById('acc-edit-title');
-    const input = document.getElementById('acc-edit-input');
-    if (title) title.innerText = `修改 [${accName}] 余额`;
-    if (input) input.value = curVal;
-    const modal = document.getElementById('acc-edit-modal');
-    if (modal) modal.classList.remove('hidden');
-  }
-
-  function closeAccEditModal() {
-    const modal = document.getElementById('acc-edit-modal');
-    if (modal) modal.classList.add('hidden');
-  }
-
-  function saveAccountBalance() {
-    const val = parseFloat(document.getElementById('acc-edit-input')?.value || "0");
-    if (isNaN(val)) {
-      showToast(`${getAppStatusIcon('warning')} 请输入合法的数值`);
-      return;
-    }
-    if (currentEditingAccount) {
-      if (currentEditingAccount.includes('微信')) {
-        const el = document.getElementById('acc-wechat');
-        if (el) el.innerText = `¥ ${val.toFixed(2)}`;
-      }
-      if (currentEditingAccount.includes('支付宝')) {
-        const el = document.getElementById('acc-alipay');
-        if (el) el.innerText = `¥ ${val.toFixed(2)}`;
-      }
-      if (currentEditingAccount.includes('招行')) {
-        const el = document.getElementById('acc-cmb');
-        if (el) el.innerText = `¥ ${val.toFixed(2)}`;
-      }
-      if (currentEditingAccount.includes('现金')) {
-        const el = document.getElementById('acc-cash');
-        if (el) el.innerText = `¥ ${val.toFixed(2)}`;
-      }
-    }
-    closeAccEditModal();
-    showToast(`已更新 ${currentEditingAccount} 余额为 ¥${val.toFixed(2)}`);
-  }
-
-  function openAddAccountModal() {
-    if (typeof closeAllCustomDropdowns === 'function') closeAllCustomDropdowns();
-    const nameEl = document.getElementById('acc-add-name');
-    const balEl = document.getElementById('acc-add-bal');
-    const typeEl = document.getElementById('acc-add-type');
-    if (nameEl) nameEl.value = '';
-    if (balEl) balEl.value = '';
-    if (typeEl) typeEl.value = 'bank_card';
-    const modal = document.getElementById('acc-add-modal');
-    if (modal) modal.classList.remove('hidden');
-  }
-
-  function closeAccAddModal() {
-    if (typeof closeAllCustomDropdowns === 'function') closeAllCustomDropdowns();
-    const modal = document.getElementById('acc-add-modal');
-    if (modal) modal.classList.add('hidden');
-  }
-
-  function saveNewAccount() {
-    const name = document.getElementById('acc-add-name')?.value?.trim();
-    const bal = parseFloat(document.getElementById('acc-add-bal')?.value || "0");
-    if (!name) {
-      showToast(`${getAppStatusIcon('warning')} 请输入账户名称`);
-      return;
-    }
-    closeAccAddModal();
-
-    const grid = document.getElementById('accounts-grid');
-    if (grid) {
-      const card = document.createElement('div');
-      card.className = "p-3 rounded-xl bg-slate-800/90 border border-slate-700 cursor-pointer hover:border-indigo-500 tap-highlight transition-all animate-fadeIn";
-      card.onclick = () => editAccountBalance(name, bal.toFixed(2));
-      card.innerHTML = `
-        <span class="text-slate-400">${name}</span>
-        <p class="text-base font-bold text-white mt-1">¥ ${bal.toFixed(2)}</p>
-      `;
-      grid.appendChild(card);
-    }
-    showToast(`已成功添加新账户: ${name}`);
-  }
-
-  // Refund Linking Modal
-  function openRefundDemoModal() {
-    const modal = document.getElementById('refund-demo-modal');
-    if (modal) modal.classList.remove('hidden');
-  }
-
-  function closeRefundDemoModal() {
-    const modal = document.getElementById('refund-demo-modal');
-    if (modal) modal.classList.add('hidden');
-  }
-
-  function executeRefundLinkDemo() {
-    closeRefundDemoModal();
-    // Update totals
-    const curRefund = -128.00 - 50.00;
-    const curNet = 3428.50 - 50.00;
-    const totalRef = document.getElementById('total-refund');
-    const totalNet = document.getElementById('total-net-expense');
-    const monthlyNet = document.getElementById('monthly-net-expense');
-    if (totalRef) totalRef.innerText = `-¥ ${Math.abs(curRefund).toFixed(2)}`;
-    if (totalNet) totalNet.innerText = `¥ ${curNet.toFixed(2)}`;
-    if (monthlyNet) monthlyNet.innerText = `¥ ${curNet.toFixed(2)}`;
-    showToast(`${getAppStatusIcon('success')} 已成功挂载 ¥50.00 退款至原消费！月度净支出已联动扣减`);
-  }
+  // Discarded legacy modals cleaned (no-ops preserved for backward-compatibility)
+  function openAddRuleModal() {}
+  function closeAddRuleModal() {}
+  function saveNewRule() {}
+  function toggleRule() {}
+  function triggerRerunRules() {}
+  function editAccountBalance() {}
+  function closeAccEditModal() {}
+  function saveAccountBalance() {}
+  function openAddAccountModal() {}
+  function closeAccAddModal() {}
+  function saveNewAccount() {}
+  function openRefundDemoModal() {}
+  function closeRefundDemoModal() {}
+  function executeRefundLinkDemo() {}
 
   // Month Picker Modal & Full 12-Month Grid Engine
   let currentActiveYear = '2026';
   let currentActiveMonth = '10';
   let pickerYear = 2026;
 
-  // Full 12-Month Realistic Financial Dataset Engine
-  const allMonthlyData = {
-    '2026-10': {
-      net: '0.00', exp: '0.00', ref: '0.00', inc: '0.00',
-      txs: []
+  // Clean 12-Month Realistic Financial Dataset Engine & LocalStorage Persistence
+  const allMonthlyData = {};
+  for (let m = 1; m <= 12; m++) {
+    const k = `2026-${String(m).padStart(2, '0')}`;
+    allMonthlyData[k] = { net: '0.00', exp: '0.00', ref: '0.00', inc: '0.00', txs: [] };
+  }
+
+  function saveUserTransactionsToStorage() {
+    try {
+      const allTx = [];
+      Object.keys(allMonthlyData).forEach(mKey => {
+        const m = allMonthlyData[mKey];
+        if (m && Array.isArray(m.txs)) {
+          m.txs.forEach(t => {
+            if (!t.softDeleted) allTx.push(t);
+          });
+        }
+      });
+      localStorage.setItem('singwallet_user_transactions', JSON.stringify(allTx));
+    } catch (e) {}
+  }
+
+  function loadUserTransactionsFromStorage() {
+    try {
+      const raw = localStorage.getItem('singwallet_user_transactions');
+      if (!raw) return [];
+      const list = JSON.parse(raw);
+      return Array.isArray(list) ? list : [];
+    } catch (e) {
+      return [];
     }
-  };
+  }
 
   function getMonthlyData(year, month) {
     const key = `${year}-${month}`;
@@ -2587,6 +2397,28 @@
       if (!groups[tx.dateGroup]) groups[tx.dateGroup] = [];
       groups[tx.dateGroup].push(tx);
     });
+
+    if (Object.keys(groups).length === 0) {
+      container.innerHTML = `
+        <div id="tx-empty-state" class="py-16 text-center space-y-3">
+          <div id="empty-state-ledger" class="space-y-3">
+            <div class="w-16 h-16 rounded-3xl bg-slate-800/80 border border-slate-700/80 text-indigo-400 flex items-center justify-center p-3.5 mx-auto shadow-inner" id="empty-state-ledger-icon"></div>
+            <div class="space-y-1">
+              <h4 class="text-white font-bold text-sm">暂无账单记录</h4>
+            </div>
+          </div>
+        </div>
+      `;
+      if (typeof IconRegistry !== 'undefined' && typeof IconRegistry.refreshAllIcons === 'function') {
+        IconRegistry.refreshAllIcons();
+      }
+      currentFilterKey = 'all';
+      updateDynamicCategoryChips();
+      updateActiveFilterCapsules();
+      applyActiveFilters();
+      if (typeof renderMonthlyCategoryChart === 'function') renderMonthlyCategoryChart();
+      return;
+    }
 
     let html = '';
     for (const [groupName, items] of Object.entries(groups)) {
@@ -3179,7 +3011,7 @@
     if (items.length === 0 || total <= 0) {
       chartContainer.innerHTML = `
         <svg viewBox="0 0 64 64" class="w-16 h-16 pointer-events-none">
-          <circle cx="32" cy="32" r="28" fill="rgba(255, 255, 255, 0.14)" />
+          <circle cx="32" cy="32" r="22" fill="none" stroke="rgba(255, 255, 255, 0.16)" stroke-width="10" />
         </svg>
       `;
       legendContainer.innerHTML = `
@@ -3195,7 +3027,7 @@
     if (validItems.length === 0) {
       chartContainer.innerHTML = `
         <svg viewBox="0 0 64 64" class="w-16 h-16 pointer-events-none">
-          <circle cx="32" cy="32" r="28" fill="rgba(255, 255, 255, 0.14)" />
+          <circle cx="32" cy="32" r="22" fill="none" stroke="rgba(255, 255, 255, 0.16)" stroke-width="10" />
         </svg>
       `;
       legendContainer.innerHTML = `
@@ -3206,42 +3038,23 @@
       return;
     }
 
-    // 实心饼图渲染逻辑
-    const singleDominantItem = validItems.length === 1
-      ? validItems[0]
-      : validItems.find(it => (it.ratio !== undefined ? it.ratio : (it.amount / total)) >= 0.9999);
+    // 空心圆环图渲染逻辑 (Hollow Donut Chart, r=22, stroke-width=10)
+    const C = 2 * Math.PI * 22; // ~138.23
+    let currentOffset = 0;
+    const slicesHtml = validItems.map((item) => {
+      const itemRatio = item.ratio !== undefined ? item.ratio : (item.amount / total);
+      const dash = itemRatio * C;
+      const offset = currentOffset;
+      currentOffset += dash;
+      return `<circle class="pie-slice" data-category="${item.category}" cx="32" cy="32" r="22" fill="none" stroke="${item.color}" stroke-width="10" stroke-dasharray="${dash.toFixed(2)} ${C.toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 32 32)" />`;
+    }).join('');
 
-    if (singleDominantItem) {
-      chartContainer.innerHTML = `
-        <svg viewBox="0 0 64 64" class="w-16 h-16">
-          <circle class="pie-slice" data-category="${singleDominantItem.category}" cx="32" cy="32" r="28" fill="${singleDominantItem.color}" />
-        </svg>
-      `;
-    } else {
-      let currentAngle = -Math.PI / 2;
-      const slicesHtml = validItems.map((item, idx) => {
-        const itemRatio = item.ratio !== undefined ? item.ratio : (item.amount / total);
-        const startAngle = currentAngle;
-        const endAngle = (idx === validItems.length - 1)
-          ? ((-Math.PI / 2) + 2 * Math.PI)
-          : (startAngle + itemRatio * 2 * Math.PI);
-        currentAngle = endAngle;
-
-        const x1 = 32 + 28 * Math.cos(startAngle);
-        const y1 = 32 + 28 * Math.sin(startAngle);
-        const x2 = 32 + 28 * Math.cos(endAngle);
-        const y2 = 32 + 28 * Math.sin(endAngle);
-        const largeArcFlag = (endAngle - startAngle) > Math.PI ? 1 : 0;
-
-        return `<path class="pie-slice" data-category="${item.category}" d="M 32 32 L ${x1.toFixed(2)} ${y1.toFixed(2)} A 28 28 0 ${largeArcFlag} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z" fill="${item.color}" stroke="rgba(67, 56, 202, 0.45)" stroke-width="0.8" />`;
-      }).join('');
-
-      chartContainer.innerHTML = `
-        <svg viewBox="0 0 64 64" class="w-16 h-16">
-          ${slicesHtml}
-        </svg>
-      `;
-    }
+    chartContainer.innerHTML = `
+      <svg viewBox="0 0 64 64" class="w-16 h-16">
+        <circle cx="32" cy="32" r="22" fill="none" stroke="rgba(255, 255, 255, 0.1)" stroke-width="10" />
+        ${slicesHtml}
+      </svg>
+    `;
 
     legendContainer.innerHTML = items.map(item => `<div class="monthly-pie-legend-item flex items-center gap-1.5 leading-tight truncate text-slate-100 shrink-0" data-category="${item.category}" title="${item.label}"><span class="w-1.5 h-1.5 rounded-full shrink-0" style="background-color: ${item.color}"></span><span class="truncate">${item.label}</span></div>`).join('');
 
@@ -3385,6 +3198,378 @@
     configurable: true
   });
 
+  // ================= 方式 2：OTA 检查更新与三条铁律（全量 JSON 备份/恢复 + SQLite v2 无损迁移） =================
+
+  function updateBackupStatsLabel() {
+    const label = document.getElementById('backup-stats-label');
+    if (!label) return;
+    let txCount = 0;
+    if (window.allMonthlyData) {
+      Object.values(window.allMonthlyData).forEach(m => {
+        if (m && Array.isArray(m.txs)) {
+          txCount += m.txs.filter(t => !t.softDeleted).length;
+        }
+      });
+    }
+    if (txCount === 0) {
+      const items = document.querySelectorAll('#transactions-list .tx-item, #tx-list-container .tx-item, .tx-item');
+      txCount = Array.from(items).filter(el => !el.classList.contains('soft-deleted')).length;
+    }
+    const categories = (window.DomainRegistry && typeof window.DomainRegistry.getParentCategories === 'function')
+      ? window.DomainRegistry.getParentCategories()
+      : (window.CORE_PARENT_CATEGORIES || ['餐饮美食', '交通出行', '日常购物', '休闲娱乐', '生活缴费', '医疗健康', '其他支出', '工资收入']);
+    const catCount = categories.length;
+    label.innerText = `${txCount} 笔账单 · ${catCount} 个分类`;
+  }
+
+  function initAppVersionBadge() {
+    const badge = document.getElementById('app-current-version-badge');
+    if (!badge) return;
+    const savedVer = localStorage.getItem('singwallet_app_version');
+    if (savedVer === '1.1.0') {
+      badge.innerText = 'v1.1.0';
+      badge.className = "text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono whitespace-nowrap";
+    } else {
+      badge.innerText = 'v1.0.0';
+      badge.className = "text-[10px] px-2 py-0.5 rounded-md bg-slate-700/60 text-slate-300 font-mono whitespace-nowrap";
+    }
+  }
+
+  function exportFullBackupSnapshot() {
+    const rawCategories = (window.DomainRegistry && typeof window.DomainRegistry.getParentCategories === 'function')
+      ? window.DomainRegistry.getParentCategories()
+      : (window.CORE_PARENT_CATEGORIES || ['餐饮美食', '交通出行', '日常购物', '休闲娱乐', '生活缴费', '医疗健康', '其他支出', '工资收入']);
+    const categories = Array.isArray(rawCategories) ? [...rawCategories] : [];
+
+    let txList = [];
+    if (window.allMonthlyData) {
+      Object.keys(window.allMonthlyData).forEach(m => {
+        const mData = window.allMonthlyData[m];
+        if (mData && Array.isArray(mData.txs)) {
+          txList.push(...mData.txs);
+        }
+      });
+    }
+    if (txList.length === 0) {
+      const items = Array.from(document.querySelectorAll('#transactions-list .tx-item, #tx-list-container .tx-item, .tx-item'))
+        .filter(el => !el.classList.contains('soft-deleted'));
+      txList = items.map(el => ({
+        id: el.id,
+        merchant: el.querySelector('.truncate')?.innerText || '账单',
+        amount: parseFloat(el.dataset.amount) || 0,
+        amountInCents: Math.round((parseFloat(el.dataset.amount) || 0) * 100),
+        catName: el.dataset.cat || el.dataset.category || '其他支出',
+        category: el.dataset.category || '其他支出',
+        parentCat: el.dataset.parent || el.dataset.category || '其他支出',
+        channel: el.dataset.channel || el.dataset.account || '微信',
+        account: el.dataset.account || '钱包',
+        txDate: el.dataset.date || '2026-10-26',
+        txTime: el.dataset.date ? (el.dataset.date + ' 12:00:00') : '2026-10-26 12:00:00',
+        orderId: el.id + '_ORDER',
+        badge: '自动识别'
+      }));
+    }
+
+    const vlm = window.vlmConfig ? JSON.parse(JSON.stringify(window.vlmConfig)) : {};
+    const orders = window.committedOrderIds ? Array.from(window.committedOrderIds) : [];
+    const currentVer = localStorage.getItem('singwallet_app_version') || '1.0.0';
+
+    const snapshot = {
+      format: "singwallet_backup",
+      version: "2.0",
+      schemaVersion: 2,
+      packageId: "com.singwallet.app",
+      dbSchema: "sqlite_v2",
+      appVersion: currentVer,
+      exportTime: new Date().toISOString(),
+      backupStats: {
+        transactionCount: txList.length,
+        categoryCount: categories.length
+      },
+      data: {
+        categories: categories,
+        allMonthlyData: JSON.parse(JSON.stringify(window.allMonthlyData || {})),
+        committedOrderIds: orders,
+        draftQueue: (typeof draftQueue !== 'undefined') ? JSON.parse(JSON.stringify(draftQueue)) : [],
+        vlmConfig: vlm,
+        transactions: txList
+      }
+    };
+
+    window.__lastExportedBackupJson = snapshot;
+    window.__lastExportedBackupJsonStr = JSON.stringify(snapshot, null, 2);
+
+    try {
+      localStorage.setItem('singwallet_latest_backup', JSON.stringify(snapshot));
+    } catch (e) {}
+
+    // Trigger browser file download: singwallet_backup_YYYYMMDD.json
+    try {
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      const filename = `singwallet_backup_${yyyy}${mm}${dd}.json`;
+      const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        if (a.parentNode) a.parentNode.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 150);
+    } catch (e) {
+      console.warn('Backup file download skipped or failed:', e);
+    }
+
+    showToast('已导出全量备份 (含账单与分类配置)');
+    updateBackupStatsLabel();
+
+    return snapshot;
+  }
+
+  function importBackupFromJson(jsonStrOrObj) {
+    let snapshot = null;
+    try {
+      if (typeof jsonStrOrObj === 'string') {
+        snapshot = JSON.parse(jsonStrOrObj);
+      } else if (typeof jsonStrOrObj === 'object' && jsonStrOrObj !== null) {
+        snapshot = jsonStrOrObj;
+      }
+    } catch (e) {
+      showToast('导入失败：备份 JSON 数据解析异常');
+      return false;
+    }
+
+    if (!snapshot) {
+      showToast('导入失败：备份数据为空');
+      return false;
+    }
+
+    // 1. SQLite v1 -> v2 无损迁移与数据解构
+    const rawData = snapshot.data || snapshot;
+    const categories = rawData.categories || [];
+    const incomingMonthlyData = rawData.allMonthlyData || null;
+    const incomingTransactions = rawData.transactions || [];
+    const incomingOrders = rawData.committedOrderIds || [];
+    const incomingVlm = rawData.vlmConfig || null;
+    const incomingDrafts = rawData.draftQueue || null;
+
+    // 2. 还原分类 (无损迁移：增量补充，恢复备份中的分类)
+    if (Array.isArray(categories) && window.DomainRegistry) {
+      const currentCats = typeof window.DomainRegistry.getParentCategories === 'function'
+        ? window.DomainRegistry.getParentCategories()
+        : [];
+      
+      categories.forEach(cat => {
+        if (!currentCats.includes(cat)) {
+          if (typeof window.DomainRegistry.addCategory === 'function') {
+            window.DomainRegistry.addCategory(cat);
+          }
+        }
+      });
+
+      if (typeof syncAllCategoryUIs === 'function') {
+        syncAllCategoryUIs();
+      }
+    }
+
+    // 3. 还原 VLM 配置
+    if (incomingVlm && typeof incomingVlm === 'object') {
+      if (window.vlmConfig) {
+        window.vlmConfig = { ...window.vlmConfig, ...incomingVlm };
+      }
+      try {
+        localStorage.setItem('singwallet_vlm_config', JSON.stringify(incomingVlm));
+      } catch (e) {}
+      if (typeof syncVlmConfigToUI === 'function') {
+        syncVlmConfigToUI();
+      }
+    }
+
+    // 4. 还原 committedOrderIds
+    if (Array.isArray(incomingOrders) && window.committedOrderIds) {
+      incomingOrders.forEach(ord => window.committedOrderIds.add(ord));
+    }
+
+    // 5. 还原草稿队列
+    if (Array.isArray(incomingDrafts) && typeof draftQueue !== 'undefined') {
+      draftQueue.length = 0;
+      incomingDrafts.forEach(d => draftQueue.push(d));
+      if (typeof renderDraftQueue === 'function') {
+        renderDraftQueue();
+      }
+    }
+
+    // 6. 还原 allMonthlyData & 账单流水 (无损字段填充)
+    if (incomingMonthlyData && typeof incomingMonthlyData === 'object' && window.allMonthlyData) {
+      Object.keys(incomingMonthlyData).forEach(m => {
+        const mObj = incomingMonthlyData[m];
+        if (mObj && Array.isArray(mObj.txs)) {
+          mObj.txs.forEach(t => {
+            if (!t.orderId) t.orderId = 'ORD_' + t.id;
+            if (t.amountInCents === undefined && t.amount !== undefined) {
+              t.amountInCents = Math.round(t.amount * 100);
+            }
+            if (!t.badge) t.badge = '自动识别';
+          });
+        }
+        window.allMonthlyData[m] = mObj;
+      });
+    } else if (incomingTransactions.length > 0 && window.allMonthlyData) {
+      if (!window.allMonthlyData['2026-10']) {
+        window.allMonthlyData['2026-10'] = { net: '0.00', exp: '0.00', ref: '0.00', inc: '0.00', txs: [] };
+      }
+      window.allMonthlyData['2026-10'].txs = incomingTransactions;
+    }
+
+    // 7. 彻底恢复 DOM 中可能被 soft-delete 的节点
+    document.querySelectorAll('#transactions-list .tx-item, #tx-list-container .tx-item, .tx-item').forEach(item => {
+      item.classList.remove('soft-deleted');
+      item.style.display = 'flex';
+    });
+
+    // 8. 重新渲染流水明细主视图与月度实心饼图
+    if (typeof renderMonthTransactions === 'function') {
+      renderMonthTransactions(currentActiveYear || '2026', currentActiveMonth || '10');
+    }
+    if (typeof renderMonthlyCategoryChart === 'function') {
+      renderMonthlyCategoryChart();
+    }
+    if (typeof updateDynamicCategoryChips === 'function') {
+      updateDynamicCategoryChips();
+    }
+    if (typeof updateActiveFilterCapsules === 'function') {
+      updateActiveFilterCapsules();
+    }
+    if (typeof applyActiveFilters === 'function') {
+      applyActiveFilters();
+    }
+    if (typeof updateBackupStatsLabel === 'function') {
+      updateBackupStatsLabel();
+    }
+
+    showToast('数据恢复成功：已无损还原账单与配置');
+    return true;
+  }
+
+  function handleBackupFileUpload(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const text = e.target.result;
+      importBackupFromJson(text);
+      event.target.value = '';
+    };
+    reader.readAsText(file);
+  }
+
+  function checkOtaUpdate(mockPayload = null) {
+    const feedInput = document.getElementById('ota-feed-url-input');
+    const resultBox = document.getElementById('ota-check-result-box');
+    const customUrl = (feedInput && feedInput.value) ? feedInput.value.trim() : '';
+    const currentVersion = (window.APP_VERSION_META && window.APP_VERSION_META.currentVersion) ? window.APP_VERSION_META.currentVersion : '1.0.0';
+
+    let payload = mockPayload;
+    if (!payload && customUrl) {
+      try {
+        if (customUrl.startsWith('{') && customUrl.endsWith('}')) {
+          payload = JSON.parse(customUrl);
+        }
+      } catch (e) {}
+    }
+
+    if (payload && (payload.version || payload.tag_name)) {
+      const releaseInfo = (window.SingWalletDomain && typeof window.SingWalletDomain.parseOtaReleasePayload === 'function')
+        ? window.SingWalletDomain.parseOtaReleasePayload(payload, currentVersion)
+        : (payload.version ? { hasUpdate: true, latestVersion: payload.version, changelog: payload.changelog || [], apkSize: payload.size || payload.apkSize || '18.4 MB' } : { hasUpdate: false });
+
+      if (releaseInfo && releaseInfo.hasUpdate) {
+        if (resultBox) {
+          resultBox.classList.remove('hidden');
+          resultBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        const vTitle = document.getElementById('ota-version-title');
+        if (vTitle) vTitle.innerText = `发现新版本 v${releaseInfo.latestVersion}`;
+        const changelogEl = document.getElementById('ota-changelog-list');
+        if (changelogEl && Array.isArray(releaseInfo.changelog) && releaseInfo.changelog.length > 0) {
+          changelogEl.innerHTML = releaseInfo.changelog.map(item => `<li>${item}</li>`).join('');
+        }
+        const btnCheckText = document.getElementById('btn-check-ota-text');
+        if (btnCheckText) btnCheckText.innerText = '检查更新';
+        showToast(`已获取最新版本信息：v${releaseInfo.latestVersion} 可升级`);
+        return;
+      }
+    }
+
+    if (resultBox) resultBox.classList.add('hidden');
+    const btnCheckText = document.getElementById('btn-check-ota-text');
+    if (btnCheckText) btnCheckText.innerText = '检查更新';
+    showToast(`当前已是最新版本 (v${currentVersion})`);
+  }
+
+  function executeOtaInPlaceUpgrade(fast = false) {
+    const progressWrap = document.getElementById('ota-download-progress-wrap');
+    const progressBar = document.getElementById('ota-download-progress-bar');
+    const progressText = document.getElementById('ota-download-progress-text');
+    const badge = document.getElementById('app-current-version-badge');
+    const btnTrigger = document.getElementById('btn-trigger-ota-upgrade');
+
+    if (progressWrap) progressWrap.classList.remove('hidden');
+    if (progressBar) progressBar.style.width = '100%';
+    if (progressText) progressText.innerText = '100%';
+
+    if (btnTrigger) {
+      btnTrigger.disabled = true;
+      btnTrigger.classList.remove('bg-indigo-600', 'hover:bg-indigo-500');
+      btnTrigger.classList.add('bg-emerald-600', 'hover:bg-emerald-600', 'cursor-default');
+      btnTrigger.innerHTML = `
+        <span class="w-4 h-4 shrink-0" data-ui-icon="success"></span>
+        <span>已完成更新 (v1.1.0)</span>
+      `;
+    }
+
+    if (badge) {
+      badge.innerText = 'v1.1.0';
+      badge.className = "text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono whitespace-nowrap";
+    }
+
+    try {
+      localStorage.setItem('singwallet_app_version', '1.1.0');
+    } catch (e) {}
+    window.currentAppVersion = '1.1.0';
+
+    showToast('已完成 v1.1.0 覆盖更新，历史账单与配置 100% 无损保留');
+
+    if (typeof updateBackupStatsLabel === 'function') {
+      updateBackupStatsLabel();
+    }
+
+    return true;
+  }
+
+  window.updateBackupStatsLabel = updateBackupStatsLabel;
+  window.initAppVersionBadge = initAppVersionBadge;
+  window.exportFullBackupSnapshot = exportFullBackupSnapshot;
+  window.importBackupFromJson = importBackupFromJson;
+  window.handleBackupFileUpload = handleBackupFileUpload;
+  window.checkOtaUpdate = checkOtaUpdate;
+  window.executeOtaInPlaceUpgrade = executeOtaInPlaceUpgrade;
+
+  if (window.SingWalletDomain) {
+    window.SingWalletDomain.exportFullBackupSnapshot = exportFullBackupSnapshot;
+    window.SingWalletDomain.importBackupFromJson = importBackupFromJson;
+  }
+  if (window.DomainRegistry) {
+    window.DomainRegistry.exportFullBackupSnapshot = exportFullBackupSnapshot;
+    window.DomainRegistry.importBackupFromJson = importBackupFromJson;
+  }
+
+
   // ================= DOM CONTENT LOADED INITIALIZATION =================
   let isAppControllerInitialized = false;
   function initAppController() {
@@ -3417,6 +3602,13 @@
     if (typeof syncAllCategoryUIs === 'function') {
       syncAllCategoryUIs();
     }
+    // 5.2 Initialize OTA version badge and Backup Stats
+    if (typeof initAppVersionBadge === 'function') {
+      initAppVersionBadge();
+    }
+    if (typeof updateBackupStatsLabel === 'function') {
+      updateBackupStatsLabel();
+    }
     // 6. Supplement data-cat-icon on static items in HTML
     document.querySelectorAll('#transactions-list .tx-item, #tx-list-container .tx-item').forEach(item => {
       const cat = item.getAttribute('data-parent') || item.getAttribute('data-cat') || item.getAttribute('data-category') || '其他支出';
@@ -3429,67 +3621,34 @@
       }
     });
 
-    // 7. Insert Demo Transactions (餐饮美食, 日常购物, 交通出行) if list is empty
-    const txList = document.getElementById('transactions-list');
-    if (txList && txList.querySelectorAll('.tx-item').length === 0) {
-      insertTransactionToList({
-        id: "item-tx-food-demo",
-        merchant: "麦当劳（王府井店）",
-        amount: 48.00,
-        amountInCents: 4800,
-        catName: "餐饮美食",
-        parentCat: "餐饮美食",
-        category: "餐饮美食",
-        channel: "微信",
-        account: "微信钱包",
-        txTime: "2026-10-25 12:30:00",
-        orderTime: "2026-10-25 12:30:00",
-        txDate: "2026-10-25",
-        timeOnly: "12:30",
-        orderId: "MD420000314320261025123000",
-        badge: "自动识别"
+    // 7. Load stored user transactions from localStorage if any
+    const storedTxs = loadUserTransactionsFromStorage();
+    if (Array.isArray(storedTxs) && storedTxs.length > 0) {
+      storedTxs.forEach(tx => {
+        insertTransactionToList(tx);
       });
-      insertTransactionToList({
-        id: "item-tx-shop-demo",
-        merchant: "盒马鲜生（朝阳大悦城店）",
-        amount: 126.80,
-        amountInCents: 12680,
-        catName: "日常购物",
-        parentCat: "日常购物",
-        category: "日常购物",
-        channel: "支付宝",
-        account: "支付宝余额",
-        txTime: "2026-10-24 16:45:00",
-        orderTime: "2026-10-24 16:45:00",
-        txDate: "2026-10-24",
-        timeOnly: "16:45",
-        orderId: "HM420000314320261024164500",
-        badge: "自动识别"
-      });
-      insertTransactionToList({
-        id: "item-tx-cr-demo",
-        merchant: "中国铁路网络有限公司",
-        amount: 333.50,
-        amountInCents: 33350,
-        catName: "交通出行",
-        parentCat: "交通出行",
-        category: "交通出行",
-        channel: "微信",
-        account: "微信钱包",
-        txTime: "2026-10-23 20:08:00",
-        orderTime: "2026-10-23 20:08:00",
-        txDate: "2026-10-23",
-        timeOnly: "20:08",
-        orderId: "CR420000314320261023200800",
-        badge: "手动录入"
-      });
-      adjustMonthlyTotals(508.30);
-      if (typeof updateDynamicCategoryChips === 'function') {
-        updateDynamicCategoryChips();
-      }
-      if (typeof renderMonthlyCategoryChart === 'function') {
-        renderMonthlyCategoryChart();
-      }
+      adjustMonthlyTotals(storedTxs.reduce((sum, t) => sum + (t.amount || 0), 0));
+    } else {
+      // Clean initial state: 0 bills
+      const emptyState = document.getElementById('tx-empty-state');
+      if (emptyState) emptyState.classList.remove('hidden');
+      const monthlyNet = document.getElementById('monthly-net-expense');
+      const totalNet = document.getElementById('total-net-expense');
+      const totalExp = document.getElementById('total-expense');
+      const totalRef = document.getElementById('total-refund');
+      const totalInc = document.getElementById('total-income');
+      if (monthlyNet) monthlyNet.innerText = '¥ 0.00';
+      if (totalNet) totalNet.innerText = '¥ 0.00';
+      if (totalExp) totalExp.innerText = '¥ 0.00';
+      if (totalRef) totalRef.innerText = '-¥ 0.00';
+      if (totalInc) totalInc.innerText = '¥ 0.00';
+    }
+
+    if (typeof updateDynamicCategoryChips === 'function') {
+      updateDynamicCategoryChips();
+    }
+    if (typeof renderMonthlyCategoryChart === 'function') {
+      renderMonthlyCategoryChart();
     }
 
     if (typeof renderMonthlyCategoryChart === 'function') {

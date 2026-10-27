@@ -615,9 +615,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Top title and core initialized text
+      // Top title
       expect(find.text('SingWallet'), findsOneWidget);
-      expect(find.text('SingWallet Core Initialized'), findsOneWidget);
 
       // Navigation bar labels
       expect(find.text('流水明细'), findsOneWidget);

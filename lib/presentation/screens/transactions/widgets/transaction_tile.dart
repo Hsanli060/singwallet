@@ -107,6 +107,8 @@ class TransactionTile extends ConsumerWidget {
 
     // Account / Payment Channel text
     final channelName = account?.name ?? getChannelDisplayName(transaction.paymentChannel);
+    final isAutoRecognized =
+        transaction.originDraftId != null || transaction.eventTimeSource == 'ocr_extracted';
 
     return Dismissible(
       key: Key('tx_tile_${transaction.id}'),
@@ -268,13 +270,39 @@ class TransactionTile extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              // Amount formatted with sign and color
-              Text(
-                amountText,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  color: amountColor,
-                  fontWeight: FontWeight.bold,
-                ),
+              // Right Column: Amount formatted with sign/color & Source Tag (自动识别 / 手动录入)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    amountText,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: amountColor,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: isAutoRecognized
+                          ? colorScheme.tertiaryContainer.withAlpha(120)
+                          : colorScheme.surfaceContainerHighest.withAlpha(120),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      isAutoRecognized ? '自动识别' : '手动录入',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: isAutoRecognized
+                            ? colorScheme.onTertiaryContainer
+                            : colorScheme.onSurfaceVariant,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

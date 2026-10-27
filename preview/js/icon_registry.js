@@ -198,7 +198,22 @@
     // 20. 扫除清理
     broom: `<svg class="w-4 h-4 inline-block align-text-bottom shrink-0" viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="17.5" y1="3.5" x2="11" y2="11.5" stroke="#c7d2fe" stroke-width="2"/><path d="M11 11.5l-3 4.5-4 2 2.5-4 3.5-3.5 1 1z" stroke="#fde68a" stroke-width="1.8" fill="#fde68a" fill-opacity="0.2"/><circle cx="19.5" cy="7.5" r="0.8" fill="#fde68a" stroke="#fde68a"/><line x1="5.5" y1="19.5" x2="7.5" y2="17.5" stroke="#c7d2fe"/></svg>`,
 
-    // 21. 庆祝 (别名 -> sparkles)
+    // 21. 数据安全与包名锁定 (蓝金盾牌锁)
+    shieldLock: `<svg class="w-4 h-4 inline-block align-text-bottom shrink-0" viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c4.5 0 8 1.8 8 6.5 0 5.5-4 10-8 12.5-4-2.5-8-7-8-12.5C4 4.8 7.5 3 12 3z" stroke="#c7d2fe"/><rect x="9.5" y="11" width="5" height="4" rx="1" stroke="#fde68a" stroke-width="1.6"/><path d="M10.5 11v-1.5a1.5 1.5 0 0 1 3 0V11" stroke="#fde68a" stroke-width="1.6"/></svg>`,
+
+    // 22. 签名与覆盖安装锁定 (蓝金包锁)
+    packageLock: `<svg class="w-4 h-4 inline-block align-text-bottom shrink-0" viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.4 7.55 4.24a1.8 1.8 0 0 0-1.8 0L2.5 6.1a1.8 1.8 0 0 0-.9 1.56v8.68c0 .64.34 1.24.9 1.56l3.25 1.86" stroke="#c7d2fe"/><path d="M21.5 10.5V7.66c0-.64-.34-1.24-.9-1.56L16.5 3.8a1.8 1.8 0 0 0-1.8 0L12 5.35" stroke="#c7d2fe"/><polyline points="2.7 6.3 12 11.5 21.3 6.3" stroke="#c7d2fe"/><line x1="12" y1="11.5" x2="12" y2="15" stroke="#c7d2fe"/><rect x="13.5" y="15" width="7" height="5.5" rx="1" stroke="#fde68a" stroke-width="1.6"/><path d="M15 15v-1.5a2 2 0 0 1 4 0V15" stroke="#fde68a" stroke-width="1.6"/></svg>`,
+
+    // 23. 全量数据导出备份 (文件向上箭头)
+    backupExport: `<svg class="w-4 h-4 inline-block align-text-bottom shrink-0" viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#c7d2fe"/><polyline points="14 2 14 8 20 8" stroke="#c7d2fe"/><line x1="12" y1="18" x2="12" y2="12" stroke="#fde68a" stroke-width="2"/><polyline points="9 15 12 12 15 15" stroke="#fde68a" stroke-width="2"/></svg>`,
+
+    // 24. 全量数据导入恢复 (文件向下箭头)
+    backupImport: `<svg class="w-4 h-4 inline-block align-text-bottom shrink-0" viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#c7d2fe"/><polyline points="14 2 14 8 20 8" stroke="#c7d2fe"/><line x1="12" y1="12" x2="12" y2="18" stroke="#fde68a" stroke-width="2"/><polyline points="9 15 12 18 15 15" stroke="#fde68a" stroke-width="2"/></svg>`,
+
+    // 25. OTA 升级下载 (极速下载云箭)
+    otaDownload: `<svg class="w-4 h-4 inline-block align-text-bottom shrink-0" viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#c7d2fe"/><polyline points="7 10 12 15 17 10" stroke="#fde68a" stroke-width="2"/><line x1="12" y1="15" x2="12" y2="3" stroke="#fde68a" stroke-width="2"/></svg>`,
+
+    // 26. 庆祝 (别名 -> sparkles)
     celebrate: null,
 
     // 22. 兜底分类
