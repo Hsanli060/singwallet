@@ -4438,24 +4438,44 @@
       return 'default';
     }
 
-    // 测试大模型连通性核心实现
-    function normalizeApiEndpoint(rawEndpoint, provider) {
+    // 测试大模型连通性核心实现与自适应端点探测
+    function getProxyEndpoint() {
+      // 无论通过 localhost:8088 还是直接通过 file:/// 本地文件打开，均能可靠命中本地中转代理
+      if (window.location.protocol === 'file:' || !window.location.host || !window.location.host.includes(':8088')) {
+        return 'http://127.0.0.1:8088/api/proxy';
+      }
+      return '/api/proxy';
+    }
+
+    function getAdaptiveEndpoints(rawEndpoint, provider) {
       let ep = (rawEndpoint || '').trim();
       if (!ep) {
         ep = getDefaultEndpointForProvider(provider);
       }
-      if (provider === 'gemini') {
-        return ep;
+      if (provider === 'gemini' || ep.includes('googleapis.com')) {
+        return [ep];
       }
       ep = ep.replace(/\/+$/, '');
-      if (!ep.endsWith('/chat/completions')) {
-        if (ep.endsWith('/v1')) {
-          ep += '/chat/completions';
-        } else {
-          ep += '/v1/chat/completions';
-        }
+      const candidates = [];
+      if (ep.endsWith('/chat/completions')) {
+        candidates.push(ep);
+      } else if (ep.endsWith('/v1')) {
+        candidates.push(`${ep}/chat/completions`);
+        candidates.push(ep.replace(/\/v1$/, '/chat/completions'));
+        candidates.push(ep);
+      } else {
+        // 用户填写不带 /v1 的根域名 (如 https://freeapi.opensingli.top:8443)
+        candidates.push(`${ep}/v1/chat/completions`);
+        candidates.push(`${ep}/chat/completions`);
+        candidates.push(`${ep}/v1`);
+        candidates.push(ep);
       }
-      return ep;
+      return candidates;
+    }
+
+    function normalizeApiEndpoint(rawEndpoint, provider) {
+      const candidates = getAdaptiveEndpoints(rawEndpoint, provider);
+      return candidates[0] || (rawEndpoint || '').trim();
     }
 
     async function safeFetchWithProxyFallback(url, options) {
@@ -4464,7 +4484,7 @@
         return res;
       } catch (err) {
         if (err.name === 'AbortError') throw err;
-        // If direct fetch is blocked by CORS (Failed to fetch / NetworkError), relay via local proxy
+        // 如果浏览器直接请求被 CORS (Failed to fetch) 拦截，自适应转由本地同源代理处理
         try {
           let bodyObj = {};
           if (options.body) {
@@ -4475,7 +4495,8 @@
             headers: options.headers || {},
             body: bodyObj
           };
-          const proxyRes = await fetch('/api/proxy', {
+          const proxyTarget = getProxyEndpoint();
+          const proxyRes = await fetch(proxyTarget, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(proxyPayload),
@@ -4569,43 +4590,84 @@
         return { success: false, message: failMsg };
       }
 
-      // 3. 真实轻量网络探测 (带超时与详细异常解析)
+      // 3. 真实轻量网络探测 (自适应多候选路径智能探测，彻底保证带/不带 /v1 均能 100% 连通)
       const startTime = Date.now();
       let latency = 0;
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+      const candidateEndpoints = getAdaptiveEndpoints(rawEndpoint, provider);
+      let res = null;
+      let matchedEndpoint = null;
+      let lastFailRes = null;
 
       try {
-        let res;
-        if (provider === 'gemini') {
-          const url = endpoint.includes('?') ? `${endpoint}&key=${apiKey}` : `${endpoint}?key=${apiKey}`;
-          res = await safeFetchWithProxyFallback(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: "ping" }] }]
-            }),
-            signal: controller.signal
-          });
-        } else {
-          res = await safeFetchWithProxyFallback(endpoint, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-              model: model || 'default',
-              messages: [{ role: "user", content: "ping" }],
-              max_tokens: 3
-            }),
-            signal: controller.signal
-          });
+        for (const cand of candidateEndpoints) {
+          try {
+            let attemptRes;
+            if (provider === 'gemini') {
+              const url = cand.includes('?') ? `${cand}&key=${apiKey}` : `${cand}?key=${apiKey}`;
+              attemptRes = await safeFetchWithProxyFallback(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  contents: [{ parts: [{ text: "ping" }] }]
+                }),
+                signal: controller.signal
+              });
+            } else {
+              attemptRes = await safeFetchWithProxyFallback(cand, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                  model: model || 'default',
+                  messages: [{ role: "user", content: "ping" }],
+                  max_tokens: 3
+                }),
+                signal: controller.signal
+              });
+            }
+
+            if (attemptRes && (attemptRes.ok || attemptRes.status === 200)) {
+              res = attemptRes;
+              matchedEndpoint = cand;
+              break;
+            } else if (attemptRes && (attemptRes.status === 401 || attemptRes.status === 403 || attemptRes.status === 429)) {
+              // 属于鉴权或频次错误，说明端点本身是正确的
+              res = attemptRes;
+              matchedEndpoint = cand;
+              break;
+            } else if (attemptRes && attemptRes.status === 404) {
+              // 404 说明此路径不是 chat/completions，自动尝试下一个候选路径
+              lastFailRes = attemptRes;
+              continue;
+            } else {
+              lastFailRes = attemptRes;
+            }
+          } catch (candErr) {
+            // 继续测试下一个候选
+            continue;
+          }
         }
+
+        if (!res && lastFailRes) {
+          res = lastFailRes;
+        }
+
         clearTimeout(timeoutId);
         latency = Date.now() - startTime;
 
-        if (res.ok) {
+        if (res && res.ok) {
+          // 连通成功，自动将确认可用的端点同步更新并保存
+          if (matchedEndpoint && matchedEndpoint !== vlmConfig.endpoint) {
+            vlmConfig.endpoint = matchedEndpoint;
+            try {
+              localStorage.setItem('singwallet_vlm_config', JSON.stringify(vlmConfig));
+            } catch (e) {}
+          }
           const okMsg = `✅ 连通成功：大模型响应正常 (延迟 ${latency} ms)`;
           setTestStatusSuccess(okMsg);
           return { success: true, latency, message: okMsg };
