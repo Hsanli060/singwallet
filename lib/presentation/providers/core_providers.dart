@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../core/native/native_bridge.g.dart';
 import '../../core/native/native_bridge_service.dart';
+import '../../core/services/capture_ingestion_coordinator.dart';
 import '../../data/database/app_database.dart';
 import '../../data/database/transaction_manager.dart';
 import '../../data/repositories/draft_repository.dart';
@@ -81,4 +82,16 @@ final nativeBridgeServiceProvider = Provider<NativeBridgeService>((ref) {
 final externalCapturesStreamProvider = StreamProvider<CaptureResult>((ref) {
   final bridge = ref.watch(nativeBridgeServiceProvider);
   return bridge.externalCaptures;
+});
+
+/// Coordinator ingesting incoming external screenshots (Back-Tap / Share Sheet) into OCR drafts.
+final captureIngestionCoordinatorProvider = Provider<CaptureIngestionCoordinator>((ref) {
+  final db = ref.watch(databaseProvider);
+  final bridge = ref.watch(nativeBridgeServiceProvider);
+  final pipeline = ref.watch(ocrPipelineProvider);
+  return CaptureIngestionCoordinator(
+    db: db,
+    bridge: bridge,
+    pipeline: pipeline,
+  );
 });

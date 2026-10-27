@@ -43,7 +43,20 @@
   let llmStartTime = 0;
   let llmExecutionStartTime = 0;
 
-  // 从本地缓存恢复历史配置
+  // 检测是否存在历史拼接污染特征（如重复 /v1/、completion/v1/、残缺后缀等）
+  function isPollutedEndpointUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    const u = url.trim();
+    if (!u) return false;
+    const v1Matches = u.match(/\/v1(?:beta\d*)?(?:\/|$)/gi);
+    if (v1Matches && v1Matches.length >= 2) return true;
+    if (/completions?\/v\d+/i.test(u) || /messages?\/v\d+/i.test(u) || /responses?\/v\d+/i.test(u) || /:generateContent\/v\d+/i.test(u)) return true;
+    if (/(?:\/chat\/completions?){2,}/i.test(u) || /(?:\/messages?){2,}/i.test(u) || /(?:\/responses?){2,}/i.test(u) || /(?::generateContent){2,}/i.test(u)) return true;
+    if (/\/chat\/completion$/i.test(u)) return true;
+    return false;
+  }
+
+  // 从本地缓存恢复历史配置（含启动时一次性自愈历史污染 Base URL 缓存）
   try {
     const savedEngine = localStorage.getItem('singwallet_ocr_engine');
     if (savedEngine === 'llm' || savedEngine === 'local') {
@@ -53,6 +66,7 @@
     const savedConfig = localStorage.getItem('singwallet_vlm_config');
     if (savedConfig) {
       const parsed = JSON.parse(savedConfig);
+      let needHealPersist = false;
       // 协议兼容映射
       if (parsed.provider === 'custom' || parsed.provider === 'qwen' || parsed.provider === 'openai') {
         parsed.provider = 'openai_chat';
@@ -67,11 +81,19 @@
       if (parsed.endpoint === 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions' ||
           parsed.endpoint === 'http://localhost:8000/v1/chat/completions') {
         parsed.endpoint = '';
+      } else if (parsed.endpoint && isPollutedEndpointUrl(parsed.endpoint)) {
+        parsed.endpoint = getBaseOriginPath(parsed.endpoint);
+        needHealPersist = true;
       }
       if (parsed.model === 'qwen-vl-plus' || parsed.model === 'default' || parsed.model === 'ling-3.0-flash-vl') {
         parsed.model = '';
       }
       vlmConfig = { ...vlmConfig, ...parsed };
+      if (needHealPersist) {
+        try {
+          localStorage.setItem('singwallet_vlm_config', JSON.stringify(vlmConfig));
+        } catch (_) {}
+      }
     }
   } catch (e) {
     console.warn('localStorage init warning in ocr_vlm_engine:', e);
@@ -426,14 +448,6 @@
     }
     vlmConfig.provider = provider;
 
-    const endpointIn = document.getElementById('vlm-endpoint');
-    const modelIn = document.getElementById('vlm-model');
-    if (endpointIn && endpointIn.value.trim()) {
-      const updatedUrl = applyProtocolSuffixToUrl(endpointIn.value, provider, modelIn?.value);
-      endpointIn.value = updatedUrl;
-      vlmConfig.endpoint = updatedUrl;
-    }
-
     try {
       localStorage.setItem('singwallet_vlm_config', JSON.stringify(vlmConfig));
     } catch (e) {}
@@ -467,20 +481,14 @@
     }
   }
 
-  function saveLlmConfigFromInputs(showToastNotice = false) {
+  function saveLlmConfigFromInputs(showToastNotice = false, syncBackToInput = false) {
     const provider = document.getElementById('vlm-provider-select')?.value || vlmConfig.provider || 'openai_chat';
     const apiKey = (document.getElementById('vlm-api-key')?.value || '').trim();
     const endpointIn = document.getElementById('vlm-endpoint');
     const rawEndpoint = (endpointIn?.value || '').trim();
     const model = (document.getElementById('vlm-model')?.value || '').trim();
 
-    let endpoint = rawEndpoint;
-    if (rawEndpoint) {
-      endpoint = applyProtocolSuffixToUrl(rawEndpoint, provider, model);
-      if (endpointIn && endpointIn.value !== endpoint) {
-        endpointIn.value = endpoint;
-      }
-    }
+    const endpoint = rawEndpoint;
 
     vlmConfig = { provider, apiKey, endpoint, model };
     window.vlmConfig = vlmConfig;
@@ -524,28 +532,67 @@
   }
 
   function getBaseOriginPath(rawUrl) {
-    let u = (rawUrl || '').trim().replace(/\/+$/, '');
+    if (!rawUrl || typeof rawUrl !== 'string') return '';
+    let u = rawUrl.trim();
     if (!u) return '';
-    const qIdx = u.indexOf('?');
-    if (qIdx !== -1) u = u.substring(0, qIdx).replace(/\/+$/, '');
 
-    u = u.replace(/\/v1beta\/models\/[^/]+:generateContent$/i, '');
-    u = u.replace(/\/v1\/models\/[^/]+:generateContent$/i, '');
-    u = u.replace(/\/models\/[^/]+:generateContent$/i, '');
-    u = u.replace(/:generateContent$/i, '');
-    u = u.replace(/\/v1\/chat\/completions$/i, '');
-    u = u.replace(/\/chat\/completions$/i, '');
-    u = u.replace(/\/v1\/messages$/i, '');
-    u = u.replace(/\/messages$/i, '');
-    u = u.replace(/\/v1\/responses$/i, '');
-    u = u.replace(/\/responses$/i, '');
-    u = u.replace(/\/v1beta$/i, '');
-    u = u.replace(/\/v1$/i, '');
+    const hashIdx = u.indexOf('#');
+    if (hashIdx !== -1) u = u.substring(0, hashIdx).trim();
+    const qIdx = u.indexOf('?');
+    if (qIdx !== -1) u = u.substring(0, qIdx).trim();
+    u = u.replace(/\/+$/, '');
+
+    // 若不含 http:// 或 https://（且不是 mock- 或 test- 测试地址）
+    if (!/^https?:\/\//i.test(u) && !u.startsWith('mock-') && !u.startsWith('test-')) {
+      if (/^(?:localhost|127\.0\.0\.1|192\.168\.|10\.|172\.(?:1[6-9]|2\d|3[01])\.)/i.test(u)) {
+        u = 'http://' + u;
+      } else {
+        u = 'https://' + u;
+      }
+    }
+
+    const suffixPatterns = [
+      /\/v\d+(?:beta\d*)?\/chat(?:\/.*)?$/i,
+      /\/chat\/completions?(?:\/.*)?$/i,
+      /\/v\d+(?:beta\d*)?\/messages?(?:\/.*)?$/i,
+      /\/messages?(?:\/.*)?$/i,
+      /\/v\d+(?:beta\d*)?\/responses?(?:\/.*)?$/i,
+      /\/responses?(?:\/.*)?$/i,
+      /\/v\d+(?:beta\d*)?\/models(?:\/.*)?$/i,
+      /\/models\/[^/]+:generateContent(?:\/.*)?$/i,
+      /:generateContent(?:\/.*)?$/i,
+      /\/v1beta\d*(?:\/)?$/i,
+      /\/v1(?:\/)?$/i
+    ];
+
+    let changed = false;
+    do {
+      changed = false;
+      u = u.replace(/\/+$/, '');
+      for (const pattern of suffixPatterns) {
+        if (pattern.test(u)) {
+          u = u.replace(pattern, '').replace(/\/+$/, '');
+          changed = true;
+          break;
+        }
+      }
+    } while (changed);
+
     return u.replace(/\/+$/, '');
   }
 
   function applyProtocolSuffixToUrl(rawUrl, protocol, model) {
-    const base = getBaseOriginPath(rawUrl);
+    return normalizeApiEndpoint(rawUrl, protocol, model);
+  }
+
+  function normalizeApiEndpoint(rawEndpoint, protocol, model) {
+    if (!rawEndpoint || typeof rawEndpoint !== 'string') return '';
+    let extractedModel = (model || '').trim();
+    if (!extractedModel) {
+      const mMatch = rawEndpoint.match(/\/models\/([^/:]+):generateContent/i);
+      if (mMatch) extractedModel = mMatch[1];
+    }
+    const base = getBaseOriginPath(rawEndpoint);
     if (!base) return '';
 
     let proto = (protocol || 'openai_chat').toLowerCase();
@@ -564,14 +611,10 @@
       return `${base}/v1/responses`;
     }
     if (proto === 'gemini_native') {
-      const m = (model || '').trim() || 'gemini-1.5-flash';
+      const m = extractedModel || 'gemini-1.5-flash';
       return `${base}/v1beta/models/${m}:generateContent`;
     }
     return `${base}/v1/chat/completions`;
-  }
-
-  function normalizeApiEndpoint(rawEndpoint, protocol, model) {
-    return applyProtocolSuffixToUrl(rawEndpoint, protocol, model);
   }
 
   /**
@@ -650,18 +693,8 @@
       return { success: false, message: failMsg };
     }
 
-    // 格式化 URL 并同步在输入框显示
-    const formattedUrl = applyProtocolSuffixToUrl(rawEndpoint, provider, model);
-    if (inputEndpoint && inputEndpoint.value !== formattedUrl) {
-      inputEndpoint.value = formattedUrl;
-    }
-    rawEndpoint = formattedUrl;
-    vlmConfig.endpoint = formattedUrl;
-    try {
-      localStorage.setItem('singwallet_vlm_config', JSON.stringify(vlmConfig));
-    } catch (_) {}
-
-    const endpoint = formattedUrl;
+    // 纯后台计算探测请求地址，绝对不修改输入框和 vlmConfig.endpoint
+    const endpoint = normalizeApiEndpoint(rawEndpoint, provider, model);
 
     if (spinner) spinner.classList.remove('hidden');
     if (btnText) btnText.innerText = "测试中...";

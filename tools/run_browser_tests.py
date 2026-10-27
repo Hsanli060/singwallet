@@ -651,7 +651,8 @@ function runAllTestsSuite() {
     document.getElementById('vlm-api-key').value = 'sk-vlm-test-key-2026';
     provSelect.value = 'openai_chat';
     onVlmProviderChange('openai_chat');
-    assert(document.getElementById('vlm-endpoint').value === 'https://my-custom-vlm.internal/v1/chat/completions', "切换服务商自动同步更新协议后缀到输入框");
+    assert(document.getElementById('vlm-endpoint').value === 'https://my-custom-vlm.internal', "切换服务商保持用户填写的 Base URL 绝不被自动改写");
+    assert(normalizeApiEndpoint(document.getElementById('vlm-endpoint').value, 'openai_chat', 'my-custom-model') === 'https://my-custom-vlm.internal/v1/chat/completions', "后台计算正确的 OpenAI Chat 请求地址");
     assert(document.getElementById('vlm-model').value === 'my-custom-model', "切换服务商绝不覆盖用户自定义 model");
     saveLlmConfig();
     assert(llmModal.classList.contains('hidden'), "llm-config-modal closed after save");
@@ -731,7 +732,8 @@ function runAllTestsSuite() {
     // Test protocol change updates suffix on input
     onVlmProviderChange('gemini_native');
     assert(vlmConfig.provider === 'gemini_native', "vlmConfig.provider switched to gemini_native");
-    assert(document.getElementById('vlm-endpoint').value === 'https://my-custom-vlm.internal/v1beta/models/my-custom-model:generateContent', "Gemini provider change updates endpoint suffix in input");
+    assert(document.getElementById('vlm-endpoint').value === 'https://my-custom-vlm.internal', "Gemini provider change keeps user endpoint in input");
+    assert(normalizeApiEndpoint(document.getElementById('vlm-endpoint').value, 'gemini_native', 'my-custom-model') === 'https://my-custom-vlm.internal/v1beta/models/my-custom-model:generateContent', "Gemini provider calculates correct background endpoint");
     assert(document.getElementById('vlm-model').value === 'my-custom-model', "Gemini provider change preserves user model");
 
     // Test form reset idempotency on openManualAddModal and saveManualTransaction
@@ -967,28 +969,32 @@ function runAllTestsSuite() {
     vlmEndpointEl.value = 'http://192.168.1.100:11434';
     vlmModelEl.value = 'llava:latest';
 
-    // 4 种协议切换测试 (同步更新对应协议后缀到输入框，用户填啥就是啥)
+    // 4 种协议切换测试 (切换协议输入框值绝对保持不变，纯后台在请求时拼接)
     selectCustomDropdownOption('vlm-provider-select', 'anthropic_messages');
     assert(vlmProviderEl.value === 'anthropic_messages', "Group 28: 自定义下拉切换为 anthropic_messages");
     assert(vlmLabel.innerText.includes('Anthropic Messages'), "Group 28: 自定义下拉标签更新为 Anthropic Messages: " + vlmLabel.innerText);
-    assert(vlmEndpointEl.value === 'http://192.168.1.100:11434/v1/messages', "Group 28: 切换协议自动更新为 Anthropic 后缀 /v1/messages");
+    assert(vlmEndpointEl.value === 'http://192.168.1.100:11434', "Group 28: 切换协议输入框保持用户原始填写的地址不变");
+    assert(normalizeApiEndpoint(vlmEndpointEl.value, vlmProviderEl.value, vlmModelEl.value) === 'http://192.168.1.100:11434/v1/messages', "Group 28: 后台计算正确的 Anthropic 后缀 /v1/messages");
     assert(vlmModelEl.value === 'llava:latest', "Group 28: 切换协议保持用户已填写的 model");
 
     selectCustomDropdownOption('vlm-provider-select', 'openai_responses');
     assert(vlmProviderEl.value === 'openai_responses', "Group 28: 自定义下拉切换为 openai_responses");
     assert(vlmLabel.innerText.includes('OpenAI Responses'), "Group 28: 自定义下拉标签更新为 OpenAI Responses: " + vlmLabel.innerText);
-    assert(vlmEndpointEl.value === 'http://192.168.1.100:11434/v1/responses', "Group 28: 切换协议自动更新为 Responses 后缀 /v1/responses");
+    assert(vlmEndpointEl.value === 'http://192.168.1.100:11434', "Group 28: 切换协议输入框保持用户原始填写的地址不变");
+    assert(normalizeApiEndpoint(vlmEndpointEl.value, vlmProviderEl.value, vlmModelEl.value) === 'http://192.168.1.100:11434/v1/responses', "Group 28: 后台计算正确的 Responses 后缀 /v1/responses");
     assert(vlmModelEl.value === 'llava:latest', "Group 28: 再次切换协议 model 保持不变");
 
     selectCustomDropdownOption('vlm-provider-select', 'gemini_native');
     assert(vlmProviderEl.value === 'gemini_native', "Group 28: 自定义下拉切换为 gemini_native");
     assert(vlmLabel.innerText.includes('Gemini Native'), "Group 28: 自定义下拉标签更新为 Gemini Native: " + vlmLabel.innerText);
-    assert(vlmEndpointEl.value === 'http://192.168.1.100:11434/v1beta/models/llava:latest:generateContent', "Group 28: 切换协议自动更新为 Gemini Native 后缀");
+    assert(vlmEndpointEl.value === 'http://192.168.1.100:11434', "Group 28: 切换协议输入框保持用户原始填写的地址不变");
+    assert(normalizeApiEndpoint(vlmEndpointEl.value, vlmProviderEl.value, vlmModelEl.value) === 'http://192.168.1.100:11434/v1beta/models/llava:latest:generateContent', "Group 28: 后台计算正确的 Gemini Native 后缀");
 
     selectCustomDropdownOption('vlm-provider-select', 'openai_chat');
     assert(vlmProviderEl.value === 'openai_chat', "Group 28: 自定义下拉切换为 openai_chat");
     assert(vlmLabel.innerText.includes('OpenAI Chat'), "Group 28: 自定义下拉标签更新为 OpenAI Chat: " + vlmLabel.innerText);
-    assert(vlmEndpointEl.value === 'http://192.168.1.100:11434/v1/chat/completions', "Group 28: 切换协议自动更新为 OpenAI Chat 后缀 /v1/chat/completions");
+    assert(vlmEndpointEl.value === 'http://192.168.1.100:11434', "Group 28: 切换协议输入框保持用户原始填写的地址不变");
+    assert(normalizeApiEndpoint(vlmEndpointEl.value, vlmProviderEl.value, vlmModelEl.value) === 'http://192.168.1.100:11434/v1/chat/completions', "Group 28: 后台计算正确的 OpenAI Chat 后缀 /v1/chat/completions");
 
     // 4.1 验证 4 大协议 URL 拼接与补全逻辑 (normalizeApiEndpoint)
     // 1) OpenAI Chat Completions: /v1/chat/completions
@@ -1231,13 +1237,30 @@ function runAllTestsSuite() {
     const filterCatsEl = document.getElementById('filter-modal-cats');
     assert(filterCatsEl.innerText.includes('潮玩手办'), "Group 30: filter-modal-cats displays 潮玩手办");
 
-    // 3. 删除分类
-    removeCustomCategory('潮玩手办');
-    assert(!DomainRegistry.getParentCategories().includes('潮玩手办'), "Group 30: DomainRegistry removed 潮玩手办");
-    assert(!customList.innerText.includes('潮玩手办'), "Group 30: custom-categories-list removed 潮玩手办");
-    assert(!menuDraftCat.innerText.includes('潮玩手办'), "Group 30: menu-select-draft-category removed 潮玩手办");
+    // 3. 编辑分类弹窗与领域重命名测试
+    openEditCategoryModal('潮玩手办');
+    const catEditModal = document.getElementById('category-edit-modal');
+    assert(catEditModal !== null && !catEditModal.classList.contains('hidden'), "Group 30: category-edit-modal 正常弹出");
+    const catEditInput = document.getElementById('edit-category-input');
+    assert(catEditInput !== null && catEditInput.value === '潮玩手办', "Group 30: edit-category-input 回显正确名称");
+    catEditInput.value = '潮玩模玩';
+    saveEditedCategory();
+    assert(catEditModal.classList.contains('hidden'), "Group 30: 保存后 category-edit-modal 自动关闭");
+    assert(DomainRegistry.getParentCategories().includes('潮玩模玩'), "Group 30: DomainRegistry 已更新为 潮玩模玩");
+    assert(!DomainRegistry.getParentCategories().includes('潮玩手办'), "Group 30: DomainRegistry 潮玩手办 已替换");
+    assert(customList.innerText.includes('潮玩模玩'), "Group 30: custom-categories-list 渲染 潮玩模玩");
 
-    // 4. 恢复默认分类
+    // 4. 删除确认弹窗与删除分类测试
+    openCategoryDeleteConfirmModal('潮玩模玩');
+    const catDelModal = document.getElementById('category-delete-confirm-modal');
+    assert(catDelModal !== null && !catDelModal.classList.contains('hidden'), "Group 30: category-delete-confirm-modal 正常弹出");
+    confirmCategoryDelete();
+    assert(catDelModal.classList.contains('hidden'), "Group 30: 确认删除后 category-delete-confirm-modal 自动关闭");
+    assert(!DomainRegistry.getParentCategories().includes('潮玩模玩'), "Group 30: DomainRegistry removed 潮玩模玩");
+    assert(!customList.innerText.includes('潮玩模玩'), "Group 30: custom-categories-list removed 潮玩模玩");
+    assert(!menuDraftCat.innerText.includes('潮玩模玩'), "Group 30: menu-select-draft-category removed 潮玩模玩");
+
+    // 5. 恢复默认分类
     resetCategoriesToDefault();
     assert(DomainRegistry.getParentCategories().length === 8, "Group 30: resetCategoriesToDefault restores 8 standard categories");
 
@@ -1984,7 +2007,7 @@ function runAllTestsSuite() {
     // ========================================================
     console.log("=== Group 39: Shortcut Capture, Draft Dropdown Ordering & Plump Controls ===");
 
-    // 1. 验证快捷指令无感抓屏模块卡片 (#shortcut-capture-card)
+    // 1. 验证快捷指令无感抓屏模块卡片 (#shortcut-capture-card) 与背部轻敲指引
     const scCard = document.getElementById('shortcut-capture-card');
     assert(scCard !== null, "Group 39: #shortcut-capture-card exists in rules view");
     const scUrl = document.getElementById('shortcut-api-url');
@@ -1994,6 +2017,35 @@ function runAllTestsSuite() {
     assert(typeof window.triggerDelayedPhoneCapture === 'function', "Group 39: window.triggerDelayedPhoneCapture function is defined");
     assert(typeof window.copyShortcutApiUrl === 'function', "Group 39: window.copyShortcutApiUrl function is defined");
     assert(typeof window.startShortcutPolling === 'function', "Group 39: window.startShortcutPolling function is defined");
+
+    // 1.1 背部轻敲记账弹窗指引与监听开关
+    const btGuideBtn = document.getElementById('btn-open-backtap-guide');
+    assert(btGuideBtn !== null, "Group 39: #btn-open-backtap-guide 存在");
+    const btGuideModal = document.getElementById('backtap-guide-modal');
+    assert(btGuideModal !== null, "Group 39: #backtap-guide-modal 存在");
+    openBackTapGuideModal();
+    assert(!btGuideModal.classList.contains('hidden'), "Group 39: openBackTapGuideModal 正常弹出指引");
+    closeBackTapGuideModal();
+    assert(btGuideModal.classList.contains('hidden'), "Group 39: closeBackTapGuideModal 正常关闭指引");
+
+    const btToggle = document.getElementById('backtap-watch-toggle');
+    assert(btToggle !== null, "Group 39: #backtap-watch-toggle 存在");
+    const btStatusLabel = document.getElementById('backtap-status-label');
+    assert(btStatusLabel !== null, "Group 39: #backtap-status-label 存在");
+    toggleBackTapWatcher(false);
+    assert(btStatusLabel.innerText.includes('监听已暂停'), "Group 39: toggleBackTapWatcher(false) 状态更新为 监听已暂停");
+    toggleBackTapWatcher(true);
+    assert(btStatusLabel.innerText.includes('截屏监听中'), "Group 39: toggleBackTapWatcher(true) 状态恢复为 截屏监听中");
+
+    // 1.2 底部导航栏标准高度与快记一手高宽比
+    const btmBar = document.getElementById('bottom-nav-bar');
+    assert(btmBar !== null && btmBar.className.includes('h-[52px]'), "Group 39: #bottom-nav-bar 为 52px 黄金高度比例");
+    const navTxBtn = document.getElementById('nav-btn-transactions');
+    assert(navTxBtn !== null && navTxBtn.className.includes('justify-center') && navTxBtn.className.includes('gap-0.5'), "Group 39: 导航栏项使用 justify-center gap-0.5 紧贴底部");
+    const qrBar = document.getElementById('tx-quick-record-bar');
+    assert(qrBar !== null && qrBar.className.includes('bottom-[60px]'), "Group 39: #tx-quick-record-bar 设为 bottom-[60px]");
+    const qrBtn = qrBar.querySelector('button');
+    assert(qrBtn !== null && qrBtn.className.includes('max-w-[240px]') && qrBtn.className.includes('h-[41px]') && qrBtn.className.includes('rounded-[14px]'), "Group 39: 快记按钮尺寸为 max-w-[240px] h-[41px] rounded-[14px]");
 
     // 2. 验证草稿箱分类下拉框置于支付网格之前，防止底部导航栏遮挡
     const draftCatWrap = document.getElementById('dropdown-wrap-select-draft-category');

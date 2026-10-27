@@ -1,6 +1,10 @@
 // lib/presentation/navigation/app_scaffold.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/native/native_bridge.g.dart';
+import '../../core/services/capture_ingestion_coordinator.dart';
+import '../providers/core_providers.dart';
 import '../providers/draft_providers.dart';
 import '../screens/drafts/drafts_queue_screen.dart';
 import '../screens/rules_accounts/rules_accounts_screen.dart';
@@ -29,11 +33,64 @@ class AppScaffold extends ConsumerStatefulWidget {
 
 class _AppScaffoldState extends ConsumerState<AppScaffold> {
   late int _currentIndex;
+  StreamSubscription<CaptureResult>? _externalCaptureSub;
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initExternalCaptureListener();
+    });
+  }
+
+  Future<void> _initExternalCaptureListener() async {
+    if (!mounted) return;
+    CaptureIngestionCoordinator coordinator;
+    try {
+      coordinator = ref.read(captureIngestionCoordinatorProvider);
+    } catch (_) {
+      // Database provider not overridden in bare widget smoke test; safely skip.
+      return;
+    }
+
+    final bridge = ref.read(nativeBridgeServiceProvider);
+    _externalCaptureSub?.cancel();
+    _externalCaptureSub = bridge.externalCaptures.listen((capture) async {
+      final draft = await coordinator.ingestCapture(capture);
+      if (draft != null && mounted) {
+        await ref.read(draftsQueueProvider.notifier).refresh();
+        if (!mounted) return;
+        final messenger = ScaffoldMessenger.maybeOf(context);
+        messenger
+          ?..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: const Text('已自动捕获并识别新账单截图'),
+              behavior: SnackBarBehavior.floating,
+              action: SnackBarAction(
+                label: '查看草稿箱',
+                onPressed: () {
+                  if (mounted) {
+                    _onDestinationSelected(1);
+                  }
+                },
+              ),
+            ),
+          );
+      }
+    });
+
+    final synced = await coordinator.syncPendingExternalCaptures();
+    if (synced.isNotEmpty && mounted) {
+      await ref.read(draftsQueueProvider.notifier).refresh();
+    }
+  }
+
+  @override
+  void dispose() {
+    _externalCaptureSub?.cancel();
+    super.dispose();
   }
 
   void _onDestinationSelected(int index) {

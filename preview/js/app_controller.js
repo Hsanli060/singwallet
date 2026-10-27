@@ -91,10 +91,10 @@
     const btnDr = document.getElementById('nav-btn-drafts');
     const btnRu = document.getElementById('nav-btn-rules');
 
-    const navInactiveClass = "flex flex-col items-center justify-end h-full pb-0.5 text-slate-400 hover:text-white tap-highlight";
-    const navInactiveClassRel = "relative flex flex-col items-center justify-end h-full pb-0.5 text-slate-400 hover:text-white tap-highlight";
-    const navActiveClass = "flex flex-col items-center justify-end h-full pb-0.5 text-indigo-400 font-semibold tap-highlight";
-    const navActiveClassRel = "relative flex flex-col items-center justify-end h-full pb-0.5 text-indigo-400 font-semibold tap-highlight";
+    const navInactiveClass = "flex flex-col items-center justify-center gap-0.5 h-full text-slate-400 hover:text-white tap-highlight";
+    const navInactiveClassRel = "relative flex flex-col items-center justify-center gap-0.5 h-full text-slate-400 hover:text-white tap-highlight";
+    const navActiveClass = "flex flex-col items-center justify-center gap-0.5 h-full text-indigo-400 font-semibold tap-highlight";
+    const navActiveClassRel = "relative flex flex-col items-center justify-center gap-0.5 h-full text-indigo-400 font-semibold tap-highlight";
 
     if (btnTx) btnTx.className = navInactiveClass;
     if (btnDr) btnDr.className = navInactiveClassRel;
@@ -2749,15 +2749,21 @@
       listEl.className = "grid grid-cols-2 gap-2 py-1";
       listEl.innerHTML = categories.map(cat => {
         const icon = getAppCatIcon(cat);
+        const safeCat = String(cat).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         return `
-          <div class="group flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-slate-900/75 hover:bg-slate-900 border border-slate-700/60 hover:border-slate-600 transition-all min-h-[36px]">
-            <div class="flex items-center space-x-2 min-w-0">
-              <span class="w-6 h-6 rounded-lg bg-slate-800/90 border border-slate-700/50 inline-flex items-center justify-center p-1 shrink-0 aspect-square" data-cat-icon="${cat}">${icon}</span>
-              <span class="text-xs font-medium text-slate-200 truncate">${cat}</span>
+          <div class="group flex items-center justify-between px-2 py-1.5 rounded-xl bg-slate-900/75 hover:bg-slate-900 border border-slate-700/60 hover:border-slate-600 transition-all min-h-[36px]">
+            <div onclick="openEditCategoryModal('${safeCat}', event)" class="flex items-center space-x-1.5 min-w-0 flex-1 cursor-pointer tap-highlight mr-1" title="点击编辑分类">
+              <span class="w-5 h-5 rounded-md bg-slate-800/90 border border-slate-700/50 inline-flex items-center justify-center p-0.5 shrink-0 aspect-square" data-cat-icon="${cat}">${icon}</span>
+              <span class="text-[11.5px] font-medium text-slate-200 truncate leading-tight">${cat}</span>
             </div>
-            <button type="button" onclick="removeCustomCategory('${cat}')" class="w-5 h-5 rounded-lg inline-flex items-center justify-center text-slate-500 hover:text-rose-400 hover:bg-rose-500/15 transition-all shrink-0 tap-highlight aspect-square" title="删除分类">
-              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
+            <div class="flex items-center space-x-0.5 shrink-0">
+              <button type="button" onclick="openEditCategoryModal('${safeCat}', event)" class="cat-item-action-btn text-slate-400 hover:text-indigo-300 hover:bg-indigo-500/15 tap-highlight" title="编辑分类">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+              </button>
+              <button type="button" onclick="openCategoryDeleteConfirmModal('${safeCat}', event)" class="cat-item-action-btn text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 tap-highlight" title="删除分类">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
           </div>
         `;
       }).join('');
@@ -2838,6 +2844,9 @@
     }
   }
 
+  let editingCategoryOldName = '';
+  let pendingDeleteCategoryName = '';
+
   function addCustomCategory() {
     const input = document.getElementById('custom-category-input');
     if (!input) return;
@@ -2859,9 +2868,232 @@
     if (success) {
       input.value = '';
       syncAllCategoryUIs();
+      if (typeof updateDynamicCategoryChips === 'function') updateDynamicCategoryChips();
+      if (typeof updateBackupStatsLabel === 'function') updateBackupStatsLabel();
       showToast(`已成功添加新分类：${name}`);
     } else {
       showToast('添加分类失败');
+    }
+  }
+
+  function openEditCategoryModal(catName, event) {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    if (!catName) return;
+    editingCategoryOldName = String(catName);
+    const modal = document.getElementById('category-edit-modal');
+    const input = document.getElementById('edit-category-input');
+    if (input) {
+      input.value = editingCategoryOldName;
+    }
+    if (modal) {
+      modal.classList.remove('hidden');
+    }
+    setTimeout(() => {
+      if (input) {
+        input.focus();
+        if (typeof input.select === 'function') input.select();
+      }
+    }, 30);
+  }
+
+  function closeEditCategoryModal() {
+    const modal = document.getElementById('category-edit-modal');
+    if (modal) modal.classList.add('hidden');
+    editingCategoryOldName = '';
+  }
+
+  function saveEditedCategory() {
+    const input = document.getElementById('edit-category-input');
+    if (!editingCategoryOldName) {
+      closeEditCategoryModal();
+      return false;
+    }
+    const oldName = editingCategoryOldName;
+    const newName = input ? input.value.trim() : '';
+    if (!newName) {
+      showToast('请输入有效的分类名称');
+      return false;
+    }
+    if (newName === oldName) {
+      closeEditCategoryModal();
+      return true;
+    }
+    const currentCats = (window.DomainRegistry && typeof window.DomainRegistry.getParentCategories === 'function')
+      ? window.DomainRegistry.getParentCategories()
+      : (window.CORE_PARENT_CATEGORIES || []);
+    if (currentCats.includes(newName)) {
+      showToast(`分类「${newName}」已存在`);
+      return false;
+    }
+
+    const ok = (window.DomainRegistry && typeof window.DomainRegistry.renameCategory === 'function')
+      ? window.DomainRegistry.renameCategory(oldName, newName)
+      : false;
+    if (!ok) {
+      showToast('修改分类名称失败');
+      return false;
+    }
+
+    // 1. 同步 allMonthlyData 中的历史流水分类字段
+    if (typeof allMonthlyData !== 'undefined' && allMonthlyData) {
+      Object.values(allMonthlyData).forEach(monthObj => {
+        if (monthObj && Array.isArray(monthObj.txs)) {
+          monthObj.txs.forEach(tx => {
+            if (!tx) return;
+            if (tx.cat === oldName) tx.cat = newName;
+            if (tx.category === oldName) tx.category = newName;
+            if (tx.catName === oldName) tx.catName = newName;
+            if (tx.parentCat === oldName) tx.parentCat = newName;
+          });
+        }
+      });
+    }
+
+    // 2. 同步当前 DOM 中所有 .tx-item 账单行的分类属性、胶囊文字、图标与详情点击参数
+    document.querySelectorAll('.tx-item').forEach(el => {
+      const dCat = el.getAttribute('data-cat');
+      const dParent = el.getAttribute('data-parent');
+      const dCategory = el.getAttribute('data-category');
+      if (dCat === oldName || dParent === oldName || dCategory === oldName) {
+        const nextCat = dCat === oldName ? newName : dCat;
+        const nextParent = dParent === oldName ? newName : dParent;
+        if (dCat === oldName) el.setAttribute('data-cat', newName);
+        if (dParent === oldName) el.setAttribute('data-parent', newName);
+        if (dCategory === oldName) el.setAttribute('data-category', newName);
+
+        const badgeSpan = el.querySelector('span[class*="bg-indigo-500/15"]');
+        if (badgeSpan && badgeSpan.innerText.trim() === oldName) {
+          badgeSpan.innerText = newName;
+        }
+
+        el.querySelectorAll('[data-cat-icon]').forEach(ic => {
+          if (ic.getAttribute('data-cat-icon') === oldName) {
+            ic.setAttribute('data-cat-icon', newName);
+            ic.innerHTML = getAppCatIcon(newName);
+          }
+        });
+
+        const onclickAttr = el.getAttribute('onclick');
+        if (onclickAttr && onclickAttr.includes(oldName)) {
+          el.setAttribute('onclick', onclickAttr.split(oldName).join(newName));
+        } else if (typeof el.onclick === 'function' && !onclickAttr) {
+          const merText = el.querySelector('.font-semibold.text-sm')?.innerText?.trim() || '日常消费';
+          const amtVal = parseFloat(el.getAttribute('data-amount') || '0') || 0;
+          const accText = el.getAttribute('data-account') || el.getAttribute('data-channel') || '钱包';
+          const dateText = el.getAttribute('data-date') || '';
+          const timeText = el.querySelector('.font-mono.text-\\[11px\\]')?.innerText?.trim() || '';
+          const ordText = el.getAttribute('data-order') || '';
+          el.onclick = () => viewTransactionDetail(merText, amtVal.toFixed(2), `${nextParent || newName}（${nextCat || newName}）`, accText, `${dateText} ${timeText}`.trim(), ordText);
+        }
+      }
+    });
+
+    // 3. 同步待确认草稿队列与当前选中草稿分类表单
+    if (typeof draftQueue !== 'undefined' && Array.isArray(draftQueue)) {
+      draftQueue.forEach(d => {
+        if (!d) return;
+        if (d.category === oldName) d.category = newName;
+        if (d.categoryName === oldName) d.categoryName = newName;
+        if (d.category === newName || d.categoryName === newName) {
+          d.categoryIcon = getAppCatIcon(newName);
+        }
+      });
+      if (typeof saveStoredDrafts === 'function') {
+        saveStoredDrafts();
+      }
+    }
+
+    if (typeof currentDraftCategory !== 'undefined' && currentDraftCategory && currentDraftCategory.name === oldName) {
+      currentDraftCategory.name = newName;
+      currentDraftCategory.icon = getAppCatIcon(newName);
+      currentDraftCategory.tag = newName.slice(0, 2);
+    }
+
+    const selectDraftInput = document.getElementById('select-draft-category');
+    if (selectDraftInput && selectDraftInput.value === oldName) {
+      selectDraftInput.value = newName;
+      const lblDraft = document.getElementById('label-select-draft-category');
+      if (lblDraft) lblDraft.innerText = newName;
+      const sugName = document.getElementById('suggested-name');
+      if (sugName) sugName.innerText = `推荐分类：${newName}`;
+      const sugIcon = document.getElementById('suggested-icon');
+      if (sugIcon) {
+        sugIcon.setAttribute('data-cat-icon', newName);
+        sugIcon.innerHTML = getAppCatIcon(newName);
+      }
+    }
+
+    const manualCatInput = document.getElementById('manual-category');
+    if (manualCatInput && manualCatInput.value === oldName) {
+      manualCatInput.value = newName;
+      const lblManual = document.getElementById('label-manual-category');
+      if (lblManual) lblManual.innerText = newName;
+    }
+
+    // 4. 同步筛选状态与胶囊
+    if (typeof currentFilterKey !== 'undefined' && currentFilterKey === oldName) {
+      currentFilterKey = newName;
+    }
+    if (typeof selectedFilterCats !== 'undefined' && selectedFilterCats && selectedFilterCats.has(oldName)) {
+      selectedFilterCats.delete(oldName);
+      selectedFilterCats.add(newName);
+    }
+
+    // 5. 持久化流水并刷新全部关联视图
+    if (typeof saveUserTransactionsToStorage === 'function') {
+      saveUserTransactionsToStorage();
+    }
+    syncAllCategoryUIs();
+    if (typeof renderDraftQueue === 'function') renderDraftQueue();
+    if (typeof updateDynamicCategoryChips === 'function') updateDynamicCategoryChips();
+    if (typeof updateActiveFilterCapsules === 'function') updateActiveFilterCapsules();
+    if (typeof applyActiveFilters === 'function') applyActiveFilters();
+    if (typeof renderMonthlyCategoryChart === 'function') renderMonthlyCategoryChart();
+    if (typeof updateBackupStatsLabel === 'function') updateBackupStatsLabel();
+
+    closeEditCategoryModal();
+    showToast(`已将分类「${oldName}」修改为「${newName}」`);
+    return true;
+  }
+
+  function openCategoryDeleteConfirmModal(catName, event) {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    if (!catName) return;
+    const currentCats = (window.DomainRegistry && typeof window.DomainRegistry.getParentCategories === 'function')
+      ? window.DomainRegistry.getParentCategories()
+      : (window.CORE_PARENT_CATEGORIES || []);
+    if (currentCats.length <= 1) {
+      showToast('至少保留一个分类，禁止删除！');
+      return;
+    }
+    pendingDeleteCategoryName = String(catName);
+    const descEl = document.getElementById('category-delete-confirm-desc');
+    if (descEl) {
+      descEl.innerText = `确定要删除分类「${pendingDeleteCategoryName}」吗？删除后不可恢复。`;
+    }
+    const modal = document.getElementById('category-delete-confirm-modal');
+    if (modal) {
+      modal.classList.remove('hidden');
+    }
+  }
+
+  function closeCategoryDeleteConfirmModal() {
+    const modal = document.getElementById('category-delete-confirm-modal');
+    if (modal) modal.classList.add('hidden');
+    pendingDeleteCategoryName = '';
+  }
+
+  function confirmCategoryDelete() {
+    const target = pendingDeleteCategoryName;
+    closeCategoryDeleteConfirmModal();
+    if (target) {
+      removeCustomCategory(target);
     }
   }
 
@@ -2879,6 +3111,8 @@
       : false;
     if (success) {
       syncAllCategoryUIs();
+      if (typeof updateDynamicCategoryChips === 'function') updateDynamicCategoryChips();
+      if (typeof updateBackupStatsLabel === 'function') updateBackupStatsLabel();
       showToast(`已删除分类：${name}`);
     } else {
       showToast('删除分类失败');
@@ -2890,6 +3124,8 @@
       window.DomainRegistry.resetCategories();
     }
     syncAllCategoryUIs();
+    if (typeof updateDynamicCategoryChips === 'function') updateDynamicCategoryChips();
+    if (typeof updateBackupStatsLabel === 'function') updateBackupStatsLabel();
     showToast('已恢复默认 8 大标准分类');
   }
 
@@ -2918,6 +3154,12 @@
   window.commitDraftTransaction = commitDraftTransaction;
   window.syncAllCategoryUIs = syncAllCategoryUIs;
   window.addCustomCategory = addCustomCategory;
+  window.openEditCategoryModal = openEditCategoryModal;
+  window.closeEditCategoryModal = closeEditCategoryModal;
+  window.saveEditedCategory = saveEditedCategory;
+  window.openCategoryDeleteConfirmModal = openCategoryDeleteConfirmModal;
+  window.closeCategoryDeleteConfirmModal = closeCategoryDeleteConfirmModal;
+  window.confirmCategoryDelete = confirmCategoryDelete;
   window.removeCustomCategory = removeCustomCategory;
   window.resetCategoriesToDefault = resetCategoriesToDefault;
 
@@ -3968,29 +4210,40 @@
     } catch (e) {}
   }
 
-  /* ================= 快捷指令后台无感抓屏与识别轮询 ================= */
+  /* ================= 背部轻敲与快捷指令后台无感抓屏识别引擎 ================= */
   let shortcutPollingStarted = false;
+  let shortcutListenersBound = false;
+  let isPollingShortcutQueue = false;
 
   function dataURLtoFile(dataurl, filename) {
-    const arr = dataurl.split(',');
-    const mimeMatch = arr[0].match(/:(.*?);/);
-    const mime = mimeMatch ? mimeMatch[1] : 'image/png';
-    const bstr = atob(arr[1]);
-    let n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    while (n--) {
-      u8arr[n] = bstr.charCodeAt(n);
+    try {
+      const arr = String(dataurl || '').split(',');
+      const mimeMatch = arr[0] ? arr[0].match(/:(.*?);/) : null;
+      const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+      const bstr = arr[1] ? atob(arr[1]) : '';
+      let n = bstr.length;
+      const u8arr = new Uint8Array(n);
+      while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+      }
+      return new File([u8arr], filename, { type: mime });
+    } catch (e) {
+      return new File([new Uint8Array(0)], filename, { type: 'image/png' });
     }
-    return new File([u8arr], filename, { type: mime });
   }
 
   async function handleShortcutCapturedItem(item) {
     if (!item || !item.dataUrl) return;
+    const isBackTap = item.source === 'backtap-screenshot';
     try {
-      const file = dataURLtoFile(item.dataUrl, '快捷指令抓屏_' + Date.now() + '.png');
+      const filePrefix = isBackTap ? '背部轻敲截屏_' : '快捷指令抓屏_';
+      const file = dataURLtoFile(item.dataUrl, filePrefix + Date.now() + '.png');
       if (typeof window.handleManualScreenshotUpload === 'function') {
         const fakeEvent = { target: { files: [file], value: '' } };
         await window.handleManualScreenshotUpload(fakeEvent);
+        if (isBackTap && typeof showToast === 'function') {
+          showToast('检测到背部轻敲截屏，正在后台调用大模型识别...');
+        }
       } else {
         const localFallback = (typeof parseBillWithLocalEngine === 'function') ? parseBillWithLocalEngine(file) : {
           merchant: '快捷抓屏商户',
@@ -4005,39 +4258,108 @@
           id: taskId,
           ...localFallback,
           confidence: 99,
-          tag: '快捷指令智能识别'
+          tag: isBackTap ? '背部轻敲智能识别' : '快捷指令智能识别'
         };
         if (!window.draftQueue) window.draftQueue = [];
         window.draftQueue.unshift(draft);
         if (typeof renderDraftQueue === 'function') renderDraftQueue();
         if (typeof updateDraftBadge === 'function') updateDraftBadge();
-        if (typeof showToast === 'function') showToast('已自动识别快捷抓屏账单并存入草稿箱');
+        if (typeof showToast === 'function') {
+          showToast(isBackTap ? '检测到背部轻敲截屏，正在后台调用大模型识别...' : '已自动识别快捷抓屏账单并存入草稿箱');
+        }
       }
     } catch (err) {
       console.warn('handleShortcutCapturedItem error:', err);
     }
   }
 
+  async function pollShortcutQueueOnce() {
+    if (isPollingShortcutQueue) return;
+    if (typeof fetch !== 'function') return;
+    isPollingShortcutQueue = true;
+    try {
+      const resp = await fetch('/api/shortcut/poll');
+      if (!resp || !resp.ok) return;
+      const data = await resp.json();
+      if (data && Array.isArray(data.items) && data.items.length > 0) {
+        for (const item of data.items) {
+          await handleShortcutCapturedItem(item);
+        }
+      }
+    } catch (e) {
+      // Silent catch for local offline / file:// / network
+    } finally {
+      isPollingShortcutQueue = false;
+    }
+  }
+
   function startShortcutPolling() {
+    if (!shortcutListenersBound && typeof document !== 'undefined' && typeof window !== 'undefined') {
+      shortcutListenersBound = true;
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          pollShortcutQueueOnce();
+        }
+      });
+      window.addEventListener('focus', pollShortcutQueueOnce);
+      document.addEventListener('keydown', (evt) => {
+        if (evt.key === 'Escape') {
+          closeEditCategoryModal();
+          closeCategoryDeleteConfirmModal();
+          closeBackTapGuideModal();
+        }
+      });
+    }
     if (shortcutPollingStarted) return;
     if (typeof window === 'undefined' || !window.location || !window.location.protocol.startsWith('http')) {
       return;
     }
     shortcutPollingStarted = true;
-    setInterval(async () => {
-      try {
-        const resp = await fetch('/api/shortcut/poll');
-        if (!resp.ok) return;
-        const data = await resp.json();
-        if (data && Array.isArray(data.items) && data.items.length > 0) {
-          for (const item of data.items) {
-            await handleShortcutCapturedItem(item);
-          }
-        }
-      } catch (e) {
-        // Silent catch for local offline/network
+    setInterval(() => {
+      pollShortcutQueueOnce();
+    }, 2000);
+  }
+
+  function openBackTapGuideModal() {
+    const modal = document.getElementById('backtap-guide-modal');
+    if (modal) modal.classList.remove('hidden');
+  }
+
+  function closeBackTapGuideModal() {
+    const modal = document.getElementById('backtap-guide-modal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  function toggleBackTapWatcher(checkbox) {
+    const toggleEl = (checkbox && typeof checkbox === 'object' && 'checked' in checkbox)
+      ? checkbox
+      : document.getElementById('backtap-watch-toggle');
+    const enabled = (typeof checkbox === 'boolean')
+      ? checkbox
+      : Boolean(toggleEl && toggleEl.checked);
+    if (toggleEl && toggleEl.checked !== enabled) {
+      toggleEl.checked = enabled;
+    }
+    const statusLabel = document.getElementById('backtap-status-label');
+    if (statusLabel) {
+      statusLabel.innerText = enabled ? '截屏监听中' : '监听已暂停';
+      statusLabel.className = enabled
+        ? 'text-[11px] text-emerald-400 font-medium'
+        : 'text-[11px] text-slate-400 font-medium';
+    }
+    try {
+      if (typeof fetch === 'function') {
+        fetch('/api/shortcut/watcher-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: enabled })
+        }).catch(() => {});
       }
-    }, 2500);
+    } catch (e) {}
+    if (typeof showToast === 'function') {
+      showToast(enabled ? '已开启背部轻敲截屏自动监听' : '已暂停背部轻敲截屏监听');
+    }
+    return enabled;
   }
 
   window.triggerDelayedPhoneCapture = async function (delaySec = 3) {
@@ -4060,7 +4382,10 @@
   };
 
   window.copyShortcutApiUrl = function () {
-    const apiUrl = `${window.location.origin}/api/shortcut/adb-capture?delay=3`;
+    const origin = (window.location && window.location.origin && window.location.origin !== 'null' && window.location.protocol.startsWith('http'))
+      ? window.location.origin
+      : 'http://127.0.0.1:8080';
+    const apiUrl = `${origin}/api/shortcut/adb-capture?delay=3`;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(apiUrl).then(() => {
         if (typeof showToast === 'function') showToast('已复制快捷指令接口地址到剪贴板');
@@ -4086,7 +4411,11 @@
     document.body.removeChild(ta);
   }
 
+  window.pollShortcutQueueOnce = pollShortcutQueueOnce;
   window.startShortcutPolling = startShortcutPolling;
+  window.openBackTapGuideModal = openBackTapGuideModal;
+  window.closeBackTapGuideModal = closeBackTapGuideModal;
+  window.toggleBackTapWatcher = toggleBackTapWatcher;
 
   if (document.readyState !== 'loading') {
     initAppController();

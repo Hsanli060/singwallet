@@ -337,6 +337,57 @@
   }
 
   /**
+   * 重命名分类 (在原索引位置替换，保留自定义图标与关键词映射，同步更新 Schema 与持久化)
+   */
+  function renameCategory(oldName, newName) {
+    if (!oldName || typeof oldName !== 'string' || !newName || typeof newName !== 'string') return false;
+    const cleanOld = oldName.trim();
+    const cleanNew = newName.trim();
+    if (!cleanOld || !cleanNew) return false;
+    const idx = CORE_PARENT_CATEGORIES.indexOf(cleanOld);
+    if (idx === -1) return false;
+    if (cleanNew === cleanOld) return true;
+    if (CORE_PARENT_CATEGORIES.includes(cleanNew)) return false;
+
+    const origCat = CORE_CATEGORIES.find(c => c.name === cleanOld);
+    const preservedIcon = (window.IconRegistry && window.IconRegistry.categoryEmojis && window.IconRegistry.categoryEmojis[cleanOld])
+      ? window.IconRegistry.categoryEmojis[cleanOld]
+      : ((window.IconRegistry && typeof window.IconRegistry.getCategoryIcon === 'function') ? window.IconRegistry.getCategoryIcon(cleanOld) : '');
+
+    if (origCat) {
+      const subCats = Array.isArray(origCat.subCategories)
+        ? origCat.subCategories.map(s => s === cleanOld ? cleanNew : s)
+        : [cleanNew];
+      if (!subCats.includes(cleanNew)) subCats.unshift(cleanNew);
+      const kwList = Array.isArray(origCat.keywords) ? [...origCat.keywords] : [];
+      if (!kwList.includes(cleanNew)) kwList.push(cleanNew);
+      CORE_CATEGORIES[idx] = {
+        id: origCat.id || ('custom_' + idx),
+        name: cleanNew,
+        type: cleanNew.includes('收入') ? 'income' : (origCat.type || 'expense'),
+        get defaultEmoji() { return window.IconRegistry ? window.IconRegistry.getCategoryIcon(this.name) : ''; },
+        desc: origCat.desc || cleanNew,
+        subCategories: subCats,
+        keywords: kwList
+      };
+    }
+
+    const nextList = [...CORE_PARENT_CATEGORIES];
+    nextList[idx] = cleanNew;
+    applyCategoriesList(nextList, true);
+
+    if (preservedIcon && window.IconRegistry) {
+      if (window.IconRegistry.categoryEmojis) {
+        window.IconRegistry.categoryEmojis[cleanNew] = preservedIcon;
+      }
+      if (typeof window.IconRegistry.setCategoryIcon === 'function') {
+        window.IconRegistry.setCategoryIcon(cleanNew, preservedIcon);
+      }
+    }
+    return true;
+  }
+
+  /**
    * 恢复为系统默认 8 大分类
    */
   function resetCategories() {
@@ -383,6 +434,18 @@
     }
     if (/工资|薪资|兼职|劳务|代发|奖金|年终奖|分红|理财收益|利息/.test(textToTest)) {
       if (CORE_PARENT_CATEGORIES.includes('工资收入')) return '工资收入';
+    }
+
+    for (let i = 0; i < CORE_CATEGORIES.length; i++) {
+      const cObj = CORE_CATEGORIES[i];
+      if (cObj && cObj.name && CORE_PARENT_CATEGORIES.includes(cObj.name) && Array.isArray(cObj.keywords) && cObj.keywords.length > 0) {
+        for (let k = 0; k < cObj.keywords.length; k++) {
+          const kw = String(cObj.keywords[k] || '').toLowerCase();
+          if (kw && textToTest.includes(kw)) {
+            return cObj.name;
+          }
+        }
+      }
     }
 
     return fallbackCat;
@@ -1030,6 +1093,7 @@
     resolveParentCategory: resolveParentCategory,
     addCategory: addCategory,
     removeCategory: removeCategory,
+    renameCategory: renameCategory,
     resetCategories: resetCategories,
     getChannels: () => PAYMENT_CHANNELS,
     getProviders: () => VLM_PROVIDERS,
@@ -1062,6 +1126,7 @@
   window.resolveParentCategory = resolveParentCategory;
   window.addCategory = addCategory;
   window.removeCategory = removeCategory;
+  window.renameCategory = renameCategory;
   window.resetCategories = resetCategories;
   window.parsePaymentMethodString = parsePaymentMethodString;
   window.isOptionMatch = isOptionMatch;

@@ -190,7 +190,10 @@
 #month-modal,
 #dedup-modal,
 #trash-modal,
-#tx-delete-confirm-modal {
+#tx-delete-confirm-modal,
+#category-edit-modal,
+#category-delete-confirm-modal,
+#backtap-guide-modal {
   z-index: 50 !important;
 }
 
@@ -344,6 +347,28 @@
   display: block !important;
 }
 
+/* ================= 账单分类管理项右侧编辑/删除按钮精准尺寸隔离 ================= */
+.cat-item-action-btn,
+#custom-categories-list .cat-item-action-btn {
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  min-height: 20px !important;
+  padding: 0 !important;
+  border-radius: 0.35rem !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+}
+
+.cat-item-action-btn svg,
+#custom-categories-list .cat-item-action-btn svg {
+  width: 12px !important;
+  height: 12px !important;
+  display: block !important;
+}
+
 /* ================= 移动端真机全屏自适应与体验优化 (<= 520px) ================= */
 @media (max-width: 520px) {
   body {
@@ -387,21 +412,21 @@
     height: 100dvh !important;
   }
 
-  /* 底部导航栏紧贴屏幕最下方，超紧凑 38px，纯黑底色与全面屏手势条无缝融合 */
+  /* 底部导航栏：移动端标准黄金比例 50px，纯黑底色与全面屏手势条无缝融合 */
   #bottom-nav-bar {
     position: fixed !important;
     bottom: 0 !important;
     left: 0 !important;
     right: 0 !important;
-    height: 38px !important;
-    min-height: 38px !important;
-    max-height: 38px !important;
+    height: 50px !important;
+    min-height: 50px !important;
+    max-height: 50px !important;
     background-color: #000000 !important;
     border-top: 1px solid rgba(30, 41, 59, 0.75) !important;
     display: grid !important;
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-    align-items: end !important;
-    padding: 2px 0 0 0 !important;
+    align-items: center !important;
+    padding: 4px 0 5px 0 !important;
     margin: 0 !important;
     z-index: 30 !important;
   }
@@ -411,30 +436,35 @@
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
-    justify-content: flex-end !important;
+    justify-content: center !important;
+    gap: 3px !important;
     padding: 0 !important;
     margin: 0 !important;
     line-height: 1 !important;
-    gap: 1px !important;
   }
 
   #bottom-nav-bar > button > div[id^="nav-icon-"] {
-    width: 17px !important;
-    height: 17px !important;
+    width: 20px !important;
+    height: 20px !important;
     margin: 0 !important;
   }
 
   #bottom-nav-bar > button > span:last-child {
-    font-size: 10.5px !important;
-    line-height: 1.05 !important;
+    font-size: 11.5px !important;
+    line-height: 1.15 !important;
+    padding: 0 !important;
     margin: 0 !important;
-    padding-bottom: 1px !important;
+  }
+
+  #nav-draft-badge {
+    top: 3px !important;
+    right: calc(50% - 22px) !important;
   }
 
   /* 快速记一手操作悬浮栏：全透明悬浮胶囊 */
   #tx-quick-record-bar {
     position: fixed !important;
-    bottom: 44px !important;
+    bottom: 60px !important;
     left: 0 !important;
     right: 0 !important;
     padding: 0 2.5rem !important;
@@ -454,12 +484,12 @@
   #tx-quick-record-bar button {
     pointer-events: auto !important;
     width: 100% !important;
-    max-width: 260px !important;
-    height: 36px !important;
-    min-height: 36px !important;
+    max-width: 240px !important;
+    height: 41px !important;
+    min-height: 41px !important;
     padding: 0 1.25rem !important;
-    border-radius: 0.75rem !important;
-    font-size: 13px !important;
+    border-radius: 13.5px !important;
+    font-size: 13.5px !important;
     box-shadow: 0 6px 20px rgba(79, 70, 229, 0.45) !important;
   }
 
@@ -471,9 +501,13 @@
     padding-right: 1.35rem !important;
   }
 
-  /* 滚动列表底部留白，防止内容被底部浮动条及导航栏遮挡 */
+  #view-transactions {
+    padding-bottom: 50px !important; /* 严格对齐 50px 底部导航栏顶边，彻底消除账单卡片半空截断死区 */
+  }
+
+  /* 滚动列表底部留白，确保滑到底部时最后一笔账单完整浮于「快记一手」按钮上方 */
   #tx-scroll-viewport {
-    padding-bottom: 116px !important;
+    padding-bottom: 76px !important;
   }
 
   #view-drafts {
@@ -487,7 +521,7 @@
     padding-bottom: 76px !important;
   }
 
-  #view-rules-accounts input:not([type="hidden"]):not([type="file"]),
+  #view-rules-accounts input:not([type="hidden"]):not([type="file"]):not([type="checkbox"]),
   #view-rules-accounts .custom-dropdown-trigger {
     min-height: 35px !important;
     height: 35px !important;
@@ -522,7 +556,9 @@
     display: block !important;
   }
 
-  #view-rules-accounts .grid-cols-2 button {
+  #vlm-config-card .grid-cols-2 > button,
+  #shortcut-capture-card .grid-cols-2 > button,
+  #data-backup-card .grid-cols-2 > button {
     min-height: 35px !important;
     height: 35px !important;
     padding: 0.35rem 0.75rem !important;
@@ -579,7 +615,10 @@
   #month-modal,
   #dedup-modal,
   #trash-modal,
-  #tx-delete-confirm-modal {
+  #tx-delete-confirm-modal,
+  #category-edit-modal,
+  #category-delete-confirm-modal,
+  #backtap-guide-modal {
     position: fixed !important;
     inset: 0 !important;
     z-index: 100 !important;
