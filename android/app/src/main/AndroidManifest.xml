@@ -49,6 +49,18 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- Xiaomi HyperOS / Android Quick Settings Tile (下拉控制中心「应用快捷开关」) -->
+        <service
+            android:name=".services.QuickRecordTileService"
+            android:icon="@mipmap/ic_launcher"
+            android:label="闪电记账"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

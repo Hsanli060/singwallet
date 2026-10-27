@@ -28,6 +28,7 @@ QUEUE_LOCK = threading.Lock()
 
 # Back-tap screenshot watcher global state & baseline isolation
 WATCH_SCREENSHOTS_ENABLED = True
+AUTO_CLEAN_SCREENSHOTS = True  # 识后即删：识别读取后自动清理手机相册截图，杜绝相册垃圾堆积
 SEEN_SCREENSHOTS = set()
 BASELINE_INITIALIZED = False
 WATCHER_LOCK = threading.Lock()
@@ -217,6 +218,14 @@ def screenshot_watcher_loop():
                     SHORTCUT_QUEUE.append(item)
 
                 print(f'[BackTap Watcher] Captured new screenshot: {fname}', flush=True)
+
+                # 识后即删 / 零相册污染：提取完毕后自动从相册清理该截屏，防止手机相册垃圾图片堆积
+                if AUTO_CLEAN_SCREENSHOTS:
+                    time.sleep(0.15)
+                    remote_file = f'{rdir}/{fname}'
+                    _run_adb(['shell', f'rm -f "{remote_file}"'], timeout=4)
+                    _run_adb(['shell', f'am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file://{remote_file}"'], timeout=4)
+                    print(f'[BackTap Watcher] Auto-cleaned screenshot from gallery: {fname} (Zero album pollution)', flush=True)
         except Exception as err:
             print(f'[BackTap Watcher] Loop error: {err}', flush=True)
 

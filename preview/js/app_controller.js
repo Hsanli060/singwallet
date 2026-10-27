@@ -2751,19 +2751,9 @@
         const icon = getAppCatIcon(cat);
         const safeCat = String(cat).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         return `
-          <div class="group flex items-center justify-between px-2 py-1.5 rounded-xl bg-slate-900/75 hover:bg-slate-900 border border-slate-700/60 hover:border-slate-600 transition-all min-h-[36px]">
-            <div onclick="openEditCategoryModal('${safeCat}', event)" class="flex items-center space-x-1.5 min-w-0 flex-1 cursor-pointer tap-highlight mr-1" title="点击编辑分类">
-              <span class="w-5 h-5 rounded-md bg-slate-800/90 border border-slate-700/50 inline-flex items-center justify-center p-0.5 shrink-0 aspect-square" data-cat-icon="${cat}">${icon}</span>
-              <span class="text-[11.5px] font-medium text-slate-200 truncate leading-tight">${cat}</span>
-            </div>
-            <div class="flex items-center space-x-0.5 shrink-0">
-              <button type="button" onclick="openEditCategoryModal('${safeCat}', event)" class="cat-item-action-btn text-slate-400 hover:text-indigo-300 hover:bg-indigo-500/15 tap-highlight" title="编辑分类">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
-              </button>
-              <button type="button" onclick="openCategoryDeleteConfirmModal('${safeCat}', event)" class="cat-item-action-btn text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 tap-highlight" title="删除分类">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-              </button>
-            </div>
+          <div onclick="handleCategoryPillClick('${safeCat}', event)" class="category-pill-item group flex items-center space-x-2 px-2.5 py-1.5 rounded-xl bg-slate-900/75 hover:bg-slate-900 active:scale-[0.98] border border-slate-700/60 hover:border-indigo-500/50 transition-all min-h-[36px] cursor-pointer select-none tap-highlight" title="单击修改名称，双击删除分类">
+            <span class="w-6 h-6 rounded-lg bg-slate-800/90 border border-slate-700/50 inline-flex items-center justify-center p-1 shrink-0 aspect-square text-indigo-300" data-cat-icon="${cat}">${icon}</span>
+            <span class="text-xs font-medium text-slate-200 truncate flex-1">${cat}</span>
           </div>
         `;
       }).join('');
@@ -2873,6 +2863,53 @@
       showToast(`已成功添加新分类：${name}`);
     } else {
       showToast('添加分类失败');
+    }
+  }
+
+  let categoryPillClickTimer = null;
+  let categoryPillLastClicked = null;
+
+  function handleCategoryPillClick(catName, event) {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    if (!catName) return;
+
+    if (categoryPillClickTimer && categoryPillLastClicked === catName) {
+      // 双击：取消待触发的单击编辑，直接唤起删除确认弹窗
+      clearTimeout(categoryPillClickTimer);
+      categoryPillClickTimer = null;
+      categoryPillLastClicked = null;
+      openCategoryDeleteConfirmModal(catName, event);
+    } else {
+      // 单击：延迟 260ms，若无连续双击则唤起编辑重命名弹窗
+      if (categoryPillClickTimer) clearTimeout(categoryPillClickTimer);
+      categoryPillLastClicked = catName;
+      categoryPillClickTimer = setTimeout(() => {
+        categoryPillClickTimer = null;
+        categoryPillLastClicked = null;
+        openEditCategoryModal(catName, event);
+      }, 260);
+    }
+  }
+
+  function toggleCategoryHelpTip(event) {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    const tip = document.getElementById('category-help-tip');
+    if (tip) {
+      const isHidden = tip.classList.contains('hidden');
+      if (isHidden) {
+        tip.classList.remove('hidden');
+      } else {
+        tip.classList.add('hidden');
+      }
+    }
+    if (typeof showToast === 'function') {
+      showToast('分类操作提示：单击修改名称，双击删除分类');
     }
   }
 
@@ -3154,6 +3191,8 @@
   window.commitDraftTransaction = commitDraftTransaction;
   window.syncAllCategoryUIs = syncAllCategoryUIs;
   window.addCustomCategory = addCustomCategory;
+  window.handleCategoryPillClick = handleCategoryPillClick;
+  window.toggleCategoryHelpTip = toggleCategoryHelpTip;
   window.openEditCategoryModal = openEditCategoryModal;
   window.closeEditCategoryModal = closeEditCategoryModal;
   window.saveEditedCategory = saveEditedCategory;

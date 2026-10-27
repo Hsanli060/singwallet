@@ -1260,7 +1260,24 @@ function runAllTestsSuite() {
     assert(!customList.innerText.includes('潮玩模玩'), "Group 30: custom-categories-list removed 潮玩模玩");
     assert(!menuDraftCat.innerText.includes('潮玩模玩'), "Group 30: menu-select-draft-category removed 潮玩模玩");
 
-    // 5. 恢复默认分类
+    // 5. 验证圆圈感叹号操作提示展开与收起
+    const btnCatInfo = document.getElementById('btn-category-info');
+    assert(btnCatInfo !== null, "Group 30: #btn-category-info exists");
+    const catHelpTip = document.getElementById('category-help-tip');
+    assert(catHelpTip !== null && catHelpTip.classList.contains('hidden'), "Group 30: #category-help-tip initially hidden");
+    toggleCategoryHelpTip();
+    assert(!catHelpTip.classList.contains('hidden'), "Group 30: toggleCategoryHelpTip reveals tip banner");
+    toggleCategoryHelpTip();
+    assert(catHelpTip.classList.contains('hidden'), "Group 30: toggleCategoryHelpTip closes tip banner");
+
+    // 6. 验证双击胶囊唤起删除确认弹窗
+    handleCategoryPillClick('餐饮美食');
+    handleCategoryPillClick('餐饮美食');
+    assert(!catDelModal.classList.contains('hidden'), "Group 30: 双击胶囊快速唤起 category-delete-confirm-modal");
+    closeCategoryDeleteConfirmModal();
+    assert(catDelModal.classList.contains('hidden'), "Group 30: closeCategoryDeleteConfirmModal 关闭弹窗");
+
+    // 7. 恢复默认分类
     resetCategoriesToDefault();
     assert(DomainRegistry.getParentCategories().length === 8, "Group 30: resetCategoriesToDefault restores 8 standard categories");
 
