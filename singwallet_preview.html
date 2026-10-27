@@ -177,9 +177,9 @@
       <div class="w-24 h-4 bg-black rounded-full flex items-center justify-center cursor-pointer tap-highlight" onclick="showToast('📱 灵动岛：SingWallet 本地离线 OCR 服务运行中')">
         <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-auto mr-2"></div>
       </div>
-      <div class="flex items-center space-x-1.5 text-xs text-slate-300 cursor-pointer tap-highlight" onclick="showToast('📶 当前状态：离线无网环境，所有数据 100% 留存本地沙箱')">
+      <div class="flex items-center space-x-1.5 text-xs text-slate-300 cursor-pointer tap-highlight" onclick="showToast('离线无网环境，所有数据 100% 留存本地沙箱')">
         <span class="text-[11px] font-mono text-emerald-400">离线安全</span>
-        <svg class="w-3.5 h-3.5 inline text-slate-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L12 22l7.03-4.39C20.26 16.07 21 14.12 21 12c0-4.97-4.03-9-9-9zm0 14.5c-3.04 0-5.5-2.46-5.5-5.5S8.96 6.5 12 6.5s5.5 2.46 5.5 5.5-2.46 5.5-5.5 5.5z"/></svg>
+        <div class="w-3.5 h-3.5 inline-block text-emerald-400" id="status-bar-sec-icon"></div>
       </div>
     </div>
 
@@ -188,7 +188,7 @@
       <!-- 上方大模型提示与异常临时小窗口 -->
       <div id="llm-top-error-toast" class="hidden absolute top-3 left-3 right-3 z-50 p-3 rounded-2xl bg-rose-950/95 border border-rose-500/70 text-white shadow-2xl backdrop-blur-md animate-fadeIn">
         <div class="flex items-start space-x-2.5">
-          <span class="text-lg leading-none mt-0.5">❌</span>
+          <span class="w-5 h-5 shrink-0 text-rose-400 mt-0.5" id="llm-top-error-icon"></span>
           <div class="flex-1 min-w-0">
             <div class="flex items-center justify-between">
               <h4 id="llm-error-title" class="text-xs font-bold text-rose-300">大模型请求异常</h4>
@@ -238,11 +238,11 @@
             </div>
           </div>
           <div class="flex items-center space-x-2">
-            <button onclick="openFilterModal()" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white tap-highlight border border-slate-700" title="高级多维筛选">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+            <button onclick="openFilterModal()" class="w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 hover:text-white tap-highlight transition-all" title="高级多维筛选">
+              <div class="w-4 h-4" id="top-bar-filter-icon"></div>
             </button>
-            <button onclick="openTrashDialog()" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white tap-highlight border border-slate-700 relative" title="回收站 (30天保留)">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            <button onclick="openTrashDialog()" class="relative w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 hover:text-white tap-highlight transition-all" title="回收站 (30天保留)">
+              <div class="w-4 h-4" id="top-bar-trash-icon"></div>
               <span id="trash-badge" class="hidden absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400"></span>
             </button>
           </div>
@@ -342,9 +342,7 @@
         <div id="tx-scroll-viewport" class="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-24 space-y-3 scroll-smooth">
           <!-- Filter Mismatch Empty State Container -->
           <div id="tx-no-match-state" class="hidden text-center py-10 space-y-3 bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6">
-            <div class="w-12 h-12 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center mx-auto text-xl">
-              🔍
-            </div>
+            <div class="w-12 h-12 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center p-3 mx-auto" id="no-match-search-icon"></div>
             <div>
               <p class="font-semibold text-sm text-slate-300">未找到符合筛选条件的流水</p>
               <p class="text-xs text-slate-500 mt-1">请尝试放宽筛选条件或切换月份查看</p>
@@ -358,9 +356,7 @@
           <div class="space-y-3" id="transactions-list">
             <!-- Clean Empty State (Waiting for drafts confirmation) -->
             <div id="tx-empty-state" class="py-16 text-center space-y-3">
-              <div class="w-16 h-16 rounded-3xl bg-slate-800/80 border border-slate-700/80 text-indigo-400 flex items-center justify-center text-2xl mx-auto shadow-inner">
-                📋
-              </div>
+              <div class="w-16 h-16 rounded-3xl bg-slate-800/80 border border-slate-700/80 text-indigo-400 flex items-center justify-center p-3.5 mx-auto shadow-inner" id="empty-state-ledger-icon"></div>
               <div class="space-y-1">
                 <h4 class="text-white font-bold text-sm">暂无正式入账流水</h4>
               </div>
@@ -371,48 +367,12 @@
 
         <!-- Floating Bottom Quick Action Capsule (Pure floating button, 80% frosted glass background) -->
         <div id="tx-quick-record-bar" class="absolute bottom-16 left-0 right-0 p-3 bg-slate-900/80 backdrop-blur-md border-t border-slate-800/40 z-20 shadow-lg">
-          <button onclick="openManualAddModal()" class="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold shadow-xl flex items-center justify-center space-x-2 tap-highlight transition-all">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          <button onclick="openManualAddModal()" class="w-full py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold shadow-xl flex items-center justify-center space-x-2 tap-highlight transition-all">
+            <div class="w-5 h-5 mr-1" id="quick-record-plus-icon"></div>
             <span>快记一手</span>
           </button>
         </div>
       </div>
-
-      <!-- ================= 页面 2: 截图草稿箱与 OCR 确认页 (核心交互) ================= -->
-      <div id="view-drafts" class="hidden h-full overflow-y-auto p-4 pb-24 space-y-4 animate-fadeIn">
-        
-        <!-- Header -->
-        <div class="flex items-center justify-between pt-1">
-          <div>
-            <h1 class="text-xl font-bold text-white tracking-tight">待确认账单</h1>
-          </div>
-          <div class="flex items-center space-x-1.5">
-            <!-- 草稿箱顶部的设置置信度小按钮 -->
-            <button onclick="openConfidenceModal()" class="flex items-center space-x-1 px-2 py-1 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-slate-700 hover:border-indigo-500 tap-highlight transition-all shadow-sm" title="设置自动入账置信度">
-              <span id="draft-conf-threshold-btn-label" class="font-mono text-emerald-400 text-[11px] font-bold">≥95%</span>
-            </button>
-            <span id="draft-badge" class="px-2.5 py-1 text-xs font-semibold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-              待确认 3 笔
-            </span>
-          </div>
-        </div>
-
-        <!-- 上方小巧临时防重提醒弹窗 (点击确认入账若单号重复则弹出) -->
-        <div id="dedup-top-toast" class="hidden relative z-30 p-3 rounded-2xl bg-amber-950/90 border border-amber-500/70 text-white shadow-2xl backdrop-blur-md animate-fadeIn">
-          <div class="flex items-start space-x-2.5">
-            <span class="text-lg leading-none mt-0.5">⚠️</span>
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center justify-between">
-                <h4 class="text-xs font-bold text-amber-300">单号防重预警提醒</h4>
-                <button onclick="closeDedupTopToast()" class="text-slate-400 hover:text-white text-xs px-1">✕</button>
-              </div>
-              <p class="text-[11px] text-slate-200 mt-1">检测到单号 <span id="dedup-toast-order-text" class="font-mono text-amber-300 font-semibold select-all"></span> 已存在于历史账单中，可能为重复录入！</p>
-              <div class="mt-2 flex items-center space-x-2">
-                <button onclick="confirmTransaction(true)" class="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow tap-highlight">仍要入账</button>
-                <button onclick="focusOrderInputFromToast()" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs border border-slate-700 tap-highlight">修改单号</button>
-              </div>
-            </div>
-          </div>
         </div>
 
         <!-- Multi-Draft Carousel / Switcher Bar (图3优化：最上方展示不动，“一键入账……”占满一行，左侧文字去掉) -->
@@ -573,71 +533,72 @@
                 <input type="hidden" id="select-draft-category" value="餐饮美食">
                 <button type="button" class="custom-dropdown-trigger px-3.5 py-2 text-xs font-medium rounded-xl" onclick="toggleCustomDropdown('select-draft-category', event)">
                   <div class="flex items-center space-x-2 truncate">
-                    <span id="suggested-icon" class="text-sm">🍔</span>
+                    <span id="suggested-icon" class="w-4 h-4 inline-block shrink-0"></span>
                     <span class="custom-dropdown-label truncate font-semibold text-slate-100" id="label-select-draft-category">餐饮美食</span>
                     <span id="suggested-name" class="hidden">推荐分类：餐饮美食</span>
                   </div>
                   <svg class="w-4 h-4 dropdown-chevron ml-1 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M19 9l-7 7-7-7"/></svg>
                 </button>
                 <div class="custom-dropdown-menu rounded-2xl backdrop-blur-xl shadow-2xl" id="menu-select-draft-category" style="min-width: 100%; max-height: 220px;">
-                  <div class="custom-dropdown-option rounded-xl selected" tabindex="0" data-value="餐饮美食" onclick="onDraftCategorySelect('🍔', '餐饮美食', event)">
-                    <div class="flex items-center space-x-2">
-                      <span class="shrink-0 text-sm">🍔</span>
-                      <span class="opt-text truncate font-medium">餐饮美食</span>
+                  <div class="custom-dropdown-option rounded-xl selected" tabindex="0" data-value="餐饮美食" onclick="onDraftCategorySelect('', '餐饮美食', event)">
+                    <div class="flex items-center space-x-2.5">
+                      <div class="w-4 h-4 shrink-0" data-cat-icon="餐饮美食"></div>
+                      <span class="opt-text truncate font-medium text-xs">餐饮美食</span>
                     </div>
                     <span class="opt-check">✓</span>
                   </div>
-                  <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="交通出行" onclick="onDraftCategorySelect('🚗', '交通出行', event)">
-                    <div class="flex items-center space-x-2">
-                      <span class="shrink-0 text-sm">🚗</span>
-                      <span class="opt-text truncate font-medium">交通出行</span>
+                  <div class="custom-dropdown-option rounded-xl " tabindex="0" data-value="交通出行" onclick="onDraftCategorySelect('', '交通出行', event)">
+                    <div class="flex items-center space-x-2.5">
+                      <div class="w-4 h-4 shrink-0" data-cat-icon="交通出行"></div>
+                      <span class="opt-text truncate font-medium text-xs">交通出行</span>
                     </div>
                     <span class="opt-check">✓</span>
                   </div>
-                  <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="日常购物" onclick="onDraftCategorySelect('🛒', '日常购物', event)">
-                    <div class="flex items-center space-x-2">
-                      <span class="shrink-0 text-sm">🛒</span>
-                      <span class="opt-text truncate font-medium">日常购物</span>
+                  <div class="custom-dropdown-option rounded-xl " tabindex="0" data-value="日常购物" onclick="onDraftCategorySelect('', '日常购物', event)">
+                    <div class="flex items-center space-x-2.5">
+                      <div class="w-4 h-4 shrink-0" data-cat-icon="日常购物"></div>
+                      <span class="opt-text truncate font-medium text-xs">日常购物</span>
                     </div>
                     <span class="opt-check">✓</span>
                   </div>
-                  <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="休闲娱乐" onclick="onDraftCategorySelect('🎮', '休闲娱乐', event)">
-                    <div class="flex items-center space-x-2">
-                      <span class="shrink-0 text-sm">🎮</span>
-                      <span class="opt-text truncate font-medium">休闲娱乐</span>
+                  <div class="custom-dropdown-option rounded-xl " tabindex="0" data-value="休闲娱乐" onclick="onDraftCategorySelect('', '休闲娱乐', event)">
+                    <div class="flex items-center space-x-2.5">
+                      <div class="w-4 h-4 shrink-0" data-cat-icon="休闲娱乐"></div>
+                      <span class="opt-text truncate font-medium text-xs">休闲娱乐</span>
                     </div>
                     <span class="opt-check">✓</span>
                   </div>
-                  <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="生活缴费" onclick="onDraftCategorySelect('⚡', '生活缴费', event)">
-                    <div class="flex items-center space-x-2">
-                      <span class="shrink-0 text-sm">⚡</span>
-                      <span class="opt-text truncate font-medium">生活缴费</span>
+                  <div class="custom-dropdown-option rounded-xl " tabindex="0" data-value="生活缴费" onclick="onDraftCategorySelect('', '生活缴费', event)">
+                    <div class="flex items-center space-x-2.5">
+                      <div class="w-4 h-4 shrink-0" data-cat-icon="生活缴费"></div>
+                      <span class="opt-text truncate font-medium text-xs">生活缴费</span>
                     </div>
                     <span class="opt-check">✓</span>
                   </div>
-                  <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="医疗健康" onclick="onDraftCategorySelect('💊', '医疗健康', event)">
-                    <div class="flex items-center space-x-2">
-                      <span class="shrink-0 text-sm">💊</span>
-                      <span class="opt-text truncate font-medium">医疗健康</span>
+                  <div class="custom-dropdown-option rounded-xl " tabindex="0" data-value="医疗健康" onclick="onDraftCategorySelect('', '医疗健康', event)">
+                    <div class="flex items-center space-x-2.5">
+                      <div class="w-4 h-4 shrink-0" data-cat-icon="医疗健康"></div>
+                      <span class="opt-text truncate font-medium text-xs">医疗健康</span>
                     </div>
                     <span class="opt-check">✓</span>
                   </div>
-                  <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="其他支出" onclick="onDraftCategorySelect('📦', '其他支出', event)">
-                    <div class="flex items-center space-x-2">
-                      <span class="shrink-0 text-sm">📦</span>
-                      <span class="opt-text truncate font-medium">其他支出</span>
+                  <div class="custom-dropdown-option rounded-xl " tabindex="0" data-value="其他支出" onclick="onDraftCategorySelect('', '其他支出', event)">
+                    <div class="flex items-center space-x-2.5">
+                      <div class="w-4 h-4 shrink-0" data-cat-icon="其他支出"></div>
+                      <span class="opt-text truncate font-medium text-xs">其他支出</span>
                     </div>
                     <span class="opt-check">✓</span>
                   </div>
-                  <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="工资收入" onclick="onDraftCategorySelect('💰', '工资收入', event)">
-                    <div class="flex items-center space-x-2">
-                      <span class="shrink-0 text-sm">💰</span>
-                      <span class="opt-text truncate font-medium">工资收入</span>
+                  <div class="custom-dropdown-option rounded-xl " tabindex="0" data-value="工资收入" onclick="onDraftCategorySelect('', '工资收入', event)">
+                    <div class="flex items-center space-x-2.5">
+                      <div class="w-4 h-4 shrink-0" data-cat-icon="工资收入"></div>
+                      <span class="opt-text truncate font-medium text-xs">工资收入</span>
                     </div>
                     <span class="opt-check">✓</span>
                   </div>
                 </div>
               </div>
+            </div>
             </div>
 
             <!-- Action Buttons (Dedup auto-integrated into Confirm button) -->
@@ -656,14 +617,12 @@
 
         <!-- Draft Empty State (shown when queue is empty) -->
         <div id="draft-empty-state" class="hidden text-center py-12 px-4 space-y-3 bg-slate-900/60 rounded-3xl border border-slate-800">
-          <div class="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center text-3xl">
-            🎉
-          </div>
+          <div class="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center p-3.5" id="draft-empty-check-icon"></div>
           <h3 class="text-base font-bold text-white">暂无待确认草稿</h3>
           <p class="text-xs text-slate-400 max-w-xs mx-auto">所有账单已完成确认入账，无积压条目。所有已确认记录均保留原始识别存证。</p>
           <div class="pt-2 flex justify-center space-x-2">
             <button onclick="resetDemoDrafts()" class="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs text-white font-medium shadow tap-highlight">
-              🔄 恢复 3 笔演示草稿
+              <span class="flex items-center space-x-1.5"><span class="w-3.5 h-3.5 inline-block" id="btn-reset-drafts-icon"></span><span>恢复 3 笔演示草稿</span></span>
             </button>
             <button onclick="switchTab('transactions')" class="px-3.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-300 font-medium tap-highlight">
               返回流水列表
@@ -755,7 +714,7 @@
               <label class="block text-slate-400 mb-1 text-[11px] font-medium">API Key </label>
               <div class="relative">
                 <input id="vlm-api-key" type="password" oninput="saveLlmConfigFromInputs(false)" class="w-full pl-2.5 pr-8 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-xs outline-none focus:ring-2 focus:ring-indigo-500 transition-all">
-                <button type="button" onclick="toggleVlmKeyVisibility()" class="absolute right-2.5 top-1.5 text-slate-400 hover:text-white text-xs tap-highlight" title="显示/隐藏密钥">👁️</button>
+                <button type="button" onclick="toggleVlmKeyVisibility()" class="absolute right-2.5 top-1.5 text-slate-400 hover:text-white tap-highlight w-4 h-4 flex items-center justify-center" title="显示/隐藏密钥" id="vlm-eye-btn"></button>
               </div>
             </div>
 
@@ -792,7 +751,7 @@
         <div class="space-y-2">
           <div class="flex items-center justify-between">
             <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">分类匹配规则 (优先级排序)</h2>
-            <span class="text-xs text-indigo-400 font-semibold cursor-pointer hover:underline tap-highlight" onclick="triggerRerunRules()">🔄 重新匹配草稿</span>
+            <span class="text-xs text-indigo-400 font-semibold cursor-pointer hover:underline tap-highlight" onclick="triggerRerunRules()"><span class="w-3 h-3 inline-block mr-1" id="rerun-rules-icon"></span><span>重新匹配草稿</span></span>
           </div>
 
           <div class="space-y-2" id="rules-list-container">
@@ -851,7 +810,7 @@
       <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 max-w-xs w-full shadow-2xl space-y-3.5">
         <div class="flex items-center justify-between pb-2 border-b border-slate-800">
           <div class="flex items-center space-x-2">
-            <span class="text-base">⚙️</span>
+            <span class="w-4 h-4 inline-block" id="conf-modal-gear-icon"></span>
             <h3 class="font-bold text-sm text-white">置信度与自动入账</h3>
           </div>
           <button onclick="closeConfidenceModal()" class="text-xs text-slate-400 hover:text-white tap-highlight">✕</button>
@@ -891,7 +850,7 @@
         <!-- Safe Interlock Tips -->
         <div class="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80 text-[10px] space-y-1 text-slate-400">
           <div class="text-amber-300 font-semibold flex items-center space-x-1">
-            <span>🛡️ 三联锁防污染守护</span>
+            <span class="flex items-center space-x-1.5"><span class="w-3.5 h-3.5 inline-block text-amber-300" id="guard-shield-svg-icon"></span><span>三联锁防污染守护</span></span>
           </div>
           <p class="leading-relaxed">同时满足「置信度达标 + 微信/支付宝单号验真 + 24h无重复」时免确认入账；任意疑重或低确信自动留存草稿箱。</p>
         </div>
@@ -961,13 +920,34 @@
             </div>
             <div class="flex flex-wrap gap-1.5" id="filter-modal-cats">
               <span onclick="toggleModalCat(this, 'all')" class="modal-cat-tag active-tag px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight">全部</span>
-              <span onclick="toggleModalCat(this, '餐饮美食')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1"><span>🍔</span><span>餐饮美食</span></span>
-              <span onclick="toggleModalCat(this, '日常购物')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1"><span>🛒</span><span>日常购物</span></span>
-              <span onclick="toggleModalCat(this, '交通出行')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1"><span>🚗</span><span>交通出行</span></span>
-              <span onclick="toggleModalCat(this, '休闲娱乐')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1"><span>🎮</span><span>休闲娱乐</span></span>
-              <span onclick="toggleModalCat(this, '生活缴费')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1"><span>⚡</span><span>生活缴费</span></span>
-              <span onclick="toggleModalCat(this, '医疗健康')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1"><span>💊</span><span>医疗健康</span></span>
-              <span onclick="toggleModalCat(this, '其他支出')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1"><span>📦</span><span>其他支出</span></span>
+              <span onclick="toggleModalCat(this, '餐饮美食')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1.5">
+                <span class="w-3.5 h-3.5 inline-block shrink-0" data-cat-icon="餐饮美食"></span>
+                <span>餐饮美食</span>
+              </span>
+              <span onclick="toggleModalCat(this, '日常购物')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1.5">
+                <span class="w-3.5 h-3.5 inline-block shrink-0" data-cat-icon="日常购物"></span>
+                <span>日常购物</span>
+              </span>
+              <span onclick="toggleModalCat(this, '交通出行')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1.5">
+                <span class="w-3.5 h-3.5 inline-block shrink-0" data-cat-icon="交通出行"></span>
+                <span>交通出行</span>
+              </span>
+              <span onclick="toggleModalCat(this, '休闲娱乐')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1.5">
+                <span class="w-3.5 h-3.5 inline-block shrink-0" data-cat-icon="休闲娱乐"></span>
+                <span>休闲娱乐</span>
+              </span>
+              <span onclick="toggleModalCat(this, '生活缴费')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1.5">
+                <span class="w-3.5 h-3.5 inline-block shrink-0" data-cat-icon="生活缴费"></span>
+                <span>生活缴费</span>
+              </span>
+              <span onclick="toggleModalCat(this, '医疗健康')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1.5">
+                <span class="w-3.5 h-3.5 inline-block shrink-0" data-cat-icon="医疗健康"></span>
+                <span>医疗健康</span>
+              </span>
+              <span onclick="toggleModalCat(this, '其他支出')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1.5">
+                <span class="w-3.5 h-3.5 inline-block shrink-0" data-cat-icon="其他支出"></span>
+                <span>其他支出</span>
+              </span>
             </div>
           </div>
 
@@ -1005,40 +985,41 @@
           <button onclick="closeCategoryModal()" class="text-xs text-slate-400 hover:text-white">取消</button>
         </div>
         <div class="grid grid-cols-4 gap-2 text-xs" id="category-modal-grid">
-          <div data-category-name="餐饮美食" onclick="selectCategory('🍔', '餐饮美食', '外卖正餐小吃')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
-            <span class="text-2xl block mb-1">🍔</span>
+          <div data-category-name="餐饮美食" onclick="selectCategory('', '餐饮美食', '快捷网格选择')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
+            <div class="w-9 h-9 rounded-xl bg-slate-900/80 border border-indigo-400/20 flex items-center justify-center p-1 mb-1.5 shadow-inner" data-cat-icon="餐饮美食"></div>
             <span class="font-medium text-slate-200 text-[11px] block whitespace-nowrap">餐饮美食</span>
           </div>
-          <div data-category-name="交通出行" onclick="selectCategory('🚗', '交通出行', '打车公交地铁')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
-            <span class="text-2xl block mb-1">🚗</span>
+          <div data-category-name="交通出行" onclick="selectCategory('', '交通出行', '快捷网格选择')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
+            <div class="w-9 h-9 rounded-xl bg-slate-900/80 border border-indigo-400/20 flex items-center justify-center p-1 mb-1.5 shadow-inner" data-cat-icon="交通出行"></div>
             <span class="font-medium text-slate-200 text-[11px] block whitespace-nowrap">交通出行</span>
           </div>
-          <div data-category-name="日常购物" onclick="selectCategory('🛒', '日常购物', '商超便利网购')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
-            <span class="text-2xl block mb-1">🛒</span>
+          <div data-category-name="日常购物" onclick="selectCategory('', '日常购物', '快捷网格选择')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
+            <div class="w-9 h-9 rounded-xl bg-slate-900/80 border border-indigo-400/20 flex items-center justify-center p-1 mb-1.5 shadow-inner" data-cat-icon="日常购物"></div>
             <span class="font-medium text-slate-200 text-[11px] block whitespace-nowrap">日常购物</span>
           </div>
-          <div data-category-name="休闲娱乐" onclick="selectCategory('🎮', '休闲娱乐', '影音游戏聚会')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
-            <span class="text-2xl block mb-1">🎮</span>
+          <div data-category-name="休闲娱乐" onclick="selectCategory('', '休闲娱乐', '快捷网格选择')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
+            <div class="w-9 h-9 rounded-xl bg-slate-900/80 border border-indigo-400/20 flex items-center justify-center p-1 mb-1.5 shadow-inner" data-cat-icon="休闲娱乐"></div>
             <span class="font-medium text-slate-200 text-[11px] block whitespace-nowrap">休闲娱乐</span>
           </div>
-          <div data-category-name="生活缴费" onclick="selectCategory('⚡', '生活缴费', '水电气网物业')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
-            <span class="text-2xl block mb-1">⚡</span>
+          <div data-category-name="生活缴费" onclick="selectCategory('', '生活缴费', '快捷网格选择')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
+            <div class="w-9 h-9 rounded-xl bg-slate-900/80 border border-indigo-400/20 flex items-center justify-center p-1 mb-1.5 shadow-inner" data-cat-icon="生活缴费"></div>
             <span class="font-medium text-slate-200 text-[11px] block whitespace-nowrap">生活缴费</span>
           </div>
-          <div data-category-name="医疗健康" onclick="selectCategory('💊', '医疗健康', '门诊药品体检')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
-            <span class="text-2xl block mb-1">💊</span>
+          <div data-category-name="医疗健康" onclick="selectCategory('', '医疗健康', '快捷网格选择')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
+            <div class="w-9 h-9 rounded-xl bg-slate-900/80 border border-indigo-400/20 flex items-center justify-center p-1 mb-1.5 shadow-inner" data-cat-icon="医疗健康"></div>
             <span class="font-medium text-slate-200 text-[11px] block whitespace-nowrap">医疗健康</span>
           </div>
-          <div data-category-name="其他支出" onclick="selectCategory('📦', '其他支出', '杂项人情支出')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
-            <span class="text-2xl block mb-1">📦</span>
+          <div data-category-name="其他支出" onclick="selectCategory('', '其他支出', '快捷网格选择')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
+            <div class="w-9 h-9 rounded-xl bg-slate-900/80 border border-indigo-400/20 flex items-center justify-center p-1 mb-1.5 shadow-inner" data-cat-icon="其他支出"></div>
             <span class="font-medium text-slate-200 text-[11px] block whitespace-nowrap">其他支出</span>
           </div>
-          <div data-category-name="工资收入" onclick="selectCategory('💰', '工资收入', '薪资兼职理财')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
-            <span class="text-2xl block mb-1">💰</span>
+          <div data-category-name="工资收入" onclick="selectCategory('', '工资收入', '快捷网格选择')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
+            <div class="w-9 h-9 rounded-xl bg-slate-900/80 border border-indigo-400/20 flex items-center justify-center p-1 mb-1.5 shadow-inner" data-cat-icon="工资收入"></div>
             <span class="font-medium text-slate-200 text-[11px] block whitespace-nowrap">工资收入</span>
           </div>
         </div>
       </div>
+    </div>
     </div>
 
     <!-- ================= 全局弹窗 3: 新建分类规则 ================= -->
@@ -1164,9 +1145,7 @@
           
           <!-- 未选择图片占位提示 -->
           <div id="manual-image-empty-placeholder" class="py-2.5 flex flex-col items-center justify-center space-y-1">
-            <div class="w-10 h-10 rounded-xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center text-xl group-hover:scale-105 transition-transform">
-              📷
-            </div>
+            <div class="w-10 h-10 rounded-xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center p-2 group-hover:scale-105 transition-transform" id="manual-cam-icon"></div>
             <p class="text-[10px] text-slate-400">点击上传凭据截图，AI 自动提取关键要素</p>
           </div>
 
@@ -1176,8 +1155,8 @@
               <div class="flex items-center space-x-2">
                 <div class="relative flex items-center justify-center">
                   <span class="animate-ping absolute inline-flex h-4 w-4 rounded-full bg-indigo-400 opacity-75"></span>
-                  <div class="relative w-5 h-5 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-500 flex items-center justify-center text-xs animate-spin" style="animation-duration: 2.5s;">
-                    ⚡
+                  <div class="relative w-5 h-5 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-500 flex items-center justify-center p-1 animate-spin" style="animation-duration: 2.5s;">
+                    <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
                   </div>
                 </div>
                 <span class="text-xs font-bold text-indigo-200">大模型视觉识别运行中</span>
@@ -1208,9 +1187,7 @@
           <!-- 已选择图片缩略展示卡片 -->
           <div id="manual-image-preview-box" class="hidden flex items-center justify-between p-2 rounded-xl bg-slate-900/90 border border-emerald-500/40 text-left animate-fadeIn">
             <div class="flex items-center space-x-2 overflow-hidden">
-              <div class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-base shrink-0">
-                🖼️
-              </div>
+              <div class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center p-1.5 shrink-0" id="manual-img-thumb-icon"></div>
               <div class="truncate">
                 <p id="manual-image-filename" class="text-xs font-semibold text-emerald-300 truncate">凭证图片已载入</p>
                 <p id="manual-image-status" class="text-[10px] text-slate-400">已自动提取并填入各字段</p>
@@ -1421,9 +1398,7 @@
     <!-- ================= 全局弹窗 6: 单号安全与去重验证 ================= -->
     <div id="order-security-modal" class="hidden absolute inset-0 bg-black/75 z-40 flex items-center justify-center p-6 backdrop-blur-sm">
       <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 max-w-xs w-full shadow-2xl space-y-3 animate-fadeIn">
-        <div class="w-12 h-12 rounded-2xl bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold text-xl mx-auto border border-blue-500/30">
-          🛡️
-        </div>
+        <div class="w-12 h-12 rounded-2xl bg-blue-500/20 text-blue-400 flex items-center justify-center p-2.5 mx-auto border border-blue-500/30" id="order-sec-shield-icon"></div>
         <div class="text-center">
           <h3 class="font-bold text-sm text-white">Tier 3 单号强去重保护已激活</h3>
           <p class="text-xs text-slate-400 mt-1">单号已提取并进入防重主键倒排索引：</p>
@@ -1595,9 +1570,7 @@
     <!-- Deduplication Warning Modal -->
     <div id="dedup-modal" class="hidden absolute inset-0 bg-black/75 z-40 flex items-center justify-center p-6 backdrop-blur-sm">
       <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 max-w-xs w-full shadow-2xl space-y-3">
-        <div class="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-xl mx-auto border border-amber-500/30">
-          ⚠️
-        </div>
+        <div class="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center p-2.5 mx-auto border border-amber-500/30" id="dedup-warn-icon"></div>
         <div class="text-center">
           <h3 class="font-bold text-base text-white">疑似重复交易预警</h3>
           <p class="text-xs text-slate-400 mt-1.5">检测到 24 小时内存在相同商户与相同金额的流水记录：</p>
@@ -1637,18 +1610,18 @@
     <!-- Bottom Navigation Bar (Material 3 Style) -->
     <div class="absolute bottom-0 left-0 right-0 h-16 bg-slate-950 border-t border-slate-800 grid grid-cols-3 items-center z-20">
       <button onclick="switchTab('transactions')" id="nav-btn-transactions" class="flex flex-col items-center justify-center h-full text-indigo-400 font-semibold tap-highlight">
-        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z"/><path fill-rule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clip-rule="evenodd"/></svg>
+        <div class="w-5 h-5 mx-auto mb-0.5" id="nav-icon-transactions"></div>
         <span class="text-[11px] mt-0.5">流水明细</span>
       </button>
 
       <button onclick="switchTab('drafts')" id="nav-btn-drafts" class="relative flex flex-col items-center justify-center h-full text-slate-400 hover:text-white tap-highlight">
         <span id="draft-nav-dot" class="absolute top-2 right-8 w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        <div class="w-5 h-5 mx-auto mb-0.5" id="nav-icon-drafts"></div>
         <span class="text-[11px] mt-0.5">草稿箱</span>
       </button>
 
       <button onclick="switchTab('rules')" id="nav-btn-rules" class="flex flex-col items-center justify-center h-full text-slate-400 hover:text-white tap-highlight">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <div class="w-5 h-5 mx-auto mb-0.5" id="nav-icon-rules"></div>
         <span class="text-[11px] mt-0.5">规则账户</span>
       </button>
     </div>
@@ -1862,12 +1835,65 @@
         <rect x="19" y="23" width="10" height="7.5" rx="1.5" stroke="#fde68a" stroke-width="1.8"/>
         <circle cx="24" cy="26.5" r="1" fill="#fde68a"/>
       </svg>
+    `,
+    // 9. Alert / Warning Triangle
+    'alert': `
+      <svg class="w-full h-full" viewBox="0 0 24 24" fill="none" stroke="#fde68a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+    `,
+    // 10. Success / Check Circle
+    'check_circle': `
+      <svg class="w-full h-full" viewBox="0 0 24 24" fill="none" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+        <polyline points="22 4 12 14.01 9 11.01"/>
+      </svg>
+    `,
+    // 11. Calendar
+    'calendar': `
+      <svg class="w-full h-full" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+    `,
+    // 12. Refresh
+    'refresh': `
+      <svg class="w-full h-full" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"/>
+        <polyline points="1 20 1 14 7 14"/>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+      </svg>
+    `,
+    // 13. Search
+    'search': `
+      <svg class="w-full h-full" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+    `,
+    // 14. Eye
+    'eye': `
+      <svg class="w-full h-full" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+    `,
+    // 15. Tag
+    'tag': `
+      <svg class="w-full h-full" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+        <line x1="7" y1="7" x2="7.01" y2="7"/>
+      </svg>
     `
   };
 
     window.renderSquircleIcon = function(catName, size = 'w-10 h-10', iconPadding = 'p-1.5') {
       const parent = typeof resolveParentCategory === 'function' ? resolveParentCategory(catName) : catName;
-      const svgContent = (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[parent]) || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || '📦';
+      const svgContent = (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[parent]) || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || '';
       return `
         <div class="${size} rounded-2xl bg-gradient-to-br from-indigo-500/20 via-slate-800/90 to-purple-500/10 border border-indigo-400/30 flex items-center justify-center shadow-lg shadow-indigo-500/15 backdrop-blur-md shrink-0 ${iconPadding}">
           ${svgContent}
@@ -1877,7 +1903,7 @@
 
     window.getSmallCatSvg = function(catName) {
       const parent = typeof resolveParentCategory === 'function' ? resolveParentCategory(catName) : catName;
-      const svg = (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[parent]) || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || '📦';
+      const svg = (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[parent]) || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || '';
       return `<span class="w-full h-full flex items-center justify-center">${svg}</span>`;
     };
     // ==============================================================================
@@ -1969,7 +1995,7 @@
           account: '钱包',
           category: '日常购物',
           categoryName: '日常购物',
-          categoryIcon: '🛒',
+          categoryIcon: '',
           confidence: 95,
           rule: '智能分类 "日常购物" (置信度 95%)',
           orderId: '4200003143202610252738865252',
@@ -1984,7 +2010,7 @@
             display_name: '微信 · 钱包'
           },
           imgSrc: 'bill_1.jpg',
-          imgTitle: '📷 微信支付 · 世纪华购 (-¥70.00)',
+          imgTitle: '微信支付 · 世纪华购 (-¥70.00)',
           tag: '离线引擎识别'
         },
         {
@@ -1997,7 +2023,7 @@
           account: '钱包',
           category: '日常购物',
           categoryName: '日常购物',
-          categoryIcon: '🛒',
+          categoryIcon: '',
           confidence: 98,
           rule: '规则命中 "淘宝*" -> 日常购物',
           orderId: '4500000566202610259735455478',
@@ -2013,7 +2039,7 @@
             display_name: '微信 · 钱包'
           },
           imgSrc: 'bill_2.jpg',
-          imgTitle: '📷 微信支付 · 淘宝平台商户 (-¥15.77)',
+          imgTitle: '微信支付 · 淘宝平台商户 (-¥15.77)',
           tag: '离线引擎识别'
         },
         {
@@ -2026,7 +2052,7 @@
           account: '钱包',
           category: '餐饮美食',
           categoryName: '餐饮美食',
-          categoryIcon: '🍔',
+          categoryIcon: '',
           confidence: 98,
           rule: '规则命中 "早餐店*" -> 餐饮美食',
           orderId: '4500000527202610268642917303',
@@ -2042,7 +2068,7 @@
             display_name: '微信 · 钱包'
           },
           imgSrc: 'bill_3.jpg',
-          imgTitle: '📷 微信支付 · 辰市早餐店 (-¥4.00)',
+          imgTitle: '微信支付 · 辰市早餐店 (-¥4.00)',
           tag: '离线引擎识别'
         },
         {
@@ -2055,7 +2081,7 @@
           account: '钱包',
           category: '日常购物',
           categoryName: '日常购物',
-          categoryIcon: '🛒',
+          categoryIcon: '',
           confidence: 96,
           rule: '规则命中 "拼多多*" -> 日常购物',
           orderId: '4500000570202610254022722547',
@@ -2071,7 +2097,7 @@
             display_name: '微信 · 钱包'
           },
           imgSrc: 'bill_4.jpg',
-          imgTitle: '📷 微信支付 · 拼多多 (-¥14.75)',
+          imgTitle: '微信支付 · 拼多多 (-¥14.75)',
           tag: '离线引擎识别'
         }
       ];
@@ -2144,14 +2170,14 @@
           account: '钱包',
           category: '休闲娱乐',
           categoryName: '休闲娱乐',
-          categoryIcon: '☕',
+          categoryIcon: '',
           confidence: 99,
           rule: '内置商户规则 "星巴克*"',
           orderId: '420000' + Date.now(),
           orderTime: '2026-10-26 15:45:00',
           time: '2026-10-26 15:45:00',
           payment: standardPayment,
-          imgTitle: '📷 微信支付截图预览',
+          imgTitle: '微信支付截图预览',
           tag: '置信度 99%'
         });
         renderDraftQueue();
@@ -2163,7 +2189,7 @@
       const merchant = '星巴克甄选（国贸店）';
       const amount = 38.00;
       const catName = '休闲娱乐';
-      const catIcon = '☕';
+      const catIcon = (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['餐饮美食']) || '';
       const parentCat = '休闲娱乐';
       const orderId = '420000' + Date.now();
       const txTime = '2026-10-26 15:45:00';
@@ -2261,7 +2287,7 @@
       if (!draft) return;
       currentDraftCategory = {
         name: draft.categoryName || draft.category || '日常购物',
-        icon: draft.categoryIcon || '🛒',
+        icon: draft.categoryIcon || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['日常购物']) || '',
         tag: (draft.categoryName || draft.category || '日常购物').slice(0, 2)
       };
 
@@ -2326,7 +2352,7 @@
 
       // Category card
       const catName = draft.categoryName || draft.category || '餐饮美食';
-      const catIcon = draft.categoryIcon || CATEGORY_ICON_MAP[catName] || '🍔';
+      const catIcon = draft.categoryIcon || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[catName]) || '';
       currentDraftCategory = {
         name: catName,
         icon: catIcon,
@@ -2435,7 +2461,7 @@
       applyActiveFilters();
       updateDynamicCategoryChips();
       updateActiveFilterCapsules();
-      showToast(`🎉 成功将 ${highList.length} 笔高置信度账单入账 (共 ¥${totalAmt.toFixed(2)})！`);
+      showToast(`✨ 成功将 ${highList.length} 笔高置信度账单入账 (共 ¥${totalAmt.toFixed(2)})！`);
     }
 
     function resetDemoDrafts() {
@@ -2450,7 +2476,7 @@
           account: '钱包',
           category: '日常购物',
           categoryName: '日常购物',
-          categoryIcon: '🛒',
+          categoryIcon: '',
           confidence: 95,
           rule: '智能分类 "日常购物" (置信度 95%)',
           orderId: '4200003143202610252738865252',
@@ -2465,7 +2491,7 @@
             display_name: '微信 · 钱包'
           },
           imgSrc: 'bill_1.jpg',
-          imgTitle: '📱 微信支付 • 世纪华购 (-¥70.00)',
+          imgTitle: '微信支付 • 世纪华购 (-¥70.00)',
           tag: '真实识别'
         },
         {
@@ -2478,7 +2504,7 @@
           account: '钱包',
           category: '日常购物',
           categoryName: '日常购物',
-          categoryIcon: '🛒',
+          categoryIcon: '',
           confidence: 98,
           rule: '规则命中 "淘宝*" -> 日常购物',
           orderId: '4500000566202610259735455478',
@@ -2494,7 +2520,7 @@
             display_name: '微信 · 钱包'
           },
           imgSrc: 'bill_2.jpg',
-          imgTitle: '📷 微信支付 · 淘宝平台商户 (-¥15.77)',
+          imgTitle: '微信支付 · 淘宝平台商户 (-¥15.77)',
           tag: '离线引擎识别'
         },
         {
@@ -2507,7 +2533,7 @@
           account: '钱包',
           category: '餐饮美食',
           categoryName: '餐饮美食',
-          categoryIcon: '🍔',
+          categoryIcon: '',
           confidence: 98,
           rule: '规则命中 "早餐店*" -> 餐饮美食',
           orderId: '4500000527202610268642917303',
@@ -2523,7 +2549,7 @@
             display_name: '微信 · 钱包'
           },
           imgSrc: 'bill_3.jpg',
-          imgTitle: '📷 微信支付 · 辰市早餐店 (-¥4.00)',
+          imgTitle: '微信支付 · 辰市早餐店 (-¥4.00)',
           tag: '离线引擎识别'
         },
         {
@@ -2536,7 +2562,7 @@
           account: '钱包',
           category: '日常购物',
           categoryName: '日常购物',
-          categoryIcon: '🛒',
+          categoryIcon: '',
           confidence: 96,
           rule: '规则命中 "拼多多*" -> 日常购物',
           orderId: '4500000570202610254022722547',
@@ -2552,7 +2578,7 @@
             display_name: '微信 · 钱包'
           },
           imgSrc: 'bill_4.jpg',
-          imgTitle: '📷 微信支付 · 拼多多 (-¥14.75)',
+          imgTitle: '微信支付 · 拼多多 (-¥14.75)',
           tag: '离线引擎识别'
         }
       ];
@@ -2570,7 +2596,7 @@
       const sug = document.getElementById('suggested-icon');
       if (sug) {
         sug.className = "w-4 h-4 inline-block shrink-0";
-        sug.innerHTML = (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[name]) || '📦';
+        sug.innerHTML = (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[name]) || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || '';
       }
       const label = document.getElementById('label-select-draft-category');
       if (label) label.innerText = name;
@@ -2591,7 +2617,7 @@
 
     let currentDraftCategory = {
       name: '餐饮美食',
-      icon: '🍔',
+      icon: (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['餐饮美食']) || '',
       tag: '餐饮'
     };
 
@@ -2619,7 +2645,7 @@
     }
 
     function selectCategory(icon, name, ruleText = '下拉选择') {
-      const catIcon = icon || CATEGORY_ICON_MAP[name] || '🍔';
+      const catIcon = icon || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[name]) || '';
       currentDraftCategory = {
         name: name,
         icon: catIcon,
@@ -2910,7 +2936,7 @@
       if (hasDay) {
         html += `
           <span class="flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-indigo-600/90 text-white border border-indigo-500 shrink-0 shadow-sm">
-            <span>📅 ${activeDayLabel || activeDayFilter}</span>
+            <span class="flex items-center space-x-1"><span class="w-3.5 h-3.5 inline-block text-indigo-400" id="day-focus-cal-icon"></span><span>${activeDayLabel || activeDayFilter}</span></span>
             <button onclick="clearDayFocus()" class="hover:text-red-300 ml-1 font-bold text-xs" title="取消日聚焦">✕</button>
           </span>
         `;
@@ -2938,7 +2964,7 @@
 
       if (hasCats) {
         Array.from(selectedFilterCats).forEach(cat => {
-          const icon = parentCategoryIcons[cat] || '🏷️';
+          const icon = (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[cat]) || window.SYSTEM_SVGS['tag'];
           html += `
             <span class="flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-indigo-900/80 text-indigo-200 border border-indigo-600/60 shrink-0">
               <span>${icon} ${cat}</span>
@@ -3046,7 +3072,7 @@
       // 4. 8大顶级父类中该月存在的分类
       for (const [parentCat, count] of Object.entries(parentCount)) {
         if (parentCat === '工资收入') continue;
-        const icon = parentCategoryIcons[parentCat] || '🏷️';
+        const icon = (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[parentCat]) || window.SYSTEM_SVGS['tag'];
         const isSelected = (currentFilterKey === parentCat || selectedFilterCats.has(parentCat));
         html += `
           <span onclick="filterTransactions('${parentCat}', this)" class="chip-item px-3 py-1.5 rounded-xl ${isSelected ? 'bg-indigo-600 text-white font-medium' : 'bg-slate-800 border border-slate-700 text-slate-300'} shrink-0 cursor-pointer tap-highlight hover:text-white">
@@ -3640,7 +3666,7 @@
       const timeShort = timeOnly && timeOnly.includes(':') ? timeOnly.split(':').slice(0, 2).join(':') : timeOnly;
       const cleanAcc = (txData.account || txData.channel || '微信钱包').replace('支付 · ', '');
       const parentCat = resolveParentCategory(txData.catName);
-      const iconSquircle = window.renderSquircleIcon ? window.renderSquircleIcon(parentCat, 'w-10 h-10', 'p-1.5') : `<div class="w-10 h-10 rounded-2xl bg-slate-700/50 flex items-center justify-center p-1.5">${(window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[parentCat]) || '📦'}</div>`;
+      const iconSquircle = window.renderSquircleIcon ? window.renderSquircleIcon(parentCat, 'w-10 h-10', 'p-1.5') : `<div class="w-10 h-10 rounded-2xl bg-slate-700/50 flex items-center justify-center p-1.5">${(window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS[parentCat]) || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || ''}</div>`;
 
       newTx.innerHTML = `
         <div class="flex items-center space-x-3 min-w-0 flex-1 mr-2.5">
@@ -3723,7 +3749,7 @@
       const channel = document.getElementById('select-channel')?.value || "微信";
       const account = document.getElementById('select-account')?.value || "钱包";
       const catName = currentDraftCategory.name || "餐饮美食";
-      const catIcon = currentDraftCategory.icon || "🍔";
+      const catIcon = currentDraftCategory.icon || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['餐饮美食']) || '';
       const parentCat = resolveParentCategory(catName);
 
       if (amount <= 0 || isNaN(amount)) {
@@ -3976,7 +4002,7 @@
         time: '2026-10-25 13:29:53',
         orderTime: '2026-10-25 13:29:53',
         orderId: '4200003143202610252738865252',
-        imgTitle: '📷 微信支付 · 世纪华购 (-¥70.00)',
+        imgTitle: '微信支付 · 世纪华购 (-¥70.00)',
         tag: '离线引擎识别'
       },
       {
@@ -3996,7 +4022,7 @@
         time: '2026-10-25 18:41:54',
         orderTime: '2026-10-25 18:41:54',
         orderId: '4500000566202610259735455478',
-        imgTitle: '📷 微信支付 · 淘宝平台商户 (-¥15.77)',
+        imgTitle: '微信支付 · 淘宝平台商户 (-¥15.77)',
         tag: '离线引擎识别'
       },
       {
@@ -4016,7 +4042,7 @@
         time: '2026-10-26 08:01:25',
         orderTime: '2026-10-26 08:01:25',
         orderId: '4500000527202610268642917303',
-        imgTitle: '📷 微信支付 · 辰市早餐店 (-¥4.00)',
+        imgTitle: '微信支付 · 辰市早餐店 (-¥4.00)',
         tag: '离线引擎识别'
       },
       {
@@ -4036,7 +4062,7 @@
         time: '2026-10-25 14:19:38',
         orderTime: '2026-10-25 14:19:38',
         orderId: '4500000570202610254022722547',
-        imgTitle: '📷 微信支付 · 拼多多 (-¥14.75)',
+        imgTitle: '微信支付 · 拼多多 (-¥14.75)',
         tag: '离线引擎识别'
       },
       {
@@ -4056,7 +4082,7 @@
         time: '2026-10-26 09:15:22',
         orderTime: '2026-10-26 09:15:22',
         orderId: '4200003198202610260192837465',
-        imgTitle: '📷 微信支付 · 瑞幸咖啡 (-¥26.80)',
+        imgTitle: '微信支付 · 瑞幸咖啡 (-¥26.80)',
         tag: '离线引擎识别'
       },
       {
@@ -4076,7 +4102,7 @@
         time: '2026-10-26 08:30:14',
         orderTime: '2026-10-26 08:30:14',
         orderId: '4200003198202610260987654321',
-        imgTitle: '📷 支付宝 · 杭州地铁 (-¥5.00)',
+        imgTitle: '支付宝 · 杭州地铁 (-¥5.00)',
         tag: '离线引擎识别'
       }
     ];
@@ -4474,7 +4500,7 @@
       // 2. 确定性测试分支 (针对测试套件与演示密钥实现即时安全响应)
       if (apiKey === 'sk-vlm-singwallet-demo-live' || apiKey === 'sk-vlm-test-key-2026' || endpoint.includes('mock-success') || endpoint.includes('test-success')) {
         if (spinner) spinner.classList.add('hidden');
-        if (btnText) btnText.innerText = "⚡ 测试连通性";
+        if (btnText) btnText.innerText = "测试连通性";
         if (testBtn) testBtn.disabled = false;
         const latency = 168;
         const okMsg = `✅ 连通成功：大模型响应正常 (延迟 ${latency} ms)`;
@@ -4484,7 +4510,7 @@
 
       if (apiKey === 'invalid-key' || endpoint.includes('mock-401') || apiKey === 'mock-401') {
         if (spinner) spinner.classList.add('hidden');
-        if (btnText) btnText.innerText = "⚡ 测试连通性";
+        if (btnText) btnText.innerText = "测试连通性";
         if (testBtn) testBtn.disabled = false;
         const failMsg = "❌ 连通失败：401 Unauthorized (API Key 无效或未授权)";
         setTestStatusFailure(failMsg);
@@ -4493,7 +4519,7 @@
 
       if (model === 'invalid-model' || endpoint.includes('mock-404') || model === 'mock-404') {
         if (spinner) spinner.classList.add('hidden');
-        if (btnText) btnText.innerText = "⚡ 测试连通性";
+        if (btnText) btnText.innerText = "测试连通性";
         if (testBtn) testBtn.disabled = false;
         const failMsg = `❌ 连通失败：404 Model Not Found (模型 [${model}] 或端点不存在)`;
         setTestStatusFailure(failMsg);
@@ -4502,7 +4528,7 @@
 
       if (endpoint.includes('mock-timeout')) {
         if (spinner) spinner.classList.add('hidden');
-        if (btnText) btnText.innerText = "⚡ 测试连通性";
+        if (btnText) btnText.innerText = "测试连通性";
         if (testBtn) testBtn.disabled = false;
         const failMsg = "❌ 连通失败：网络超时 (8000ms)";
         setTestStatusFailure(failMsg);
@@ -4579,7 +4605,7 @@
         return { success: false, message: failMsg };
       } finally {
         if (spinner) spinner.classList.add('hidden');
-        if (btnText) btnText.innerText = "⚡ 测试连通性";
+        if (btnText) btnText.innerText = "测试连通性";
         if (testBtn) testBtn.disabled = false;
       }
     }
@@ -5006,13 +5032,13 @@
         payment: paymentObj,
         category: cat,
         categoryName: cat,
-        categoryIcon: parentCategoryIcons[resolveParentCategory(cat)] || '🧾',
+        categoryIcon: parentCategoryIcons[resolveParentCategory(cat)] || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || '',
         confidence: lastUploadedData.engine === 'llm' ? 99 : 97,
         rule: tag,
         orderId: orderId,
         orderTime: orderTime,
         time: orderTime,
-        imgTitle: `📷 上传凭证 (${lastUploadedData.fileName})`,
+        imgTitle: `上传凭证 (${lastUploadedData.fileName})`,
         tag: tag
       });
 
@@ -5161,7 +5187,7 @@
       adjustMonthlyTotals(amount);
 
       const parentCat = resolveParentCategory(cat);
-      const icon = parentCategoryIcons[parentCat] || '📝';
+      const icon = parentCategoryIcons[parentCat] || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || '';
 
       const txDate = txTime.split(' ')[0] || `${currentActiveYear}-${currentActiveMonth}-26`;
       const timeOnly = txTime.includes(' ') ? txTime.split(' ')[1] : '16:30:00';
@@ -5507,7 +5533,7 @@
         `;
         items.forEach(tx => {
             const parentCat = resolveParentCategory(tx.cat);
-            const icon = parentCategoryIcons[parentCat] || tx.icon || '📦';
+            const icon = parentCategoryIcons[parentCat] || tx.icon || (window.FAITHFUL_CAT_SVGS && window.FAITHFUL_CAT_SVGS['其他支出']) || '';
             const timeShort = tx.time && tx.time.includes(':') ? tx.time.split(':').slice(0, 2).join(':') : (tx.time || '');
             const cleanAcc = (tx.channel || '钱包').replace('支付 · ', '');
             html += `
@@ -5912,146 +5938,87 @@
   
     // ================= DOM SVG UPGRADE INITIALIZER =================
     function initSvgUI() {
-      // 1. Bottom Nav Icons
-      const navBtns = document.querySelectorAll('button[onclick*="switchTab"]');
-      navBtns.forEach(btn => {
-        const text = btn.innerText.trim();
-        if (text.includes('流水明细')) {
-          btn.innerHTML = `
-            <div class="w-5 h-5 mx-auto mb-0.5">${window.SYSTEM_SVGS['ledger']}</div>
-            <span class="text-[11px]">流水明细</span>
-          `;
-        } else if (text.includes('草稿箱')) {
-          const dot = btn.querySelector('#draft-nav-dot');
-          const hasDot = dot && dot.style.display !== 'none';
-          btn.innerHTML = `
-            <span id="draft-nav-dot" class="absolute top-2 right-8 w-2 h-2 rounded-full bg-red-500 animate-pulse" style="display: ${hasDot ? 'block' : 'none'};"></span>
-            <div class="w-5 h-5 mx-auto mb-0.5">${window.SYSTEM_SVGS['drafts_inbox']}</div>
-            <span class="text-[11px]">草稿箱</span>
-          `;
-        } else if (text.includes('规则账户')) {
-          btn.innerHTML = `
-            <div class="w-5 h-5 mx-auto mb-0.5">${window.SYSTEM_SVGS['rules_control']}</div>
-            <span class="text-[11px]">规则账户</span>
-          `;
-        }
-      });
+      if (!window.SYSTEM_SVGS || !window.FAITHFUL_CAT_SVGS) return;
 
-      // 2. Top App Bar Filter and Trash Buttons
-      const filterBtn = document.querySelector('button[onclick*="openFilterModal"]');
-      if (filterBtn && window.SYSTEM_SVGS) {
-        filterBtn.innerHTML = `<div class="w-4 h-4">${window.SYSTEM_SVGS['filter']}</div>`;
-      }
-      const trashBtn = document.querySelector('button[onclick*="openTrashDialog"]');
-      if (trashBtn && window.SYSTEM_SVGS) {
-        const hasBadge = document.getElementById('trash-badge') && !document.getElementById('trash-badge').classList.contains('hidden');
-        trashBtn.innerHTML = `
-          <div class="w-4 h-4">${window.SYSTEM_SVGS['trash']}</div>
-          <span id="trash-badge" class="${hasBadge ? '' : 'hidden'} absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400"></span>
-        `;
-      }
+      // 1. Navigation Icons
+      const navTx = document.getElementById('nav-icon-transactions');
+      if (navTx) navTx.innerHTML = window.SYSTEM_SVGS['ledger'];
+      const navDr = document.getElementById('nav-icon-drafts');
+      if (navDr) navDr.innerHTML = window.SYSTEM_SVGS['drafts_inbox'];
+      const navRu = document.getElementById('nav-icon-rules');
+      if (navRu) navRu.innerHTML = window.SYSTEM_SVGS['rules_control'];
 
-      // 3. Status Bar Offline Security Badge
-      const secContainers = document.querySelectorAll('.h-11 div');
-      secContainers.forEach(container => {
-        if (container.children.length === 0 && container.textContent.includes('离线安全')) {
-          container.innerHTML = `
-            <span class="text-[11px] font-mono text-emerald-400">离线安全</span>
-            <div class="w-3.5 h-3.5 inline-block">${window.SYSTEM_SVGS['offline_security']}</div>
-          `;
-        }
-      });
+      // 2. Top App Bar Buttons
+      const filterIcon = document.getElementById('top-bar-filter-icon');
+      if (filterIcon) filterIcon.innerHTML = window.SYSTEM_SVGS['filter'];
+      const trashIcon = document.getElementById('top-bar-trash-icon');
+      if (trashIcon) trashIcon.innerHTML = window.SYSTEM_SVGS['trash'];
 
-      // 4. Floating Quick Add Button
-      const quickRecordBtn = document.querySelector('button[onclick*="openManualAddModal"]');
-      if (quickRecordBtn && window.SYSTEM_SVGS) {
-        quickRecordBtn.innerHTML = `
-          <div class="w-5 h-5 mr-1.5">${window.SYSTEM_SVGS['quick_add']}</div>
-          <span>快记一手</span>
-        `;
-      }
+      // 3. Status Bar Offline Security
+      const secIcon = document.getElementById('status-bar-sec-icon');
+      if (secIcon) secIcon.innerHTML = window.SYSTEM_SVGS['offline_security'];
 
-      // 5. Discard button in Drafts
+      // 4. Quick Add Floating Button
+      const quickPlusIcon = document.getElementById('quick-record-plus-icon');
+      if (quickPlusIcon) quickPlusIcon.innerHTML = window.SYSTEM_SVGS['quick_add'];
+
+      // 5. Empty States & Alerts
+      const emptyLedger = document.getElementById('empty-state-ledger-icon');
+      if (emptyLedger) emptyLedger.innerHTML = window.SYSTEM_SVGS['ledger'];
+      const noMatchSearch = document.getElementById('no-match-search-icon');
+      if (noMatchSearch) noMatchSearch.innerHTML = window.SYSTEM_SVGS['search'];
+      const draftEmptyCheck = document.getElementById('draft-empty-check-icon');
+      if (draftEmptyCheck) draftEmptyCheck.innerHTML = window.SYSTEM_SVGS['check_circle'];
+      const dedupWarn = document.getElementById('dedup-warn-icon');
+      if (dedupWarn) dedupWarn.innerHTML = window.SYSTEM_SVGS['alert'];
+      const orderSecShield = document.getElementById('order-sec-shield-icon');
+      if (orderSecShield) orderSecShield.innerHTML = window.SYSTEM_SVGS['offline_security'];
+      const confGear = document.getElementById('conf-modal-gear-icon');
+      if (confGear) confGear.innerHTML = window.SYSTEM_SVGS['rules_control'];
+      const manualCam = document.getElementById('manual-cam-icon');
+      if (manualCam) manualCam.innerHTML = window.SYSTEM_SVGS['camera'];
+      const manualThumb = document.getElementById('manual-img-thumb-icon');
+      if (manualThumb) manualThumb.innerHTML = window.SYSTEM_SVGS['camera'];
+      const vlmEye = document.getElementById('vlm-eye-btn');
+      if (vlmEye) vlmEye.innerHTML = window.SYSTEM_SVGS['eye'];
+      const resetDrafts = document.getElementById('btn-reset-drafts-icon');
+      if (resetDrafts) resetDrafts.innerHTML = window.SYSTEM_SVGS['refresh'];
+      const rerunRules = document.getElementById('rerun-rules-icon');
+      if (rerunRules) rerunRules.innerHTML = window.SYSTEM_SVGS['refresh'];
+      const guardShield = document.getElementById('guard-shield-svg-icon');
+      if (guardShield) guardShield.innerHTML = window.SYSTEM_SVGS['offline_security'];
+      const dedupToastWarn = document.getElementById('dedup-toast-warn-icon');
+      if (dedupToastWarn) dedupToastWarn.innerHTML = window.SYSTEM_SVGS['alert'];
+      const llmTopErr = document.getElementById('llm-top-error-icon');
+      if (llmTopErr) llmTopErr.innerHTML = `<svg class="w-full h-full" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`;
+      const dayCal = document.getElementById('day-focus-cal-icon');
+      if (dayCal) dayCal.innerHTML = window.SYSTEM_SVGS['calendar'];
+
       const discardBtn = document.getElementById('btn-discard-draft');
-      if (discardBtn && window.SYSTEM_SVGS) {
+      if (discardBtn) {
         discardBtn.innerHTML = `
           <div class="w-3.5 h-3.5 mr-1.5">${window.SYSTEM_SVGS['trash']}</div>
           <span>丢弃</span>
         `;
       }
 
-      // 6. Camera Box in Manual Add
-      const cameraBox = document.querySelector('#manual-add-modal .w-16.h-16, #manual-add-modal .w-12.h-12, #manual-add-modal .w-10.h-10');
-      if (cameraBox && window.SYSTEM_SVGS) {
-        cameraBox.innerHTML = window.SYSTEM_SVGS['camera'];
-      }
+      // 6. Populate all [data-cat-icon] placeholders with pure vector SVG
+      document.querySelectorAll('[data-cat-icon]').forEach(el => {
+        const catName = el.getAttribute('data-cat-icon');
+        const parent = typeof resolveParentCategory === 'function' ? resolveParentCategory(catName) : catName;
+        const svg = window.FAITHFUL_CAT_SVGS[parent] || window.FAITHFUL_CAT_SVGS['其他支出'];
+        el.innerHTML = svg;
+      });
 
-      // 7. Draft Category Dropdown Options (#menu-select-draft-category)
-      const draftCatMenu = document.getElementById('menu-select-draft-category');
-      if (draftCatMenu && window.FAITHFUL_CAT_SVGS) {
-        const catList = ['餐饮美食', '交通出行', '日常购物', '休闲娱乐', '生活缴费', '医疗健康', '其他支出', '工资收入'];
-        let menuHtml = '';
-        const currentSelected = document.getElementById('select-draft-category')?.value || '餐饮美食';
-        catList.forEach(name => {
-          const isSelected = (currentSelected === name);
-          menuHtml += `
-            <div class="custom-dropdown-option rounded-xl ${isSelected ? 'selected' : ''}" tabindex="0" data-value="${name}" onclick="onDraftCategorySelect('', '${name}', event)">
-              <div class="flex items-center space-x-2.5">
-                <div class="w-4 h-4 shrink-0">${window.FAITHFUL_CAT_SVGS[name]}</div>
-                <span class="opt-text truncate font-medium text-xs">${name}</span>
-              </div>
-              <span class="opt-check">✓</span>
-            </div>
-          `;
-        });
-        draftCatMenu.innerHTML = menuHtml;
-      }
-
-      // 8. Category Modal Grid (#category-modal-grid)
-      const catModalGrid = document.getElementById('category-modal-grid');
-      if (catModalGrid && window.FAITHFUL_CAT_SVGS) {
-        const pickerCats = ['餐饮美食', '交通出行', '日常购物', '休闲娱乐', '生活缴费', '医疗健康', '其他支出', '工资收入'];
-        let gridHtml = '';
-        pickerCats.forEach(name => {
-          gridHtml += `
-            <div data-category-name="${name}" onclick="selectCategory('', '${name}', '快捷网格选择')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
-              <div class="w-9 h-9 rounded-xl bg-slate-900/80 border border-indigo-400/20 flex items-center justify-center p-1 mb-1.5 shadow-inner">
-                ${window.FAITHFUL_CAT_SVGS[name]}
-              </div>
-              <span class="font-medium text-slate-200 text-[11px] block whitespace-nowrap">${name}</span>
-            </div>
-          `;
-        });
-        catModalGrid.innerHTML = gridHtml;
-      }
-
-      // 9. Filter Modal Categories (#filter-modal-cats)
-      const filterModalCats = document.getElementById('filter-modal-cats');
-      if (filterModalCats && window.FAITHFUL_CAT_SVGS) {
-        const catNames = ['餐饮美食', '日常购物', '交通出行', '休闲娱乐', '生活缴费', '医疗健康', '其他支出'];
-        let catsHtml = `
-          <span onclick="toggleModalCat(this, 'all')" class="modal-cat-tag active-tag px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight">全部</span>
-        `;
-        catNames.forEach(c => {
-          catsHtml += `
-            <span onclick="toggleModalCat(this, '${c}')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1.5">
-              <span class="w-3.5 h-3.5 inline-block">${window.FAITHFUL_CAT_SVGS[c]}</span>
-              <span>${c}</span>
-            </span>
-          `;
-        });
-        filterModalCats.innerHTML = catsHtml;
-      }
-
-      // 10. Suggested Icon in Draft View
+      // 7. Suggested Icon in Draft View
       const curCat = document.getElementById('select-draft-category')?.value || '餐饮美食';
       const sugIcon = document.getElementById('suggested-icon');
-      if (sugIcon && window.FAITHFUL_CAT_SVGS) {
+      if (sugIcon) {
         sugIcon.className = "w-4 h-4 inline-block shrink-0";
         sugIcon.innerHTML = window.FAITHFUL_CAT_SVGS[curCat] || window.FAITHFUL_CAT_SVGS['餐饮美食'];
       }
 
-      // 11. Insert Demo Transaction (China Railway) if list is empty
+      // 8. Insert Demo Transaction (China Railway) if list is empty
       const txList = document.getElementById('transactions-list');
       if (txList && txList.querySelectorAll('.tx-item').length === 0) {
         insertTransactionToList({
@@ -6075,9 +6042,9 @@
     }
 
     // Auto-run initSvgUI on DOM ready and load
-    document.addEventListener('DOMContentLoaded', () => { setTimeout(initSvgUI, 30); });
-    window.addEventListener('load', () => { setTimeout(initSvgUI, 50); });
-</script>
+    document.addEventListener('DOMContentLoaded', () => { setTimeout(initSvgUI, 10); });
+    window.addEventListener('load', () => { setTimeout(initSvgUI, 30); });
+  </script>
 
 
 
