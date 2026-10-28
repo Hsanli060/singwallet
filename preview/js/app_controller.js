@@ -4492,7 +4492,10 @@
 
   // 小米 HyperOS 下拉控制中心「闪电记账」快捷开关触发响应
   window.onTileQuickRecordTriggered = function() {
-    const fileInput = document.getElementById('manual-image-input');
+    if (typeof openManualAddModal === 'function') {
+      openManualAddModal();
+    }
+    const fileInput = document.getElementById('manual-upload-input') || document.getElementById('manual-image-input');
     if (fileInput) {
       fileInput.click();
     } else if (typeof showToast === 'function') {
