@@ -393,9 +393,24 @@
     ring: none !important;
   }
 
-  /* 隐藏模拟器假状态栏与假刘海，真机自带有原生系统状态栏 */
+  /* 移动端与原生宿主：系统状态栏自适应占位安全区，留出 44px 舒适物理顶距，杜绝系统时间/电量与标题文字重叠拥挤 */
   #simulator-status-bar,
   .max-w-\[410px\] > .h-11 {
+    display: block !important;
+    height: 44px !important;
+    height: max(env(safe-area-inset-top, 0px), 44px) !important;
+    min-height: 44px !important;
+    background-color: #020617 !important;
+    border-bottom: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    flex-shrink: 0 !important;
+    width: 100% !important;
+    z-index: 20 !important;
+  }
+
+  /* 隐藏模拟器内部的假刘海、假时间(09:41)、假离线指示，仅保留纯黑安全占位区承托真机系统状态栏 */
+  #simulator-status-bar > * {
     display: none !important;
   }
 
@@ -407,64 +422,82 @@
     padding: 0 !important;
   }
 
-  /* 沉浸式视口铺满 */
+  /* 沉浸式视口自适应占满剩余高度，杜绝双滚动条与上下截断 */
   #screen-container {
-    height: 100dvh !important;
+    flex: 1 1 0% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
   }
 
-  /* 底部导航栏：移动端标准黄金比例 50px，纯黑底色与全面屏手势条无缝融合 */
+  /* 移动端三大核心页面顶部 Header 呼吸感统一定义，避免顶边局促拥挤 */
+  #view-transactions > .shrink-0 > div:first-child,
+  #view-drafts > div:first-child,
+  #view-rules-accounts > div:first-child {
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+    min-height: 44px !important;
+  }
+
+  /* 底部导航栏：严格对标微信等主流国民级 App 黄金比例规范 (56px 内容高度 + 全面屏手势条安全区，总高约 74px~76px) */
   #bottom-nav-bar {
     position: fixed !important;
     bottom: 0 !important;
     left: 0 !important;
     right: 0 !important;
-    height: 50px !important;
-    min-height: 50px !important;
-    max-height: 50px !important;
-    background-color: #000000 !important;
-    border-top: 1px solid rgba(30, 41, 59, 0.75) !important;
+    height: auto !important;
+    min-height: calc(56px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
+    max-height: none !important;
+    background-color: #020617 !important;
+    border-top: 1px solid rgba(30, 41, 59, 0.8) !important;
     display: grid !important;
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-    align-items: center !important;
-    padding: 4px 0 5px 0 !important;
+    align-items: start !important;
+    padding-top: 7px !important;
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 18px) !important;
     margin: 0 !important;
     z-index: 30 !important;
   }
 
   #bottom-nav-bar > button {
-    height: 100% !important;
+    height: 48px !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
     justify-content: center !important;
-    gap: 3px !important;
-    padding: 0 !important;
+    gap: 3.5px !important;
+    padding: 2px 0 !important;
     margin: 0 !important;
-    line-height: 1 !important;
   }
 
   #bottom-nav-bar > button > div[id^="nav-icon-"] {
-    width: 20px !important;
-    height: 20px !important;
+    width: 23px !important;
+    height: 23px !important;
     margin: 0 !important;
   }
 
   #bottom-nav-bar > button > span:last-child {
     font-size: 11.5px !important;
+    font-weight: 500 !important;
     line-height: 1.15 !important;
     padding: 0 !important;
     margin: 0 !important;
   }
 
   #nav-draft-badge {
-    top: 3px !important;
-    right: calc(50% - 22px) !important;
+    top: 4px !important;
+    right: calc(50% - 24px) !important;
   }
 
-  /* 快速记一手操作悬浮栏：全透明悬浮胶囊 */
+  #draft-nav-dot {
+    top: 3px !important;
+    right: calc(50% - 18px) !important;
+  }
+
+  /* 快速记一手操作悬浮栏：精准浮于微信比例底部导航栏上方 14px，间隙通透不拥挤 */
   #tx-quick-record-bar {
     position: fixed !important;
-    bottom: 60px !important;
+    bottom: calc(56px + max(env(safe-area-inset-bottom, 0px), 18px) + 14px) !important;
     left: 0 !important;
     right: 0 !important;
     padding: 0 2.5rem !important;
@@ -485,10 +518,10 @@
     pointer-events: auto !important;
     width: 100% !important;
     max-width: 240px !important;
-    height: 41px !important;
-    min-height: 41px !important;
+    height: 42px !important;
+    min-height: 42px !important;
     padding: 0 1.25rem !important;
-    border-radius: 13.5px !important;
+    border-radius: 14px !important;
     font-size: 13.5px !important;
     box-shadow: 0 6px 20px rgba(79, 70, 229, 0.45) !important;
   }
@@ -502,23 +535,23 @@
   }
 
   #view-transactions {
-    padding-bottom: 50px !important; /* 严格对齐 50px 底部导航栏顶边，彻底消除账单卡片半空截断死区 */
+    padding-bottom: calc(56px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
   }
 
-  /* 滚动列表底部留白，确保滑到底部时最后一笔账单完整浮于「快记一手」按钮上方 */
+  /* 滚动列表底部留白，确保滑到底部时最后一笔账单完整浮于「快记一手」按钮上方，毫无遮挡 */
   #tx-scroll-viewport {
-    padding-bottom: 76px !important;
+    padding-bottom: calc(125px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
   }
 
   #view-drafts {
-    padding-bottom: 74px !important;
+    padding-bottom: calc(75px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
   }
 
-  /* AI 配置中心：横向适度微收，纵向精致纤巧 (35px 黄金高度) */
+  /* AI 配置中心：横向适度微收，纵向精致纤巧 */
   #view-rules-accounts {
     padding-left: 1.65rem !important;
     padding-right: 1.65rem !important;
-    padding-bottom: 76px !important;
+    padding-bottom: calc(75px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
   }
 
   #view-rules-accounts input:not([type="hidden"]):not([type="file"]):not([type="checkbox"]),
@@ -645,8 +678,27 @@ body.native-app #mobile-device-shell {
   ring: none !important;
 }
 body.native-app #simulator-status-bar {
+  display: block !important;
+  height: 44px !important;
+  height: max(env(safe-area-inset-top, 0px), 44px) !important;
+  min-height: 44px !important;
+  background-color: #020617 !important;
+  border-bottom: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  flex-shrink: 0 !important;
+  width: 100% !important;
+  z-index: 20 !important;
+}
+body.native-app #simulator-status-bar > * {
   display: none !important;
 }
 body.native-app #simulator-home-indicator {
   display: none !important;
+}
+body.native-app #screen-container {
+  flex: 1 1 0% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
 }
