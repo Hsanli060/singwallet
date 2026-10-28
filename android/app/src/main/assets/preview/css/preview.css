@@ -74,18 +74,19 @@
   display: grid !important;
   grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   align-items: center !important;
-  padding: 8px 0 10px 0 !important;
+  padding: 0 !important;
   z-index: 20 !important;
 }
 
 #bottom-nav-bar > button {
-  height: 56px !important;
+  height: 100% !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
-  justify-content: center !important;
+  justify-content: flex-start !important;
   gap: 4px !important;
-  padding: 2px 0 !important;
+  padding-top: 10px !important;
+  padding-bottom: 0 !important;
   margin: 0 !important;
 }
 
@@ -102,12 +103,12 @@
 }
 
 #nav-draft-badge {
-  top: 5px !important;
+  top: 7px !important;
   right: calc(50% - 25px) !important;
 }
 
 #draft-nav-dot {
-  top: 4px !important;
+  top: 8px !important;
   right: calc(50% - 19px) !important;
 }
 
@@ -511,20 +512,21 @@
     display: grid !important;
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
     align-items: start !important;
-    padding-top: 10px !important;
+    padding-top: 0 !important;
     padding-bottom: max(env(safe-area-inset-bottom, 0px), 18px) !important;
     margin: 0 !important;
     z-index: 30 !important;
   }
 
   #bottom-nav-bar > button {
-    height: 56px !important;
+    height: 64px !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
-    justify-content: center !important;
+    justify-content: flex-start !important;
     gap: 4px !important;
-    padding: 2px 0 !important;
+    padding-top: 10px !important;
+    padding-bottom: 0 !important;
     margin: 0 !important;
   }
 
@@ -774,20 +776,21 @@ body.native-app #bottom-nav-bar {
   display: grid !important;
   grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   align-items: start !important;
-  padding-top: 10px !important;
+  padding-top: 0 !important;
   padding-bottom: max(env(safe-area-inset-bottom, 0px), 18px) !important;
   margin: 0 !important;
   z-index: 30 !important;
 }
 
 body.native-app #bottom-nav-bar > button {
-  height: 56px !important;
+  height: 64px !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
-  justify-content: center !important;
+  justify-content: flex-start !important;
   gap: 4px !important;
-  padding: 2px 0 !important;
+  padding-top: 10px !important;
+  padding-bottom: 0 !important;
   margin: 0 !important;
 }
 
