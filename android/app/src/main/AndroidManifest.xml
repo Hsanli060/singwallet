@@ -59,6 +59,20 @@
             </intent-filter>
         </service>
 
+        <!-- SingWallet 无感抓屏无障碍服务 (Android 11+ takeScreenshot API) -->
+        <service
+            android:name=".services.SingWalletAccessibilityService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:label="@string/accessibility_service_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

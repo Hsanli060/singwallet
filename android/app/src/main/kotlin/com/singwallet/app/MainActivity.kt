@@ -32,6 +32,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.provider.Settings
 import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -40,7 +41,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.singwallet.app.services.QuickRecordTileService
+import com.singwallet.app.services.SingWalletAccessibilityService
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.InputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -61,13 +64,38 @@ class MainActivity : ComponentActivity() {
         private const val TAG = "SingWalletActivity"
         private const val REQUEST_CODE_MEDIA_PERMISSION = 10042
         private const val ASSET_ENTRY_URL = "file:///android_asset/singwallet_preview.html"
+
+        @Volatile
+        private var instance: MainActivity? = null
+
+        fun getInstance(): MainActivity? = instance
+
+        /**
+         * 供 QuickRecordTileService 在后台捕获屏幕快照后安全派发至 WebView
+         */
+        fun dispatchCapturedScreenshot(dataUrl: String, source: String = "lightning-tile") {
+            val act = instance
+            if (act != null) {
+                act.mainHandler.post {
+                    if (act.isPageLoaded) {
+                        act.dispatchScreenshotToWebView(dataUrl, "", source)
+                    } else {
+                        synchronized(act.pendingScreenshots) {
+                            act.pendingScreenshots.add(Triple(dataUrl, "", source))
+                        }
+                    }
+                }
+            } else {
+                Log.i(TAG, "MainActivity is not in memory; snapshot preserved in disk queue")
+            }
+        }
     }
 
     private var webView: WebView? = null
     private var screenshotObserver: ScreenshotContentObserver? = null
     private var isPageLoaded = false
     private var pendingTileTrigger = false
-    private val pendingScreenshots = mutableListOf<Pair<String, String>>() // (dataUrl, uriString)
+    private val pendingScreenshots = mutableListOf<Triple<String, String, String>>() // (dataUrl, uriString, source)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ingestionExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
@@ -86,6 +114,7 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        instance = this
 
         // 注册全局异常捕获，确保即使有任何极端异常也能输出 Logcat 并弹窗提示，绝不静默闪退
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
@@ -132,7 +161,10 @@ class MainActivity : ComponentActivity() {
             // 6. 处理可能带入的启动 Intent (控制中心快捷瓷贴 / 分享意图)
             handleIntent(intent)
 
-            // 7. 延迟 1.5 秒在界面完全渲染就绪后，静默检测并引导相册读取权限
+            // 7. 扫描未处理的离线闪电抓屏任务
+            scanPendingLightningCaptures()
+
+            // 8. 延迟 1.5 秒在界面完全渲染就绪后，静默检测并引导相册读取权限
             ensureMediaPermissionDelayed()
         } catch (t: Throwable) {
             Log.e(TAG, "Error in onCreate: ${t.message}", t)
@@ -214,8 +246,8 @@ class MainActivity : ComponentActivity() {
 
                 // 刷新暂存的待处理抓屏任务
                 synchronized(pendingScreenshots) {
-                    for ((dataUrl, uriString) in pendingScreenshots) {
-                        dispatchScreenshotToWebView(dataUrl, uriString)
+                    for ((dataUrl, uriString, source) in pendingScreenshots) {
+                        dispatchScreenshotToWebView(dataUrl, uriString, source)
                     }
                     pendingScreenshots.clear()
                 }
@@ -356,10 +388,10 @@ class MainActivity : ComponentActivity() {
 
                         mainHandler.post {
                             if (isPageLoaded) {
-                                dispatchScreenshotToWebView(dataUrl, uri.toString())
+                                dispatchScreenshotToWebView(dataUrl, uri.toString(), "backtap-screenshot")
                             } else {
                                 synchronized(pendingScreenshots) {
-                                    pendingScreenshots.add(Pair(dataUrl, uri.toString()))
+                                    pendingScreenshots.add(Triple(dataUrl, uri.toString(), "backtap-screenshot"))
                                 }
                             }
                         }
@@ -371,14 +403,52 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun dispatchScreenshotToWebView(dataUrl: String, uriString: String) {
+    private fun scanPendingLightningCaptures() {
+        if (ingestionExecutor.isShutdown) return
+        ingestionExecutor.execute {
+            try {
+                val dir = File(filesDir, "pending_lightning_captures")
+                if (dir.exists() && dir.isDirectory) {
+                    val files = dir.listFiles { f -> f.extension.equals("jpg", ignoreCase = true) }
+                    files?.sortBy { it.lastModified() }
+                    files?.forEach { file ->
+                        try {
+                            val bytes = file.readBytes()
+                            val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                            val dataUrl = "data:image/jpeg;base64,$base64"
+                            mainHandler.post {
+                                if (isPageLoaded) {
+                                    dispatchScreenshotToWebView(dataUrl, "", "lightning-tile")
+                                } else {
+                                    synchronized(pendingScreenshots) {
+                                        pendingScreenshots.add(Triple(dataUrl, "", "lightning-tile"))
+                                    }
+                                }
+                            }
+                            file.delete()
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to ingest cached lightning capture ${file.name}: ${e.message}")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "scanPendingLightningCaptures error: ${e.message}")
+            }
+        }
+    }
+
+    internal fun dispatchScreenshotToWebView(
+        dataUrl: String,
+        uriString: String,
+        source: String = "backtap-screenshot"
+    ) {
         val escapedDataUrl = dataUrl.replace("'", "\\'")
         val escapedUri = uriString.replace("'", "\\'")
         val script = """
             if (typeof window.handleShortcutCapturedItem === 'function') {
                 window.handleShortcutCapturedItem({
                     dataUrl: '$escapedDataUrl',
-                    source: 'backtap-screenshot',
+                    source: '$source',
                     uri: '$escapedUri'
                 });
             }
@@ -443,6 +513,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        if (instance === this) {
+            instance = null
+        }
         unregisterScreenshotObserver()
         mainHandler.removeCallbacksAndMessages(null)
         ingestionExecutor.shutdownNow()
@@ -517,6 +590,28 @@ class MainActivity : ComponentActivity() {
         fun triggerQuickRecord() {
             activity.runOnUiThread {
                 activity.triggerQuickRecordInWeb()
+            }
+        }
+
+        @JavascriptInterface
+        fun isAccessibilityServiceEnabled(): Boolean {
+            return SingWalletAccessibilityService.isServiceRunning() ||
+                   SingWalletAccessibilityService.checkAccessibilityEnabled(activity)
+        }
+
+        @JavascriptInterface
+        fun openAccessibilitySettings() {
+            activity.runOnUiThread {
+                try {
+                    val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    activity.startActivity(intent)
+                    Toast.makeText(activity, "请找到「SingWallet 闪电记账」，开启无障碍快捷抓屏服务", Toast.LENGTH_LONG).show()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to open accessibility settings: ${e.message}", e)
+                    Toast.makeText(activity, "无法打开系统设置，请手动开启无障碍快捷抓屏服务", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }

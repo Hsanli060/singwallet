@@ -110,6 +110,7 @@
       if (rulesView) rulesView.classList.remove('hidden');
       if (btnRu) btnRu.className = navActiveClass;
       if (typeof syncVlmConfigToUI === 'function') syncVlmConfigToUI();
+      if (typeof checkA11yServiceStatus === 'function') checkA11yServiceStatus();
     }
   }
 
@@ -4174,6 +4175,10 @@
     if (typeof updateBackupStatsLabel === 'function') {
       updateBackupStatsLabel();
     }
+    // 5.3 Check Accessibility quick capture service status
+    if (typeof checkA11yServiceStatus === 'function') {
+      checkA11yServiceStatus();
+    }
     // 6. Supplement data-cat-icon on static items in HTML
     document.querySelectorAll('#transactions-list .tx-item, #tx-list-container .tx-item').forEach(item => {
       const cat = item.getAttribute('data-parent') || item.getAttribute('data-cat') || item.getAttribute('data-category') || '其他支出';
@@ -4274,18 +4279,23 @@
   async function handleShortcutCapturedItem(item) {
     if (!item || !item.dataUrl) return;
     const isBackTap = item.source === 'backtap-screenshot';
+    const isLightning = item.source === 'lightning-tile';
     try {
-      const filePrefix = isBackTap ? '背部轻敲截屏_' : '快捷指令抓屏_';
+      const filePrefix = isLightning ? '闪电抓屏_' : (isBackTap ? '背部轻敲截屏_' : '快捷指令抓屏_');
       const file = dataURLtoFile(item.dataUrl, filePrefix + Date.now() + '.png');
       if (typeof window.handleManualScreenshotUpload === 'function') {
         const fakeEvent = { target: { files: [file], value: '' } };
         await window.handleManualScreenshotUpload(fakeEvent);
-        if (isBackTap && typeof showToast === 'function') {
-          showToast('检测到背部轻敲截屏，正在后台调用大模型识别...');
+        if (typeof showToast === 'function') {
+          if (isLightning) {
+            showToast('⚡ 闪电记账已捕获账单画面，正在后台调用大模型解析...');
+          } else if (isBackTap) {
+            showToast('检测到背部轻敲截屏，正在后台调用大模型识别...');
+          }
         }
       } else {
         const localFallback = (typeof parseBillWithLocalEngine === 'function') ? parseBillWithLocalEngine(file) : {
-          merchant: '快捷抓屏商户',
+          merchant: isLightning ? '闪电抓屏商户' : '快捷抓屏商户',
           amount: 25.8,
           channel: '微信',
           account: '钱包',
@@ -4297,14 +4307,14 @@
           id: taskId,
           ...localFallback,
           confidence: 99,
-          tag: isBackTap ? '背部轻敲智能识别' : '快捷指令智能识别'
+          tag: isLightning ? '闪电抓屏智能识别' : (isBackTap ? '背部轻敲智能识别' : '快捷指令智能识别')
         };
         if (!window.draftQueue) window.draftQueue = [];
         window.draftQueue.unshift(draft);
         if (typeof renderDraftQueue === 'function') renderDraftQueue();
         if (typeof updateDraftBadge === 'function') updateDraftBadge();
         if (typeof showToast === 'function') {
-          showToast(isBackTap ? '检测到背部轻敲截屏，正在后台调用大模型识别...' : '已自动识别快捷抓屏账单并存入草稿箱');
+          showToast(isLightning ? '⚡ 闪电记账已捕获账单，已存入草稿箱' : (isBackTap ? '检测到背部轻敲截屏，正在后台调用大模型识别...' : '已自动识别快捷抓屏账单并存入草稿箱'));
         }
       }
 
@@ -4461,11 +4471,81 @@
     document.body.removeChild(ta);
   }
 
+  let mockA11yEnabled = true;
+
+  function checkA11yServiceStatus() {
+    const badge = document.getElementById('a11y-service-status-badge');
+    const btnText = document.getElementById('a11y-btn-text');
+    const btn = document.getElementById('btn-toggle-a11y-service');
+    if (!badge) return false;
+
+    let isEnabled = false;
+    if (window.AndroidBridge && typeof window.AndroidBridge.isAccessibilityServiceEnabled === 'function') {
+      try {
+        isEnabled = window.AndroidBridge.isAccessibilityServiceEnabled();
+      } catch (e) {
+        console.warn('isAccessibilityServiceEnabled error:', e);
+      }
+    } else {
+      isEnabled = mockA11yEnabled;
+    }
+
+    if (isEnabled) {
+      badge.textContent = '服务已就绪';
+      badge.className = 'text-[11px] text-emerald-400 font-mono whitespace-nowrap';
+      if (btnText) btnText.textContent = '✅ 无障碍服务运行正常 (点击重检)';
+      if (btn) {
+        btn.className = 'w-full py-2 px-3 rounded-xl bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-500/40 hover:border-emerald-500 text-emerald-300 text-xs font-medium transition-all flex items-center justify-center gap-1.5 tap-highlight';
+      }
+    } else {
+      badge.textContent = '未授权开启';
+      badge.className = 'text-[11px] text-amber-400 font-mono whitespace-nowrap';
+      if (btnText) btnText.textContent = '⚡ 前往开启无障碍快捷抓屏服务';
+      if (btn) {
+        btn.className = 'w-full py-2 px-3 rounded-xl bg-indigo-600/25 hover:bg-indigo-600/40 border border-indigo-500/50 hover:border-indigo-400 text-indigo-200 text-xs font-medium transition-all flex items-center justify-center gap-1.5 tap-highlight';
+      }
+    }
+    return isEnabled;
+  }
+
+  function handleA11yServiceAuth() {
+    if (window.AndroidBridge && typeof window.AndroidBridge.openAccessibilitySettings === 'function') {
+      try {
+        window.AndroidBridge.openAccessibilitySettings();
+        let checkCount = 0;
+        const pollTimer = setInterval(() => {
+          checkCount++;
+          const ready = checkA11yServiceStatus();
+          if (ready || checkCount > 10) {
+            clearInterval(pollTimer);
+          }
+        }, 1000);
+      } catch (e) {
+        console.warn('openAccessibilitySettings error:', e);
+      }
+    } else {
+      mockA11yEnabled = !mockA11yEnabled;
+      const ready = checkA11yServiceStatus();
+      if (typeof showToast === 'function') {
+        showToast(ready ? '⚡ 无障碍快捷抓屏服务已就绪 (原生端支持直接无感抓屏)' : '已模拟切换为未授权状态，点击可模拟开启');
+      }
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('focus', () => {
+      checkA11yServiceStatus();
+    });
+  }
+
   window.pollShortcutQueueOnce = pollShortcutQueueOnce;
   window.startShortcutPolling = startShortcutPolling;
   window.openBackTapGuideModal = openBackTapGuideModal;
   window.closeBackTapGuideModal = closeBackTapGuideModal;
   window.toggleBackTapWatcher = toggleBackTapWatcher;
+  window.checkA11yServiceStatus = checkA11yServiceStatus;
+  window.handleA11yServiceAuth = handleA11yServiceAuth;
+  window.handleShortcutCapturedItem = handleShortcutCapturedItem;
 
   // 原生 Android 返回手势拦截：优先关闭上层模态框
   window.handleAndroidBackPress = function() {

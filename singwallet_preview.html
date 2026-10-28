@@ -632,6 +632,26 @@
               <span>3秒抓屏测试</span>
             </button>
           </div>
+
+          <!-- 闪电记账 · 无障碍后台无感抓屏服务 (Android 11+ 官方零相册垃圾) -->
+          <div class="pt-2 border-t border-slate-700/60 space-y-2">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-1.5">
+                <span class="text-amber-400 font-bold text-xs">⚡</span>
+                <span class="font-bold text-xs text-slate-200 whitespace-nowrap">闪电记账无障碍抓屏</span>
+                <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-medium">免跳转·零垃圾</span>
+              </div>
+              <span id="a11y-service-status-badge" class="text-[11px] text-emerald-400 font-mono whitespace-nowrap">服务已就绪</span>
+            </div>
+            <p class="text-[11px] text-slate-400 leading-relaxed">
+              微信/支付宝付款页下拉控制中心轻点「闪电记账」，后台 180ms 毫秒级冻结当前账单，不切应用、不存相册，全自动无感解析。
+            </p>
+            <div class="pt-0.5">
+              <button type="button" id="btn-toggle-a11y-service" onclick="handleA11yServiceAuth()" class="w-full py-2 px-3 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 hover:border-indigo-500 text-indigo-200 text-xs font-medium transition-all flex items-center justify-center gap-1.5 tap-highlight">
+                <span id="a11y-btn-text">一键授权 / 检查无障碍服务</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- ================= 账单分类管理 (Category Manager) 模块卡片 ================= -->

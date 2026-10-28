@@ -2054,6 +2054,18 @@ function runAllTestsSuite() {
     toggleBackTapWatcher(true);
     assert(btStatusLabel.innerText.includes('截屏监听中'), "Group 39: toggleBackTapWatcher(true) 状态恢复为 截屏监听中");
 
+    // 1.1.1 闪电记账无障碍后台抓屏服务状态与一键跳转开启引导断言
+    const a11yBadge = document.getElementById('a11y-service-status-badge');
+    assert(a11yBadge !== null, "Group 39: #a11y-service-status-badge exists");
+    const a11yBtn = document.getElementById('btn-toggle-a11y-service');
+    assert(a11yBtn !== null, "Group 39: #btn-toggle-a11y-service exists");
+    assert(typeof window.checkA11yServiceStatus === 'function', "Group 39: window.checkA11yServiceStatus is function");
+    assert(typeof window.handleA11yServiceAuth === 'function', "Group 39: window.handleA11yServiceAuth is function");
+    assert(typeof window.handleShortcutCapturedItem === 'function', "Group 39: window.handleShortcutCapturedItem is function");
+    const a11yInitialReady = window.checkA11yServiceStatus();
+    assert(typeof a11yInitialReady === 'boolean', "Group 39: checkA11yServiceStatus returns boolean");
+    assert(a11yBadge.innerText.includes('服务已就绪') || a11yBadge.innerText.includes('未授权开启'), "Group 39: a11y status badge shows readable status");
+
     // 1.2 底部导航栏标准高度与快记一手高宽比
     const btmBar = document.getElementById('bottom-nav-bar');
     assert(btmBar !== null && btmBar.className.includes('h-[52px]'), "Group 39: #bottom-nav-bar 为 52px 黄金高度比例");
