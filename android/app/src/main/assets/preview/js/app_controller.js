@@ -4502,7 +4502,7 @@
 
   // 原生移动端宿主环境检测与全屏自适应注入
   if (typeof window !== 'undefined') {
-    if (window.AndroidBridge || (navigator.userAgent && navigator.userAgent.includes('SingWalletAndroid')) || window.innerWidth <= 640) {
+    if (window.AndroidBridge || (navigator.userAgent && navigator.userAgent.includes('SingWalletAndroid')) || window.innerWidth <= 640 || (window.location && window.location.search && window.location.search.includes('mobile=1'))) {
       if (document.body) {
         document.body.classList.add('native-app');
       } else {

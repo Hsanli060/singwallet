@@ -701,4 +701,83 @@ body.native-app #screen-container {
   height: auto !important;
   min-height: 0 !important;
   overflow: hidden !important;
+}
+body.native-app #bottom-nav-bar {
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: auto !important;
+  min-height: calc(56px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
+  max-height: none !important;
+  background-color: #020617 !important;
+  border-top: 1px solid rgba(30, 41, 59, 0.8) !important;
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  align-items: start !important;
+  padding-top: 7px !important;
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 18px) !important;
+  margin: 0 !important;
+  z-index: 30 !important;
 }
+
+body.native-app #bottom-nav-bar > button {
+  height: 48px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 3.5px !important;
+  padding: 2px 0 !important;
+  margin: 0 !important;
+}
+
+body.native-app #bottom-nav-bar > button > div[id^="nav-icon-"] {
+  width: 23px !important;
+  height: 23px !important;
+  margin: 0 !important;
+}
+
+body.native-app #bottom-nav-bar > button > span:last-child {
+  font-size: 11.5px !important;
+  font-weight: 500 !important;
+  line-height: 1.15 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+body.native-app #nav-draft-badge {
+  top: 4px !important;
+  right: calc(50% - 24px) !important;
+}
+
+body.native-app #draft-nav-dot {
+  top: 3px !important;
+  right: calc(50% - 18px) !important;
+}
+
+body.native-app #tx-quick-record-bar {
+  position: fixed !important;
+  bottom: calc(56px + max(env(safe-area-inset-bottom, 0px), 18px) + 14px) !important;
+}
+
+body.native-app #view-transactions {
+  padding-bottom: calc(56px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
+}
+
+body.native-app #tx-scroll-viewport {
+  padding-bottom: calc(125px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
+}
+
+body.native-app #view-drafts,
+body.native-app #view-rules-accounts {
+  padding-bottom: calc(75px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
+}
+
+body.native-app #view-transactions > .shrink-0 > div:first-child,
+body.native-app #view-drafts > div:first-child,
+body.native-app #view-rules-accounts > div:first-child {
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+  min-height: 44px !important;
+}
