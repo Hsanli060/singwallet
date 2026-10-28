@@ -456,9 +456,9 @@
   #simulator-status-bar,
   .max-w-\[410px\] > .h-11 {
     display: block !important;
-    height: 44px !important;
-    height: max(env(safe-area-inset-top, 0px), 44px) !important;
-    min-height: 44px !important;
+    height: 48px !important;
+    height: max(env(safe-area-inset-top, 0px), 48px) !important;
+    min-height: 48px !important;
     background-color: #020617 !important;
     border-bottom: none !important;
     padding: 0 !important;
@@ -493,9 +493,9 @@
   #view-transactions > .shrink-0 > div:first-child,
   #view-drafts > div:first-child,
   #view-rules-accounts > div:first-child {
-    padding-top: 6px !important;
-    padding-bottom: 6px !important;
-    min-height: 44px !important;
+    padding-top: 14px !important;
+    padding-bottom: 8px !important;
+    min-height: 52px !important;
   }
 
   /* 底部导航栏：严格对标微信等主流国民级 App 黄金比例规范 (56px 内容高度 + 全面屏手势条安全区，总高约 74px~76px) */
@@ -739,9 +739,9 @@ body.native-app #mobile-device-shell {
 }
 body.native-app #simulator-status-bar {
   display: block !important;
-  height: 44px !important;
-  height: max(env(safe-area-inset-top, 0px), 44px) !important;
-  min-height: 44px !important;
+  height: 48px !important;
+  height: max(env(safe-area-inset-top, 0px), 48px) !important;
+  min-height: 48px !important;
   background-color: #020617 !important;
   border-bottom: none !important;
   padding: 0 !important;
@@ -839,8 +839,8 @@ body.native-app #view-rules-accounts {
 body.native-app #view-transactions > .shrink-0 > div:first-child,
 body.native-app #view-drafts > div:first-child,
 body.native-app #view-rules-accounts > div:first-child {
-  padding-top: 6px !important;
-  padding-bottom: 6px !important;
-  min-height: 44px !important;
+  padding-top: 14px !important;
+  padding-bottom: 8px !important;
+  min-height: 52px !important;
 }
 
