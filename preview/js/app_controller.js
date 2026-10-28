@@ -4307,6 +4307,17 @@
           showToast(isBackTap ? '检测到背部轻敲截屏，正在后台调用大模型识别...' : '已自动识别快捷抓屏账单并存入草稿箱');
         }
       }
+
+      // 若宿主为 Android 原生容器且携带 uri，解析完成后自动清理相册临时截屏，杜绝相册垃圾堆积
+      if (item.uri && window.AndroidBridge && typeof window.AndroidBridge.deleteScreenshot === 'function') {
+        setTimeout(() => {
+          try {
+            window.AndroidBridge.deleteScreenshot(item.uri);
+          } catch (e) {
+            console.warn('Auto-clean screenshot error:', e);
+          }
+        }, 1500);
+      }
     } catch (err) {
       console.warn('handleShortcutCapturedItem error:', err);
     }
@@ -4455,6 +4466,52 @@
   window.openBackTapGuideModal = openBackTapGuideModal;
   window.closeBackTapGuideModal = closeBackTapGuideModal;
   window.toggleBackTapWatcher = toggleBackTapWatcher;
+
+  // 原生 Android 返回手势拦截：优先关闭上层模态框
+  window.handleAndroidBackPress = function() {
+    const modalIds = [
+      'category-modal', 'edit-category-modal', 'category-delete-confirm-modal',
+      'backtap-guide-modal', 'tx-detail-modal', 'manual-add-modal', 'filter-modal',
+      'trash-modal', 'dedup-modal', 'order-security-modal', 'confidence-modal',
+      'month-modal', 'tx-delete-confirm-modal'
+    ];
+    for (const id of modalIds) {
+      const el = document.getElementById(id);
+      if (el && !el.classList.contains('hidden') && el.style.display !== 'none') {
+        const closeFnName = 'close' + id.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('');
+        if (typeof window[closeFnName] === 'function') {
+          window[closeFnName]();
+          return true;
+        }
+        el.classList.add('hidden');
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // 小米 HyperOS 下拉控制中心「闪电记账」快捷开关触发响应
+  window.onTileQuickRecordTriggered = function() {
+    const fileInput = document.getElementById('manual-image-input');
+    if (fileInput) {
+      fileInput.click();
+    } else if (typeof showToast === 'function') {
+      showToast('闪电记账已激活，请选取账单截图');
+    }
+  };
+
+  // 原生移动端宿主环境检测与全屏自适应注入
+  if (typeof window !== 'undefined') {
+    if (window.AndroidBridge || (navigator.userAgent && navigator.userAgent.includes('SingWalletAndroid')) || window.innerWidth <= 640) {
+      if (document.body) {
+        document.body.classList.add('native-app');
+      } else {
+        document.addEventListener('DOMContentLoaded', () => {
+          if (document.body) document.body.classList.add('native-app');
+        });
+      }
+    }
+  }
 
   if (document.readyState !== 'loading') {
     initAppController();

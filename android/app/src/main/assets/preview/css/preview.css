@@ -1,0 +1,652 @@
+.hidden { display: none !important; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.35); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.65); }
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+.tap-highlight:active { transform: scale(0.96); transition: transform 0.08s ease; }
+
+/* Apple/iOS 级弹簧减震入场曲线 cubic-bezier(0.16, 1, 0.3, 1) */
+.animate-fadeIn,
+.modal-spring-in {
+  animation: modalSpringIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes modalSpringIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.drawer-spring-in {
+  animation: drawerSpringIn 0.36s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes drawerSpringIn {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 全局强制图标尺寸兜底规则 (彻底根治 SVG 图标脱离容器撑满异常) */
+[data-cat-icon],
+[data-ui-icon] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+[data-cat-icon].w-3\.5, [data-ui-icon].w-3\.5 { width: 0.875rem; height: 0.875rem; }
+[data-cat-icon].w-4, [data-ui-icon].w-4 { width: 1rem; height: 1rem; }
+[data-cat-icon].w-5, [data-ui-icon].w-5 { width: 1.25rem; height: 1.25rem; }
+[data-cat-icon].w-6, [data-ui-icon].w-6 { width: 1.5rem; height: 1.5rem; }
+[data-cat-icon].w-7, [data-ui-icon].w-7 { width: 1.75rem; height: 1.75rem; }
+[data-cat-icon].w-8, [data-ui-icon].w-8 { width: 2rem; height: 2rem; }
+[data-cat-icon].w-10, [data-ui-icon].w-10 { width: 2.5rem; height: 2.5rem; }
+[data-cat-icon] > svg,
+[data-ui-icon] > svg {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+}
+.active-tag { background: #4f46e5 !important; color: #ffffff !important; border-color: #4f46e5 !important; }
+
+#tx-quick-record-bar {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  pointer-events: none !important;
+}
+
+#tx-quick-record-bar > button,
+#tx-quick-record-bar button {
+  pointer-events: auto !important;
+}
+
+/* Pure HTML/CSS Custom Floating Select Components (100% Win32 Popups Free) */
+.custom-dropdown-container {
+  position: relative;
+  width: 100%;
+}
+.custom-dropdown-container.inline-dropdown {
+  width: auto;
+  display: inline-flex;
+}
+.custom-dropdown-container.z-active {
+  z-index: 60 !important;
+}
+
+.custom-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.96) 0%, rgba(15, 23, 42, 0.98) 100%);
+  border: 1px solid rgba(71, 85, 105, 0.75);
+  border-radius: 0.75rem; /* rounded-xl (12px) */
+  color: #f8fafc;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.35), inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+  user-select: none;
+  text-align: left;
+}
+.custom-dropdown-trigger:hover {
+  background: linear-gradient(180deg, rgba(51, 65, 85, 0.96) 0%, rgba(30, 41, 59, 0.98) 100%);
+  border-color: rgba(99, 102, 241, 0.65);
+  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.45), 0 0 12px rgba(99, 102, 241, 0.2);
+}
+.custom-dropdown-trigger.active,
+.custom-dropdown-trigger:focus-visible {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.35), 0 0 20px rgba(99, 102, 241, 0.3);
+}
+.custom-dropdown-trigger:active {
+  transform: scale(0.985);
+}
+
+/* Floating Menu Overlay - rounded-2xl & Dark Frosted Glass */
+.custom-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 100%;
+  min-width: 140px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #0f172a !important;
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(99, 102, 241, 0.45);
+  border-radius: 1rem; /* rounded-2xl (16px) */
+  padding: 6px;
+  box-shadow: 0 20px 35px -8px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.1), 0 0 16px rgba(99, 102, 241, 0.18);
+  z-index: 70;
+  opacity: 0;
+  transform: translateY(-6px) scale(0.97);
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 0.16s ease-out, transform 0.16s ease-out, visibility 0.16s;
+}
+.custom-dropdown-menu.menu-right {
+  left: auto;
+  right: 0;
+}
+.custom-dropdown-menu.menu-dropup {
+  top: auto !important;
+  bottom: calc(100% + 6px) !important;
+  margin-bottom: 0 !important;
+  margin-top: 0 !important;
+  transform: translateY(6px) scale(0.97);
+}
+.custom-dropdown-menu.menu-dropup.open {
+  transform: translateY(0) scale(1);
+}
+.custom-dropdown-menu.open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+  visibility: visible;
+}
+
+/* 自定义下拉菜单：在非 inline 容器中，宽度 100% 严格对齐父触发器 */
+.custom-dropdown-container:not(.inline-dropdown) > .custom-dropdown-menu {
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* 全局弹窗层级强化，防止被底部导航栏穿透 */
+#confidence-modal,
+#filter-modal,
+#category-modal,
+#manual-add-modal,
+#tx-detail-modal,
+#order-security-modal,
+#month-modal,
+#dedup-modal,
+#trash-modal,
+#tx-delete-confirm-modal,
+#category-edit-modal,
+#category-delete-confirm-modal,
+#backtap-guide-modal {
+  z-index: 50 !important;
+}
+
+/* Dropdown Option Items - rounded-xl */
+.custom-dropdown-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 0.75rem; /* rounded-xl (12px) */
+  font-size: 12px;
+  font-weight: 500;
+  color: #f1f5f9;
+  cursor: pointer;
+  transition: all 0.12s ease-in-out;
+  border: 1px solid transparent;
+  user-select: none;
+  white-space: nowrap;
+}
+.custom-dropdown-option:hover {
+  background: rgba(49, 46, 129, 0.65);
+  color: #ffffff;
+  border-color: rgba(99, 102, 241, 0.35);
+}
+.custom-dropdown-option.selected {
+  background: rgba(99, 102, 241, 0.28);
+  color: #c7d2fe;
+  font-weight: 600;
+  border-color: rgba(99, 102, 241, 0.55);
+}
+.custom-dropdown-option .opt-check {
+  display: none;
+  color: #818cf8;
+  font-weight: 700;
+  font-size: 13px;
+  margin-left: 8px;
+}
+.custom-dropdown-option.selected .opt-check {
+  display: inline-block;
+}
+
+/* Chevron rotation */
+.dropdown-chevron {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.custom-dropdown-trigger.active .dropdown-chevron {
+  transform: rotate(180deg);
+}
+
+/* Monthly Category Breakdown Solid Pie & Legend */
+#monthly-pie-chart svg .pie-slice {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+#monthly-pie-legend {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+#monthly-pie-legend::-webkit-scrollbar {
+  display: none;
+}
+.monthly-pie-legend-item {
+  flex-shrink: 0;
+  min-height: 15px;
+}
+.pie-legend-fade-bottom {
+  mask-image: linear-gradient(to bottom, #000 68%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 68%, transparent 100%);
+}
+
+
+/* OTA Download Progress Bar Transition */
+#ota-download-progress-bar {
+  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+
+/* ================= iOS 风格流水账单左滑删除交互 ================= */
+.tx-item {
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.tx-item > *:not(.tx-swipe-delete-btn) {
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tx-item.swiped-left > *:not(.tx-swipe-delete-btn) {
+  transform: translateX(-76px);
+}
+
+.tx-swipe-delete-btn {
+  position: absolute !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  right: 0 !important;
+  width: 76px !important;
+  background-color: #e11d48 !important; /* rose-600 */
+  color: #ffffff !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 2px !important;
+  z-index: 10 !important;
+  cursor: pointer !important;
+  transform: translateX(101%) !important;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease !important;
+  user-select: none !important;
+}
+
+.tx-swipe-delete-btn:hover {
+  background-color: #f43f5e !important; /* rose-500 */
+}
+
+.tx-swipe-delete-btn:active {
+  background-color: #be123c !important; /* rose-700 */
+}
+
+.tx-item.swiped-left .tx-swipe-delete-btn {
+  transform: translateX(0) !important;
+}
+
+/* ================= API Key 密码圆点与眼睛图标防重叠隔离 ================= */
+#vlm-api-key,
+#view-rules-accounts #vlm-api-key {
+  padding-right: 2.5rem !important;
+}
+
+#vlm-eye-btn {
+  position: absolute !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  right: 4px !important;
+  width: 28px !important;
+  height: 26px !important;
+  padding: 5px !important;
+  background-color: #0f172a !important; /* 与 bg-slate-900 一致，彻底遮挡底层文字与密码圆点 */
+  border-radius: 0.5rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 5 !important;
+}
+
+#vlm-eye-btn svg {
+  width: 15px !important;
+  height: 15px !important;
+  display: block !important;
+}
+
+/* ================= 账单分类管理项右侧编辑/删除按钮精准尺寸隔离 ================= */
+.cat-item-action-btn,
+#custom-categories-list .cat-item-action-btn {
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  min-height: 20px !important;
+  padding: 0 !important;
+  border-radius: 0.35rem !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+}
+
+.cat-item-action-btn svg,
+#custom-categories-list .cat-item-action-btn svg {
+  width: 12px !important;
+  height: 12px !important;
+  display: block !important;
+}
+
+/* ================= 移动端真机全屏自适应与体验优化 (<= 520px) ================= */
+@media (max-width: 520px) {
+  body {
+    padding: 0 !important;
+    margin: 0 !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    overflow: hidden !important;
+  }
+
+  #mobile-device-shell,
+  .max-w-\[410px\] {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    --tw-ring-offset-shadow: 0 0 #0000 !important;
+    --tw-ring-shadow: 0 0 #0000 !important;
+    ring: none !important;
+  }
+
+  /* 隐藏模拟器假状态栏与假刘海，真机自带有原生系统状态栏 */
+  #simulator-status-bar,
+  .max-w-\[410px\] > .h-11 {
+    display: none !important;
+  }
+
+  /* 彻底隐藏模拟器底部的假 Home 指示条，消除真机黑边空隙 */
+  #simulator-home-indicator {
+    display: none !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* 沉浸式视口铺满 */
+  #screen-container {
+    height: 100dvh !important;
+  }
+
+  /* 底部导航栏：移动端标准黄金比例 50px，纯黑底色与全面屏手势条无缝融合 */
+  #bottom-nav-bar {
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: 50px !important;
+    min-height: 50px !important;
+    max-height: 50px !important;
+    background-color: #000000 !important;
+    border-top: 1px solid rgba(30, 41, 59, 0.75) !important;
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    align-items: center !important;
+    padding: 4px 0 5px 0 !important;
+    margin: 0 !important;
+    z-index: 30 !important;
+  }
+
+  #bottom-nav-bar > button {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 3px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    line-height: 1 !important;
+  }
+
+  #bottom-nav-bar > button > div[id^="nav-icon-"] {
+    width: 20px !important;
+    height: 20px !important;
+    margin: 0 !important;
+  }
+
+  #bottom-nav-bar > button > span:last-child {
+    font-size: 11.5px !important;
+    line-height: 1.15 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  #nav-draft-badge {
+    top: 3px !important;
+    right: calc(50% - 22px) !important;
+  }
+
+  /* 快速记一手操作悬浮栏：全透明悬浮胶囊 */
+  #tx-quick-record-bar {
+    position: fixed !important;
+    bottom: 60px !important;
+    left: 0 !important;
+    right: 0 !important;
+    padding: 0 2.5rem !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    display: flex !important;
+    justify-content: center !important;
+    pointer-events: none !important;
+    z-index: 25 !important;
+  }
+
+  #tx-quick-record-bar > button,
+  #tx-quick-record-bar button {
+    pointer-events: auto !important;
+    width: 100% !important;
+    max-width: 240px !important;
+    height: 41px !important;
+    min-height: 41px !important;
+    padding: 0 1.25rem !important;
+    border-radius: 13.5px !important;
+    font-size: 13.5px !important;
+    box-shadow: 0 6px 20px rgba(79, 70, 229, 0.45) !important;
+  }
+
+  /* 主内容区与顶部栏适度内收（~21.6px留白），告别宽扁贴边，提升精致感 */
+  #view-transactions > .shrink-0,
+  #tx-scroll-viewport,
+  #view-drafts {
+    padding-left: 1.35rem !important;
+    padding-right: 1.35rem !important;
+  }
+
+  #view-transactions {
+    padding-bottom: 50px !important; /* 严格对齐 50px 底部导航栏顶边，彻底消除账单卡片半空截断死区 */
+  }
+
+  /* 滚动列表底部留白，确保滑到底部时最后一笔账单完整浮于「快记一手」按钮上方 */
+  #tx-scroll-viewport {
+    padding-bottom: 76px !important;
+  }
+
+  #view-drafts {
+    padding-bottom: 74px !important;
+  }
+
+  /* AI 配置中心：横向适度微收，纵向精致纤巧 (35px 黄金高度) */
+  #view-rules-accounts {
+    padding-left: 1.65rem !important;
+    padding-right: 1.65rem !important;
+    padding-bottom: 76px !important;
+  }
+
+  #view-rules-accounts input:not([type="hidden"]):not([type="file"]):not([type="checkbox"]),
+  #view-rules-accounts .custom-dropdown-trigger {
+    min-height: 35px !important;
+    height: 35px !important;
+    padding: 0.35rem 0.7rem !important;
+    font-size: 12px !important;
+    border-radius: 0.75rem !important;
+  }
+
+  #view-rules-accounts #vlm-api-key {
+    padding-right: 2.5rem !important;
+  }
+
+  #vlm-eye-btn {
+    position: absolute !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    right: 4px !important;
+    width: 28px !important;
+    height: 26px !important;
+    padding: 5px !important;
+    background-color: #0f172a !important; /* 与 bg-slate-900 一致，彻底遮挡底层文字与密码圆点 */
+    border-radius: 0.5rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 5 !important;
+  }
+
+  #vlm-eye-btn svg {
+    width: 15px !important;
+    height: 15px !important;
+    display: block !important;
+  }
+
+  #vlm-config-card .grid-cols-2 > button,
+  #shortcut-capture-card .grid-cols-2 > button,
+  #data-backup-card .grid-cols-2 > button {
+    min-height: 35px !important;
+    height: 35px !important;
+    padding: 0.35rem 0.75rem !important;
+    border-radius: 0.75rem !important;
+    font-size: 12px !important;
+  }
+
+  /* 整合输入栏 (Integrated input bars) */
+  #view-rules-accounts .bg-slate-900.border.rounded-xl {
+    padding: 0.25rem !important;
+    border-radius: 0.75rem !important;
+  }
+
+  #view-rules-accounts .bg-slate-900.border.rounded-xl input {
+    min-height: 30px !important;
+    height: 30px !important;
+    padding: 0.25rem 0.65rem !important;
+    font-size: 11px !important;
+  }
+
+  #view-rules-accounts .bg-slate-900.border.rounded-xl button {
+    min-height: 30px !important;
+    height: 30px !important;
+    padding: 0.25rem 0.65rem !important;
+    font-size: 11px !important;
+  }
+
+  /* 图标宽高比严格 1:1 保持不变形 */
+  [data-cat-icon],
+  [data-ui-icon] {
+    aspect-ratio: 1 / 1 !important;
+  }
+
+  /* 移动端提升卡片纵向饱满度与精致感，消除扁平拉宽视觉 */
+  .tx-item {
+    padding-top: 0.95rem !important;
+    padding-bottom: 0.95rem !important;
+    padding-left: 1.15rem !important;
+    padding-right: 1.15rem !important;
+    min-height: 4.6rem;
+  }
+
+  #view-transactions .bg-gradient-to-br {
+    padding: 1.15rem !important;
+  }
+
+  /* 移动端全局弹窗全屏覆盖与防穿透 */
+  #confidence-modal,
+  #filter-modal,
+  #category-modal,
+  #manual-add-modal,
+  #tx-detail-modal,
+  #order-security-modal,
+  #month-modal,
+  #dedup-modal,
+  #trash-modal,
+  #tx-delete-confirm-modal,
+  #category-edit-modal,
+  #category-delete-confirm-modal,
+  #backtap-guide-modal {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 100 !important;
+  }
+}
+
+/* 原生 Android 宿主容器全屏自适应 */
+body.native-app {
+  padding: 0 !important;
+  margin: 0 !important;
+  height: 100dvh !important;
+  min-height: 100dvh !important;
+  overflow: hidden !important;
+  background-color: #020617 !important;
+}
+body.native-app #mobile-device-shell {
+  width: 100vw !important;
+  max-width: 100vw !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  border-radius: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  ring: none !important;
+}
+body.native-app #simulator-status-bar {
+  display: none !important;
+}
+body.native-app #simulator-home-indicator {
+  display: none !important;
+}
