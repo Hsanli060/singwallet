@@ -37,6 +37,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.singwallet.app.services.QuickRecordTileService
 import java.io.ByteArrayOutputStream
@@ -284,7 +285,7 @@ class MainActivity : ComponentActivity() {
                 }
                 if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
                     hasRequestedPermission = true
-                    requestPermissions(arrayOf(permission), REQUEST_CODE_MEDIA_PERMISSION)
+                    ActivityCompat.requestPermissions(this, arrayOf(permission), REQUEST_CODE_MEDIA_PERMISSION)
                 }
             } catch (e: Throwable) {
                 Log.w(TAG, "Delayed permission check error: ${e.message}")
@@ -294,7 +295,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onRequestPermissionsResult(
         requestCode: Int,
-        permissions: Array<out String>,
+        permissions: Array<String>,
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
