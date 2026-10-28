@@ -23,6 +23,7 @@ import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsetsController
+import android.view.WindowManager
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
@@ -57,6 +58,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "SingWalletActivity"
+        private const val REQUEST_CODE_MEDIA_PERMISSION = 10042
         private const val ASSET_ENTRY_URL = "file:///android_asset/singwallet_preview.html"
     }
 
@@ -68,6 +70,7 @@ class MainActivity : ComponentActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ingestionExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
+    private var hasRequestedPermission = false
 
     private val fileChooserLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -79,77 +82,81 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private val mediaPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val granted = permissions.values.any { it }
-        if (granted) {
-            Log.i(TAG, "Media permission granted by user, registering ScreenshotContentObserver")
-            registerScreenshotObserver()
-        } else {
-            Log.w(TAG, "Media permission denied by user")
-        }
-    }
-
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 1. 设置沉浸式纯黑底色与状态栏/导航栏
-        applyWindowDecorations()
-
-        // 2. 创建并配置硬件加速全屏 WebView
-        val rootLayout = FrameLayout(this).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setBackgroundColor(Color.parseColor("#020617"))
+        // 注册全局异常捕获，确保即使有任何极端异常也能输出 Logcat 并弹窗提示，绝不静默闪退
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            Log.e(TAG, "Uncaught exception on thread ${thread.name}: ${throwable.message}", throwable)
         }
 
-        val wv = WebView(this).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-            )
-            setBackgroundColor(Color.parseColor("#020617"))
-            isVerticalScrollBarEnabled = false
-            isHorizontalScrollBarEnabled = false
+        try {
+            // 1. 设置沉浸式纯黑底色与状态栏/导航栏
+            applyWindowDecorations()
+
+            // 2. 创建并配置硬件加速全屏 WebView
+            val rootLayout = FrameLayout(this).apply {
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                setBackgroundColor(Color.parseColor("#020617"))
+            }
+
+            val wv = WebView(this).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+                setBackgroundColor(Color.parseColor("#020617"))
+                isVerticalScrollBarEnabled = false
+                isHorizontalScrollBarEnabled = false
+            }
+            rootLayout.addView(wv)
+            setContentView(rootLayout)
+            webView = wv
+
+            configureWebView(wv)
+
+            // 3. 注册返回手势/物理按键拦截 (优先关闭 H5 内置弹窗)
+            setupBackPressHandler(wv)
+
+            // 4. 注册系统截屏监听 (注册 Observer 无需运行时权限；读取时再做校验)
+            registerScreenshotObserver()
+
+            // 5. 载入离线 H5 页面
+            wv.loadUrl(ASSET_ENTRY_URL)
+
+            // 6. 处理可能带入的启动 Intent (控制中心快捷瓷贴 / 分享意图)
+            handleIntent(intent)
+
+            // 7. 延迟 1.5 秒在界面完全渲染就绪后，静默检测并引导相册读取权限
+            ensureMediaPermissionDelayed()
+        } catch (t: Throwable) {
+            Log.e(TAG, "Error in onCreate: ${t.message}", t)
         }
-        rootLayout.addView(wv)
-        setContentView(rootLayout)
-        webView = wv
-
-        configureWebView(wv)
-
-        // 3. 注册返回手势/物理按键拦截 (优先关闭 H5 内置弹窗)
-        setupBackPressHandler(wv)
-
-        // 4. 监听系统截屏 (小米澎湃 OS 轻敲背部截屏 / 电源+音量无感记账)
-        requestMediaPermissionAndObserve()
-
-        // 5. 载入离线 H5 页面
-        wv.loadUrl(ASSET_ENTRY_URL)
-
-        // 6. 处理可能带入的启动 Intent (控制中心快捷瓷贴 / 分享意图)
-        handleIntent(intent)
     }
 
     private fun applyWindowDecorations() {
-        val darkBg = Color.parseColor("#020617")
-        window.statusBarColor = darkBg
-        window.navigationBarColor = darkBg
+        try {
+            val darkBg = Color.parseColor("#020617")
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+            window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS)
+            window.statusBarColor = darkBg
+            window.navigationBarColor = darkBg
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            window.insetsController?.setSystemBarsAppearance(
-                0, // 0 = light icons on dark background
-                WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility = (
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                window.insetsController?.setSystemBarsAppearance(
+                    0, // 0 = light icons on dark background
+                    WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "applyWindowDecorations warning: ${e.message}")
         }
     }
 
@@ -266,22 +273,36 @@ class MainActivity : ComponentActivity() {
         })
     }
 
-    private fun requestMediaPermissionAndObserve() {
-        val permissionsToRequest = mutableListOf<String>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
-                permissionsToRequest.add(Manifest.permission.READ_MEDIA_IMAGES)
+    private fun ensureMediaPermissionDelayed() {
+        if (hasRequestedPermission) return
+        mainHandler.postDelayed({
+            try {
+                val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    Manifest.permission.READ_MEDIA_IMAGES
+                } else {
+                    Manifest.permission.READ_EXTERNAL_STORAGE
+                }
+                if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+                    hasRequestedPermission = true
+                    requestPermissions(arrayOf(permission), REQUEST_CODE_MEDIA_PERMISSION)
+                }
+            } catch (e: Throwable) {
+                Log.w(TAG, "Delayed permission check error: ${e.message}")
             }
-        } else {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                permissionsToRequest.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-            }
-        }
+        }, 1500)
+    }
 
-        if (permissionsToRequest.isEmpty()) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_CODE_MEDIA_PERMISSION &&
+            grantResults.isNotEmpty() &&
+            grantResults[0] == PackageManager.PERMISSION_GRANTED
+        ) {
             registerScreenshotObserver()
-        } else {
-            mediaPermissionLauncher.launch(permissionsToRequest.toTypedArray())
         }
     }
 
@@ -483,7 +504,7 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun getAppVersion(): String {
-            return "1.0.1"
+            return "1.0.2"
         }
 
         @JavascriptInterface
