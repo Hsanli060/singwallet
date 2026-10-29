@@ -28,6 +28,7 @@ import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -102,6 +103,18 @@ class MainActivity : ComponentActivity() {
     private val ingestionExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private var hasRequestedPermission = false
+    private var activeDevUrl: String? = null
+
+    /**
+     * 安全回环开发地址白名单校验：仅放行 127.0.0.1 与 localhost 本地回环地址，严防恶意外部 Intent 注入公网 URL
+     */
+    private fun isAllowedLoopbackDevUrl(url: String?): Boolean {
+        if (url.isNullOrBlank()) return false
+        return url.startsWith("http://127.0.0.1:") ||
+               url.startsWith("http://127.0.0.1/") ||
+               url.startsWith("http://localhost:") ||
+               url.startsWith("http://localhost/")
+    }
 
     private val fileChooserLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -157,16 +170,13 @@ class MainActivity : ComponentActivity() {
             // 4. 注册系统截屏监听 (注册 Observer 无需运行时权限；读取时再做校验)
             registerScreenshotObserver()
 
-            // 5. 载入离线 H5 页面
-            wv.loadUrl(ASSET_ENTRY_URL)
+            // 5. 处理可能带入的启动 Intent (控制中心快捷瓷贴 / 分享意图 / USB 实时热重载 dev_url)
+            handleIntent(intent, isFromCreate = true)
 
-            // 6. 处理可能带入的启动 Intent (控制中心快捷瓷贴 / 分享意图)
-            handleIntent(intent)
-
-            // 7. 扫描未处理的离线闪电抓屏任务
+            // 6. 扫描未处理的离线闪电抓屏任务
             scanPendingLightningCaptures()
 
-            // 8. 延迟 1.5 秒在界面完全渲染就绪后，静默检测并引导相册读取权限
+            // 7. 延迟 1.5 秒在界面完全渲染就绪后，静默检测并引导相册读取权限
             ensureMediaPermissionDelayed()
         } catch (t: Throwable) {
             Log.e(TAG, "Error in onCreate: ${t.message}", t)
@@ -197,6 +207,13 @@ class MainActivity : ComponentActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun configureWebView(wv: WebView) {
+        // 开启 Chrome DevTools 真机远程审查 (chrome://inspect/#devices 实时审查与 1px 微调 DOM/CSS)
+        try {
+            WebView.setWebContentsDebuggingEnabled(true)
+        } catch (e: Throwable) {
+            Log.w(TAG, "Failed to enable WebContentsDebugging: ${e.message}")
+        }
+
         val settings = wv.settings
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
@@ -218,14 +235,18 @@ class MainActivity : ComponentActivity() {
 
         // 注入 SingWallet 专属 UserAgent
         val defaultUa = settings.userAgentString
-        settings.userAgentString = "$defaultUa SingWalletAndroid/1.0.4 Mobile"
+        settings.userAgentString = "$defaultUa SingWalletAndroid/1.0.5 Mobile"
 
         wv.addJavascriptInterface(AndroidBridge(this), "AndroidBridge")
 
         wv.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url?.toString() ?: return false
-                if (url.startsWith("file:///android_asset/") || url.startsWith("data:") || url.startsWith("blob:")) {
+                if (url.startsWith("file:///android_asset/") ||
+                    url.startsWith("data:") ||
+                    url.startsWith("blob:") ||
+                    isAllowedLoopbackDevUrl(url)
+                ) {
                     return false
                 }
                 // 外部网页链接使用系统浏览器打开
@@ -236,6 +257,26 @@ class MainActivity : ComponentActivity() {
                     Log.w(TAG, "Cannot launch external url: $url", e)
                 }
                 return true
+            }
+
+            override fun onReceivedError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                error: WebResourceError?
+            ) {
+                super.onReceivedError(view, request, error)
+                val failedUrl = request?.url?.toString()
+                val isMainFrame = request?.isForMainFrame == true
+                Log.w(TAG, "onReceivedError: url=$failedUrl, isMainFrame=$isMainFrame, errorCode=${error?.errorCode}, desc=${error?.description}")
+
+                // 拔掉数据线或本地热重载开发服务未启动时的「零白屏自动离线兜底」
+                if (isMainFrame && isAllowedLoopbackDevUrl(failedUrl)) {
+                    Log.w(TAG, "Dev server unreachable, auto-falling back to built-in offline assets")
+                    activeDevUrl = null
+                    view?.settings?.cacheMode = WebSettings.LOAD_DEFAULT
+                    view?.loadUrl(ASSET_ENTRY_URL)
+                    Toast.makeText(this@MainActivity, "开发服务未连接，已自动切回内置离线版", Toast.LENGTH_SHORT).show()
+                }
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
@@ -475,14 +516,42 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleIntent(intent)
+        handleIntent(intent, isFromCreate = false)
     }
 
-    private fun handleIntent(intent: Intent?) {
-        if (intent == null) return
+    private fun handleIntent(intent: Intent?, isFromCreate: Boolean = false) {
+        if (intent == null) {
+            if (isFromCreate && webView != null) {
+                webView?.loadUrl(ASSET_ENTRY_URL)
+            }
+            return
+        }
+
+        // 1. USB 实时热重载 dev_url 切换与重置回退
+        val devUrlExtra = intent.getStringExtra("dev_url")
+        val resetDev = intent.getBooleanExtra("reset_dev", false) || devUrlExtra.equals("off", ignoreCase = true)
+
+        if (resetDev) {
+            activeDevUrl = null
+            webView?.settings?.cacheMode = WebSettings.LOAD_DEFAULT
+            webView?.loadUrl(ASSET_ENTRY_URL)
+            Log.i(TAG, "Switched back to built-in offline assets")
+            Toast.makeText(this, "已切回内置离线版", Toast.LENGTH_SHORT).show()
+        } else if (isAllowedLoopbackDevUrl(devUrlExtra)) {
+            activeDevUrl = devUrlExtra
+            webView?.settings?.cacheMode = WebSettings.LOAD_NO_CACHE
+            webView?.clearCache(true)
+            webView?.loadUrl(devUrlExtra!!)
+            Log.i(TAG, "Loading live hot-reload dev_url: $devUrlExtra")
+            Toast.makeText(this, "已连接电脑 UI 实时热重载模式", Toast.LENGTH_SHORT).show()
+        } else if (isFromCreate) {
+            // 冷启动且未指定 dev_url 时，默认加载内置离线页面
+            webView?.loadUrl(ASSET_ENTRY_URL)
+        }
+
         val action = intent.action
 
-        // 1. 小米 HyperOS 下拉控制中心「应用快捷开关」闪电记账
+        // 2. 小米 HyperOS 下拉控制中心「应用快捷开关」闪电记账
         if (action == QuickRecordTileService.ACTION_TRIGGER_QUICK_RECORD) {
             Log.i(TAG, "Received Quick Settings Tile Trigger")
             if (isPageLoaded) {
@@ -493,7 +562,7 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        // 2. 系统分享单图接收 (例如微信、支付宝长按分享到 SingWallet)
+        // 3. 系统分享单图接收 (例如微信、支付宝长按分享到 SingWallet)
         if (action == Intent.ACTION_SEND && intent.type?.startsWith("image/") == true) {
             val uri: Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
@@ -598,7 +667,7 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun getAppVersion(): String {
-            return "1.0.4"
+            return "1.0.5"
         }
 
         @JavascriptInterface
