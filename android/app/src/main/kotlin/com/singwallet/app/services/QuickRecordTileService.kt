@@ -38,7 +38,8 @@ class QuickRecordTileService : TileService() {
     companion object {
         private const val TAG = "QuickRecordTile"
         const val ACTION_TRIGGER_QUICK_RECORD = "com.singwallet.app.action.QUICK_RECORD_CAPTURE"
-        private const val PANEL_COLLAPSE_DELAY_MS = 180L
+        private const val PANEL_COLLAPSE_DELAY_MS = 340L
+        private const val TARGET_MAX_WIDTH = 1080
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -95,25 +96,28 @@ class QuickRecordTileService : TileService() {
 
         // 3. 立即收拢控制中心面板 (绝不使用 startActivityAndCollapse 切应用，确保屏幕留在微信/支付宝)
         SingWalletAccessibilityService.collapseShade()
-        try {
-            @Suppress("DEPRECATION")
-            val closeIntent = Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)
-            sendBroadcast(closeIntent)
-        } catch (e: Exception) {
-            Log.w(TAG, "Unable to broadcast CLOSE_SYSTEM_DIALOGS: ${e.message}")
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            try {
+                @Suppress("DEPRECATION")
+                val closeIntent = Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)
+                sendBroadcast(closeIntent)
+            } catch (e: Exception) {
+                Log.w(TAG, "Unable to broadcast CLOSE_SYSTEM_DIALOGS: ${e.message}")
+            }
         }
 
-        // 4. 时序控制：在控制中心面板收拢露出的第一瞬间 (180ms 极速延迟) 立即冻结当前屏幕快照
+        // 4. 时序控制：在控制中心面板收拢露出的第一瞬间 (340ms 调优延迟，对齐澎湃OS毛玻璃归零与震动快门体感)
         // 毫秒级把当前屏幕画面直接固化到内存 Bitmap 中，绝不阻塞！
         mainHandler.postDelayed({
             SingWalletAccessibilityService.captureCurrentScreen { bitmap ->
                 isCapturing = false
                 if (bitmap != null) {
-                    // 4.1 捕获到内存的瞬间触发短震动 (Haptic feedback 50ms)
+                    // 4.1 捕获到内存的瞬间触发短震动 (Haptic feedback 50ms: 震动即快门确认)
                     triggerHapticFeedback(50L)
+                    Log.i(TAG, "Snapshot locked in RAM (${bitmap.width}x${bitmap.height}), haptic shutter triggered")
 
                     // 4.2 即时系统 Toast 提示，让用户明确知道画面已抓取成功，可自由切走或锁屏
-                    showToast("⚡ 闪电记账：已捕获账单画面，后台解析中...")
+                    showToast("闪电记账：已捕获账单画面，后台解析中...")
 
                     // 4.3 异步转码为 Base64 并派发给后端/WebView (不阻塞主线程)
                     dispatchExecutor.execute {
@@ -131,21 +135,39 @@ class QuickRecordTileService : TileService() {
     }
 
     private fun processCapturedBitmap(bitmap: Bitmap) {
+        var scaledBitmap: Bitmap? = null
         try {
+            // 小米 14 原生分辨率 1200x2670 直接转 Base64 体积较大；若宽度 > 1080 则等比缩放至 1080
+            // 既保障 OCR 识别率 100%，又能大幅削减 evaluateJavascript 传输体积并节省存储
+            val bitmapToEncode = if (bitmap.width > TARGET_MAX_WIDTH) {
+                val scale = TARGET_MAX_WIDTH.toFloat() / bitmap.width.toFloat()
+                val targetHeight = (bitmap.height * scale).toInt()
+                scaledBitmap = Bitmap.createScaledBitmap(bitmap, TARGET_MAX_WIDTH, targetHeight, true)
+                scaledBitmap
+            } else {
+                bitmap
+            }
+
             val outputStream = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
+            bitmapToEncode.compress(Bitmap.CompressFormat.JPEG, 82, outputStream)
             val byteArray = outputStream.toByteArray()
             val base64 = Base64.encodeToString(byteArray, Base64.NO_WRAP)
             val dataUrl = "data:image/jpeg;base64,$base64"
 
-            if (MainActivity.getInstance() != null) {
+            Log.i(TAG, "Encoded JPEG bytes=${byteArray.size}, base64Len=${base64.length}")
+
+            if (MainActivity.isAlive()) {
                 MainActivity.dispatchCapturedScreenshot(dataUrl, "lightning-tile")
+                Log.i(TAG, "Dispatched screenshot to MainActivity memory queue")
             } else {
                 savePendingCaptureToDisk(byteArray)
             }
         } catch (e: Throwable) {
             Log.e(TAG, "Error encoding captured bitmap: ${e.message}", e)
         } finally {
+            try {
+                scaledBitmap?.recycle()
+            } catch (_: Throwable) {}
             try {
                 bitmap.recycle()
             } catch (_: Throwable) {}
@@ -158,7 +180,7 @@ class QuickRecordTileService : TileService() {
             if (!dir.exists()) dir.mkdirs()
             val file = File(dir, "lightning_${System.currentTimeMillis()}.jpg")
             FileOutputStream(file).use { it.write(byteArray) }
-            Log.i(TAG, "Saved pending lightning capture to ${file.absolutePath}")
+            Log.i(TAG, "MainActivity not active, saved pending capture to ${file.absolutePath} (${byteArray.size} bytes)")
         } catch (e: Throwable) {
             Log.e(TAG, "Failed to save pending capture: ${e.message}", e)
         }

@@ -1367,12 +1367,63 @@
     currentUploadedImageFile = file;
     const fileName = file.name || '账单截图.png';
 
+    const isBackgroundCapture = Boolean(event && event.isBackgroundCapture);
+    const sourceDataUrl = (event && event.sourceDataUrl) || '';
+
     if (currentOcrEngine === 'llm') {
       const inputKey = document.getElementById('vlm-api-key');
       const activeKey = ((inputKey && inputKey.value.trim()) ? inputKey.value.trim() : (vlmConfig.apiKey || '')).trim();
       if (!activeKey) {
-        showLlmTopError('大模型视觉识别失败', `${getStatusIcon('error')} 识别失败：未配置大模型 API Key（未予入账兜底）`);
-        return;
+        if (isBackgroundCapture) {
+          // 后台抓屏零丢失保障：绝不能直接 return 丢弃！立即保底入草稿箱
+          const fallbackTaskId = 'draft-vlm-task-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+          const fallbackDraft = {
+            id: fallbackTaskId,
+            merchant: '闪电抓屏 (待配置API解析)',
+            merchantHeader: '闪电抓屏',
+            amount: 0,
+            amountInCents: 0,
+            confidence: 0,
+            isParsing: false,
+            parseError: true,
+            parseErrorReason: '未配置大模型 API Key',
+            category: '日常购物',
+            categoryName: '日常购物',
+            categoryIcon: (window.IconRegistry && typeof window.IconRegistry.getCategoryIcon === 'function')
+              ? window.IconRegistry.getCategoryIcon('日常购物')
+              : '',
+            channel: '微信',
+            account: '钱包',
+            imgTitle: fileName,
+            tag: '已存抓屏·待解析',
+            rule: '抓屏已安全落盘，配置 API Key 后可点击重试或手动填写',
+            time: (typeof window.formatCurrentDateTime === 'function') ? window.formatCurrentDateTime() : new Date().toISOString().replace('T', ' ').slice(0, 19),
+            imageData: sourceDataUrl,
+            rawFile: file
+          };
+
+          if (!window.draftQueue || !Array.isArray(window.draftQueue)) {
+            window.draftQueue = [];
+          }
+          window.draftQueue.unshift(fallbackDraft);
+
+          if (typeof window.saveStoredDrafts === 'function') {
+            window.saveStoredDrafts();
+          }
+          if (typeof window.renderDraftQueue === 'function') {
+            window.renderDraftQueue();
+          }
+          if (typeof window.updateDraftBadge === 'function') {
+            window.updateDraftBadge();
+          }
+          if (typeof window.showToast === 'function') {
+            window.showToast('已存入草稿箱（未配置大模型Key，可进入草稿箱重试或手填）');
+          }
+          return;
+        } else {
+          showLlmTopError('大模型视觉识别失败', `${getStatusIcon('error')} 识别失败：未配置大模型 API Key（未予入账兜底）`);
+          return;
+        }
       }
       vlmConfig.apiKey = activeKey;
 
@@ -1400,7 +1451,8 @@
         tag: '后台解析中...',
         rule: 'VLM 视觉智能识别',
         time: (typeof window.formatCurrentDateTime === 'function') ? window.formatCurrentDateTime() : new Date().toISOString().replace('T', ' ').slice(0, 19),
-        rawFile: file
+        rawFile: file,
+        imageData: sourceDataUrl
       };
 
       if (!window.draftQueue || !Array.isArray(window.draftQueue)) {
@@ -1408,6 +1460,9 @@
       }
       window.draftQueue.unshift(taskDraft);
 
+      if (typeof window.saveStoredDrafts === 'function') {
+        window.saveStoredDrafts();
+      }
       if (typeof window.renderDraftQueue === 'function') {
         window.renderDraftQueue();
       }
@@ -1475,6 +1530,9 @@
           targetDraft.account = (result.payment && result.payment.sub_type) || '钱包';
           targetDraft.tag = `置信度 ${targetDraft.confidence}%`;
           targetDraft.rule = result.rule || 'VLM 视觉智能识别';
+          if (sourceDataUrl && !targetDraft.imageData) {
+            targetDraft.imageData = sourceDataUrl;
+          }
 
           // 去重校验：检查单号是否已在已入账集合中
           const isDuplicate = (targetDraft.orderId && typeof window.isOrderIdDuplicate === 'function')
@@ -1499,6 +1557,9 @@
               if (window.committedOrderIds && targetDraft.orderId) {
                 window.committedOrderIds.add(targetDraft.orderId.trim());
               }
+              if (typeof window.saveStoredDrafts === 'function') {
+                window.saveStoredDrafts();
+              }
               if (typeof window.renderDraftQueue === 'function') {
                 window.renderDraftQueue();
               }
@@ -1511,6 +1572,9 @@
             }
           } else {
             // 未开启自动入账、置信度不足或单号重复：留在草稿箱原地更新为待确认草稿 (isParsing: false)
+            if (typeof window.saveStoredDrafts === 'function') {
+              window.saveStoredDrafts();
+            }
             if (typeof window.renderDraftQueue === 'function') {
               window.renderDraftQueue();
             }
@@ -1528,29 +1592,85 @@
         } catch (err) {
           clearInterval(progTimer);
           console.warn('Background VLM parse error:', err);
-          if (window.draftQueue && Array.isArray(window.draftQueue)) {
-            const idx = window.draftQueue.findIndex(item => item.id === taskId);
-            if (idx !== -1) {
-              window.draftQueue.splice(idx, 1);
-            }
-          }
-          if (typeof window.renderDraftQueue === 'function') {
-            window.renderDraftQueue();
-          }
-          if (typeof window.updateDraftBadge === 'function') {
-            window.updateDraftBadge();
-          }
           const errMsg = err.message || '大模型调用异常或网络不可达';
-          if (typeof window.showLlmTopError === 'function') {
-            window.showLlmTopError('大模型视觉识别失败', `${getStatusIcon('error')} 识别失败：${errMsg}（未予入账兜底）`);
-          } else if (typeof window.showToast === 'function') {
-            window.showToast(`识别失败：${errMsg}`, 'error');
+
+          if (isBackgroundCapture) {
+            // 场景 B：后台抓屏零丢失保障，绝不 splice 删除草稿！原地保底
+            const targetDraft = (window.draftQueue && Array.isArray(window.draftQueue)) ? window.draftQueue.find(item => item.id === taskId) : null;
+            if (targetDraft) {
+              targetDraft.isParsing = false;
+              targetDraft.parseError = true;
+              targetDraft.parseErrorReason = errMsg;
+              targetDraft.merchant = '闪电抓屏 (点击重试或手填)';
+              targetDraft.merchantHeader = '闪电抓屏';
+              targetDraft.tag = '网络受阻·已保单';
+              targetDraft.rule = '网络调用异常，截图已安全保单，可点击重试或手动编辑';
+              if (sourceDataUrl) targetDraft.imageData = sourceDataUrl;
+            }
+            if (typeof window.saveStoredDrafts === 'function') {
+              window.saveStoredDrafts();
+            }
+            if (typeof window.renderDraftQueue === 'function') {
+              window.renderDraftQueue();
+            }
+            if (typeof window.updateDraftBadge === 'function') {
+              window.updateDraftBadge();
+            }
+            if (typeof window.showToast === 'function') {
+              window.showToast(`抓屏已保单：大模型解析受阻 (${errMsg})，已存入草稿箱`, 'warning');
+            }
+          } else {
+            // 前台手动上传：保持原有删除草稿行为与测试断言一致
+            if (window.draftQueue && Array.isArray(window.draftQueue)) {
+              const idx = window.draftQueue.findIndex(item => item.id === taskId);
+              if (idx !== -1) {
+                window.draftQueue.splice(idx, 1);
+              }
+            }
+            if (typeof window.saveStoredDrafts === 'function') {
+              window.saveStoredDrafts();
+            }
+            if (typeof window.renderDraftQueue === 'function') {
+              window.renderDraftQueue();
+            }
+            if (typeof window.updateDraftBadge === 'function') {
+              window.updateDraftBadge();
+            }
+            if (typeof window.showLlmTopError === 'function') {
+              window.showLlmTopError('大模型视觉识别失败', `${getStatusIcon('error')} 识别失败：${errMsg}（未予入账兜底）`);
+            } else if (typeof window.showToast === 'function') {
+              window.showToast(`识别失败：${errMsg}`, 'error');
+            }
           }
         }
       })();
     } else {
       const result = parseBillWithLocalEngine(file);
-      applyOcrResultToManualForm(result, fileName, 'local');
+      if (isBackgroundCapture) {
+        const taskId = 'draft-shortcut-' + Date.now();
+        const normCat = result.category || '日常购物';
+        const draft = {
+          id: taskId,
+          ...result,
+          categoryName: normCat,
+          categoryIcon: (window.IconRegistry && typeof window.IconRegistry.getCategoryIcon === 'function') ? window.IconRegistry.getCategoryIcon(normCat) : '',
+          confidence: result.confidence || 98,
+          tag: (event && event.captureSource === 'lightning-tile') ? '闪电抓屏智能识别' : '快捷指令智能识别',
+          rule: result.rule || '本地规则引擎识别',
+          imageData: sourceDataUrl,
+          rawFile: file
+        };
+        if (!window.draftQueue) window.draftQueue = [];
+        window.draftQueue.unshift(draft);
+        if (typeof window.saveStoredDrafts === 'function') window.saveStoredDrafts();
+        if (typeof window.renderDraftQueue === 'function') window.renderDraftQueue();
+        if (typeof window.updateDraftBadge === 'function') window.updateDraftBadge();
+        if (typeof window.showToast === 'function') {
+          window.showToast('已自动识别抓屏账单并存入草稿箱');
+        }
+      } else {
+        applyOcrResultToManualForm(result, fileName, 'local');
+      }
     }
   }
 

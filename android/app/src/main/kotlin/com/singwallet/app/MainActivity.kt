@@ -70,6 +70,8 @@ class MainActivity : ComponentActivity() {
 
         fun getInstance(): MainActivity? = instance
 
+        fun isAlive(): Boolean = instance != null && !(instance?.isFinishing ?: true)
+
         /**
          * 供 QuickRecordTileService 在后台捕获屏幕快照后安全派发至 WebView
          */
@@ -216,7 +218,7 @@ class MainActivity : ComponentActivity() {
 
         // 注入 SingWallet 专属 UserAgent
         val defaultUa = settings.userAgentString
-        settings.userAgentString = "$defaultUa SingWalletAndroid/1.0.1 Mobile"
+        settings.userAgentString = "$defaultUa SingWalletAndroid/1.0.4 Mobile"
 
         wv.addJavascriptInterface(AndroidBridge(this), "AndroidBridge")
 
@@ -403,36 +405,47 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val scanLock = Any()
+
     private fun scanPendingLightningCaptures() {
         if (ingestionExecutor.isShutdown) return
         ingestionExecutor.execute {
-            try {
-                val dir = File(filesDir, "pending_lightning_captures")
-                if (dir.exists() && dir.isDirectory) {
-                    val files = dir.listFiles { f -> f.extension.equals("jpg", ignoreCase = true) }
-                    files?.sortBy { it.lastModified() }
-                    files?.forEach { file ->
-                        try {
-                            val bytes = file.readBytes()
-                            val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-                            val dataUrl = "data:image/jpeg;base64,$base64"
-                            mainHandler.post {
-                                if (isPageLoaded) {
-                                    dispatchScreenshotToWebView(dataUrl, "", "lightning-tile")
-                                } else {
-                                    synchronized(pendingScreenshots) {
-                                        pendingScreenshots.add(Triple(dataUrl, "", "lightning-tile"))
+            synchronized(scanLock) {
+                try {
+                    val dir = File(filesDir, "pending_lightning_captures")
+                    if (dir.exists() && dir.isDirectory) {
+                        val files = dir.listFiles { f -> f.extension.equals("jpg", ignoreCase = true) }
+                        files?.sortBy { it.lastModified() }
+                        files?.forEach { file ->
+                            // 原子认领机制：通过 renameTo 成为专属 processing 文件，杜绝与冷启动/热启动并发扫描重复处理
+                            val processingFile = File(dir, "${file.nameWithoutExtension}_${System.currentTimeMillis()}.processing")
+                            if (file.renameTo(processingFile)) {
+                                try {
+                                    val bytes = processingFile.readBytes()
+                                    val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                                    val dataUrl = "data:image/jpeg;base64,$base64"
+                                    mainHandler.post {
+                                        if (isPageLoaded) {
+                                            dispatchScreenshotToWebView(dataUrl, "", "lightning-tile")
+                                        } else {
+                                            synchronized(pendingScreenshots) {
+                                                pendingScreenshots.add(Triple(dataUrl, "", "lightning-tile"))
+                                            }
+                                        }
                                     }
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Failed to ingest cached lightning capture ${processingFile.name}: ${e.message}")
+                                } finally {
+                                    try {
+                                        processingFile.delete()
+                                    } catch (_: Throwable) {}
                                 }
                             }
-                            file.delete()
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Failed to ingest cached lightning capture ${file.name}: ${e.message}")
                         }
                     }
+                } catch (e: Exception) {
+                    Log.w(TAG, "scanPendingLightningCaptures error: ${e.message}")
                 }
-            } catch (e: Exception) {
-                Log.w(TAG, "scanPendingLightningCaptures error: ${e.message}")
             }
         }
     }
@@ -453,7 +466,10 @@ class MainActivity : ComponentActivity() {
                 });
             }
         """.trimIndent()
-        webView?.evaluateJavascript(script, null)
+        Log.i(TAG, "Dispatching screenshot to WebView: source=$source, dataUrlLen=${dataUrl.length}")
+        webView?.evaluateJavascript(script) { result ->
+            Log.i(TAG, "Screenshot dispatched to WebView callback: source=$source, evalResult=$result")
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -505,11 +521,15 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         webView?.onResume()
+        // 热启动恢复或从前台切回时，主动扫描离线捕获落盘的闪电抓屏任务，确保零丢单
+        scanPendingLightningCaptures()
     }
 
     override fun onPause() {
         super.onPause()
-        webView?.onPause()
+        // 关键保活设计：绝不调用 webView?.onPause()！
+        // 保持后台 WebView JS 上下文活跃，确保用户在微信/支付宝付款页前台点击「闪电记账」磁贴时，
+        // 后台 WebView 能瞬间接收快照并执行大模型解析与 localStorage 存库，绝不挂起丢单。
     }
 
     override fun onDestroy() {
@@ -578,7 +598,7 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun getAppVersion(): String {
-            return "1.0.2"
+            return "1.0.4"
         }
 
         @JavascriptInterface

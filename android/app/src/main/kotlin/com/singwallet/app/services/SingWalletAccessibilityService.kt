@@ -149,25 +149,46 @@ class SingWalletAccessibilityService : AccessibilityService() {
      */
     fun collapseControlCenter(): Boolean {
         var handled = false
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            try {
-                handled = performGlobalAction(GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
-            } catch (e: Throwable) {
-                Log.w(TAG, "GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE failed: ${e.message}")
-            }
-        }
-        if (!handled) {
+        val isXiaomi = Build.MANUFACTURER.equals("Xiaomi", ignoreCase = true) ||
+                       Build.BRAND.equals("Xiaomi", ignoreCase = true) ||
+                       Build.BRAND.equals("Redmi", ignoreCase = true) ||
+                       Build.BRAND.equals("POCO", ignoreCase = true)
+
+        if (isXiaomi) {
+            // 小米澎湃 OS (HyperOS) 实测不支持 GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE (底层报错 Invalid action id: 15 并徒增 74ms 耗时)
+            // 直接第一时间调用 GLOBAL_ACTION_BACK，0ms 零延迟收起控制中心
             try {
                 handled = performGlobalAction(GLOBAL_ACTION_BACK)
             } catch (e: Throwable) {
-                Log.w(TAG, "GLOBAL_ACTION_BACK fallback failed: ${e.message}")
+                Log.w(TAG, "GLOBAL_ACTION_BACK on Xiaomi failed: ${e.message}")
+            }
+        } else {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                try {
+                    handled = performGlobalAction(GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
+                } catch (e: Throwable) {
+                    Log.w(TAG, "GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE failed: ${e.message}")
+                }
+            }
+            if (!handled) {
+                try {
+                    handled = performGlobalAction(GLOBAL_ACTION_BACK)
+                } catch (e: Throwable) {
+                    Log.w(TAG, "GLOBAL_ACTION_BACK fallback failed: ${e.message}")
+                }
             }
         }
-        try {
-            @Suppress("DEPRECATION")
-            val closeIntent = Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)
-            sendBroadcast(closeIntent)
-        } catch (_: Throwable) {}
+
+        // 仅在 Android 12 (API 31) 以下才发送 ACTION_CLOSE_SYSTEM_DIALOGS，彻底消除 Android 12+ Permission Denial 报错警告
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            try {
+                @Suppress("DEPRECATION")
+                val closeIntent = Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)
+                sendBroadcast(closeIntent)
+            } catch (_: Throwable) {}
+        }
+
+        Log.i(TAG, "collapseControlCenter executed (isXiaomi=$isXiaomi): handled=$handled")
         return handled
     }
 
@@ -186,6 +207,7 @@ class SingWalletAccessibilityService : AccessibilityService() {
     @RequiresApi(Build.VERSION_CODES.R)
     private fun performCaptureApi30(onResult: (Bitmap?) -> Unit) {
         try {
+            Log.i(TAG, "Invoking takeScreenshot(DEFAULT_DISPLAY)...")
             takeScreenshot(
                 Display.DEFAULT_DISPLAY,
                 captureExecutor,
@@ -199,6 +221,8 @@ class SingWalletAccessibilityService : AccessibilityService() {
                             // 2. 转换为软件 Bitmap，避免 Hardware Bitmap 在后续压缩或处理时抛异常
                             val softwareBitmap = hwBitmap?.copy(Bitmap.Config.ARGB_8888, false)
                             hwBitmap?.recycle()
+
+                            Log.i(TAG, "takeScreenshot onSuccess: ${softwareBitmap?.width}x${softwareBitmap?.height}")
 
                             mainHandler.post {
                                 onResult(softwareBitmap)

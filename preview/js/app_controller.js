@@ -158,8 +158,33 @@
   function saveStoredDrafts() {
     try {
       localStorage.setItem('singwallet_user_drafts', JSON.stringify(draftQueue));
-    } catch (e) {}
+    } catch (e) {
+      console.warn('[SingWallet] saveStoredDrafts quota warning, attempting cleanup of oldest imageData:', e);
+      try {
+        const safeQueue = draftQueue.map(d => ({ ...d }));
+        for (let i = safeQueue.length - 1; i >= 0; i--) {
+          if (safeQueue[i].imageData) {
+            delete safeQueue[i].imageData;
+            try {
+              localStorage.setItem('singwallet_user_drafts', JSON.stringify(safeQueue));
+              console.info('[SingWallet] Successfully persisted drafts after pruning draft index', i);
+              return;
+            } catch (subErr) {
+              // 继续裁剪更早的
+            }
+          }
+        }
+        const minimalQueue = safeQueue.map(d => {
+          const { imageData, rawFile, ...rest } = d;
+          return rest;
+        });
+        localStorage.setItem('singwallet_user_drafts', JSON.stringify(minimalQueue));
+      } catch (finalErr) {
+        console.error('[SingWallet] Failed to persist drafts to localStorage:', finalErr);
+      }
+    }
   }
+  window.saveStoredDrafts = saveStoredDrafts;
 
   function createInitialDraftQueue() {
     return loadStoredDrafts();
@@ -346,6 +371,32 @@
             </div>
           `;
         }
+
+        if (draft.parseError) {
+          const borderClass = isActive 
+            ? 'border-2 border-amber-500 bg-amber-950/70 shadow-md ring-2 ring-amber-500/30' 
+            : 'border border-amber-600/70 bg-amber-950/40 hover:border-amber-500';
+          const cat = draft.categoryName || draft.category || '日常购物';
+          const catIcon = getAppCatIcon(cat);
+          draft.categoryIcon = catIcon;
+          const displayMerchant = (draft.merchant || '抓屏待解析').split('（')[0];
+          const displayAmt = (typeof draft.amount === 'number' && !isNaN(draft.amount) && draft.amount > 0)
+            ? `¥${draft.amount.toFixed(2)}`
+            : '待解析';
+
+          return `
+            <button onclick="switchDraft(${idx})" class="flex-shrink-0 px-3 py-1.5 rounded-xl ${borderClass} text-left transition-all tap-highlight flex items-center space-x-2">
+              <span class="w-4 h-4 inline-flex items-center justify-center shrink-0 text-amber-400" data-ui-icon="warning">${getAppStatusIcon('warning')}</span>
+              <div class="text-xs leading-tight">
+                <div class="flex items-center space-x-1">
+                  <span class="font-semibold text-amber-200 truncate max-w-[85px]">${displayMerchant}</span>
+                  <span class="text-[9px] font-mono px-1 py-0.2 rounded border text-amber-400 bg-amber-500/20 border-amber-500/40">待重试</span>
+                </div>
+                <span class="text-[11px] font-bold text-amber-300/90">${displayAmt}</span>
+              </div>
+            </button>
+          `;
+        }
         
         const cat = draft.categoryName || draft.category || '日常购物';
         const catIcon = getAppCatIcon(cat);
@@ -404,6 +455,8 @@
       if (inMer) inMer.value = '';
       if (inOrder) inOrder.value = '';
       if (inTime) inTime.value = '';
+      const retryCard = document.getElementById('draft-vlm-retry-card');
+      if (retryCard) retryCard.classList.add('hidden');
       return;
     }
     const catName = draft.categoryName || draft.category || '日常购物';
@@ -424,36 +477,79 @@
     const imgTitle = document.getElementById('draft-img-title');
     const imgStatus = document.getElementById('draft-img-status');
 
+    const numAmount = (typeof draft.amount === 'number' && !isNaN(draft.amount)) ? draft.amount : (parseFloat(draft.amount) || 0);
+
     if (ocrAmount) {
-      ocrAmount.innerText = `¥ ${draft.amount.toFixed(2)}`;
+      ocrAmount.innerText = `¥ ${numAmount.toFixed(2)}`;
       ocrAmount.onclick = null;
       if (ocrAmount.parentElement) ocrAmount.parentElement.onclick = null;
       ocrAmount.style.cursor = 'default';
     }
     if (ocrMerchant) {
-      ocrMerchant.innerText = `收款商户：${draft.merchant}`;
+      ocrMerchant.innerText = `收款商户：${draft.merchant || '--'}`;
       ocrMerchant.onclick = null;
       if (ocrMerchant.parentElement) ocrMerchant.parentElement.onclick = null;
       ocrMerchant.style.cursor = 'default';
     }
     if (ocrOrder) {
-      ocrOrder.innerText = `单号: ${draft.orderId}`;
+      ocrOrder.innerText = `单号: ${draft.orderId || '--'}`;
       ocrOrder.onclick = null;
       if (ocrOrder.parentElement) ocrOrder.parentElement.onclick = null;
       ocrOrder.style.cursor = 'default';
     }
     if (ocrTime) {
-      ocrTime.innerText = `订单时间: ${draft.orderTime || draft.time}`;
+      ocrTime.innerText = `订单时间: ${draft.orderTime || draft.time || '--'}`;
       ocrTime.onclick = null;
       if (ocrTime.parentElement) ocrTime.parentElement.onclick = null;
       ocrTime.style.cursor = 'default';
     }
-    if (imgTitle) imgTitle.innerText = draft.imgTitle;
+    if (imgTitle) imgTitle.innerText = draft.imgTitle || '账单截图.png';
     if (imgStatus) {
-      imgStatus.innerText = draft.tag;
-      imgStatus.className = draft.confidence >= 95 
-        ? "text-emerald-400 font-mono text-[10px] bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/30"
-        : "text-amber-400 font-mono text-[10px] bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/30";
+      imgStatus.innerText = draft.tag || (draft.parseError ? '待重试' : '已提取');
+      if (draft.parseError) {
+        imgStatus.className = "text-amber-400 font-mono text-[10px] bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/30";
+      } else {
+        imgStatus.className = draft.confidence >= 95 
+          ? "text-emerald-400 font-mono text-[10px] bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/30"
+          : "text-amber-400 font-mono text-[10px] bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/30";
+      }
+    }
+
+    // 动态展示凭证区缩略图与重试操作条
+    let retryCard = document.getElementById('draft-vlm-retry-card');
+    if (draft.parseError) {
+      if (!retryCard) {
+        const simCanvas = ocrAmount ? ocrAmount.closest('.relative.w-full.h-56') : null;
+        if (simCanvas && simCanvas.parentElement) {
+          retryCard = document.createElement('div');
+          retryCard.id = 'draft-vlm-retry-card';
+          retryCard.className = 'w-full p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs transition-all';
+          simCanvas.parentElement.insertBefore(retryCard, simCanvas);
+        }
+      }
+      if (retryCard) {
+        retryCard.classList.remove('hidden');
+        const reason = draft.parseErrorReason || '未完成大模型解析';
+        const refreshIcon = (typeof getAppStatusIcon === 'function') ? getAppStatusIcon('refresh') : '';
+        const imgThumb = draft.imageData ? `<img src="${draft.imageData}" class="w-10 h-10 object-cover rounded-lg border border-amber-500/40 shrink-0" alt="截屏预览" />` : '';
+        retryCard.innerHTML = `
+          <div class="flex items-center space-x-2.5 overflow-hidden">
+            ${imgThumb}
+            <div class="overflow-hidden">
+              <span class="text-amber-300 font-semibold block truncate">${reason}</span>
+              <span class="text-[10px] text-slate-400 block truncate">已保留画面截图，点击可重试AI识别</span>
+            </div>
+          </div>
+          <button type="button" onclick="window.retryCurrentDraftVlm()" class="shrink-0 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-amber-500 text-slate-900 hover:bg-amber-400 transition-all flex items-center space-x-1 shadow-sm tap-highlight">
+            <span class="w-3.5 h-3.5 inline-flex items-center justify-center" data-ui-icon="refresh">${refreshIcon}</span>
+            <span>重新识别</span>
+          </button>
+        `;
+      }
+    } else {
+      if (retryCard) {
+        retryCard.classList.add('hidden');
+      }
     }
 
     // Inputs
@@ -463,8 +559,8 @@
     const inTime = document.getElementById('input-time');
     const selChan = document.getElementById('select-channel');
     const selAcc = document.getElementById('select-account');
-    if (inAmt) inAmt.value = draft.amount.toFixed(2);
-    if (inMer) inMer.value = draft.merchant;
+    if (inAmt) inAmt.value = numAmount.toFixed(2);
+    if (inMer) inMer.value = draft.merchant || '';
     if (inOrder) inOrder.value = draft.orderId || '';
     if (inTime) inTime.value = draft.orderTime || draft.time || '';
 
@@ -507,6 +603,103 @@
       sugRule.innerHTML = `<span class="w-3.5 h-3.5 inline-flex items-center justify-center align-text-bottom mr-1" data-ui-icon="bulb">${bulbSvg}</span>匹配规则：${draft.rule}`;
     }
   }
+
+  async function retryCurrentDraftVlm() {
+    const draft = draftQueue[currentDraftIndex];
+    if (!draft) return;
+    if (!draft.imageData) {
+      if (typeof showToast === 'function') {
+        showToast('该草稿无截屏原图数据，无法重新识别', 'warning');
+      }
+      return;
+    }
+    const vlmKeyInput = document.getElementById('vlm-api-key');
+    let activeKey = (vlmKeyInput && vlmKeyInput.value.trim()) ? vlmKeyInput.value.trim() : '';
+    if (!activeKey) {
+      try {
+        const raw = localStorage.getItem('singwallet_vlm_config');
+        if (raw) {
+          const cfg = JSON.parse(raw);
+          if (cfg && cfg.apiKey) activeKey = cfg.apiKey.trim();
+        }
+      } catch (e) {}
+    }
+    if (!activeKey && window.vlmConfig && window.vlmConfig.apiKey) {
+      activeKey = window.vlmConfig.apiKey.trim();
+    }
+
+    if (!activeKey) {
+      if (typeof showToast === 'function') {
+        showToast('请先在「大模型设置」中配置 API Key 后重试', 'warning');
+      }
+      if (typeof openLlmConfigModal === 'function') {
+        openLlmConfigModal();
+      }
+      return;
+    }
+
+    const file = dataURLtoFile(draft.imageData, draft.imgTitle || ('retry_vlm_' + Date.now() + '.png'));
+
+    draft.isParsing = true;
+    draft.parseError = false;
+    draft.progress = 15;
+    draft.tag = '重新解析中...';
+    renderDraftQueue();
+
+    if (typeof parseBillWithVlm === 'function') {
+      try {
+        const result = await parseBillWithVlm(file);
+        draft.isParsing = false;
+        draft.parseError = false;
+        draft.progress = 100;
+        draft.merchant = result.merchant || '已解析商户';
+        draft.merchantHeader = (draft.merchant || '').slice(0, 8);
+        draft.amount = Number(result.amount) || 0;
+        draft.amountInCents = Math.round(draft.amount * 100);
+        draft.confidence = typeof result.confidence === 'number' ? result.confidence : 96;
+
+        const resolver = window.resolveParentCategory || (window.DomainRegistry && window.DomainRegistry.resolveParentCategory);
+        const currentCats = (window.DomainRegistry && typeof window.DomainRegistry.getParentCategories === 'function')
+          ? window.DomainRegistry.getParentCategories()
+          : (window.CORE_PARENT_CATEGORIES || ['日常购物']);
+        const fallbackCat = currentCats.includes('日常购物') ? '日常购物' : (currentCats[0] || '日常购物');
+        const normCat = typeof resolver === 'function' ? resolver(result.category || result.cat || '', draft.merchant || '') : (result.category || fallbackCat);
+
+        draft.category = normCat;
+        draft.categoryName = normCat;
+        draft.categoryIcon = (window.IconRegistry && typeof window.IconRegistry.getCategoryIcon === 'function')
+          ? window.IconRegistry.getCategoryIcon(normCat)
+          : '';
+        draft.orderId = result.orderId || '';
+        draft.time = result.orderTime || result.time || ((typeof window.formatCurrentDateTime === 'function') ? window.formatCurrentDateTime() : '');
+        draft.payment = result.payment;
+        draft.channel = (result.payment && result.payment.channel) || '微信';
+        draft.account = (result.payment && result.payment.sub_type) || '钱包';
+        draft.tag = `置信度 ${draft.confidence}%`;
+        draft.rule = result.rule || 'VLM 视觉智能识别';
+
+        saveStoredDrafts();
+        renderDraftQueue();
+        updateDraftBadge();
+        if (typeof showToast === 'function') {
+          showToast(`草稿重新识别成功：${draft.merchant} ¥${draft.amount.toFixed(2)}`);
+        }
+      } catch (err) {
+        console.warn('retryCurrentDraftVlm error:', err);
+        draft.isParsing = false;
+        draft.parseError = true;
+        draft.parseErrorReason = err.message || '大模型调用异常或网络不可达';
+        draft.tag = '重试失败·已保单';
+        saveStoredDrafts();
+        renderDraftQueue();
+        updateDraftBadge();
+        if (typeof showToast === 'function') {
+          showToast(`重试失败：${draft.parseErrorReason}`, 'error');
+        }
+      }
+    }
+  }
+  window.retryCurrentDraftVlm = retryCurrentDraftVlm;
 
   function updateDraftBadge() {
     const badge = document.getElementById('draft-badge');
@@ -4278,17 +4471,23 @@
 
   async function handleShortcutCapturedItem(item) {
     if (!item || !item.dataUrl) return;
+    console.info('[SingWalletShortcut] Received capture:', item.source, 'dataUrlLen=', item.dataUrl.length);
     const isBackTap = item.source === 'backtap-screenshot';
     const isLightning = item.source === 'lightning-tile';
     try {
       const filePrefix = isLightning ? '闪电抓屏_' : (isBackTap ? '背部轻敲截屏_' : '快捷指令抓屏_');
       const file = dataURLtoFile(item.dataUrl, filePrefix + Date.now() + '.png');
       if (typeof window.handleManualScreenshotUpload === 'function') {
-        const fakeEvent = { target: { files: [file], value: '' } };
+        const fakeEvent = {
+          target: { files: [file], value: '' },
+          isBackgroundCapture: true,
+          captureSource: item.source,
+          sourceDataUrl: item.dataUrl
+        };
         await window.handleManualScreenshotUpload(fakeEvent);
         if (typeof showToast === 'function') {
           if (isLightning) {
-            showToast('⚡ 闪电记账已捕获账单画面，正在后台调用大模型解析...');
+            showToast('闪电记账已捕获账单画面，正在后台调用大模型解析...');
           } else if (isBackTap) {
             showToast('检测到背部轻敲截屏，正在后台调用大模型识别...');
           }
@@ -4307,14 +4506,16 @@
           id: taskId,
           ...localFallback,
           confidence: 99,
+          imageData: item.dataUrl,
           tag: isLightning ? '闪电抓屏智能识别' : (isBackTap ? '背部轻敲智能识别' : '快捷指令智能识别')
         };
         if (!window.draftQueue) window.draftQueue = [];
         window.draftQueue.unshift(draft);
+        saveStoredDrafts();
         if (typeof renderDraftQueue === 'function') renderDraftQueue();
         if (typeof updateDraftBadge === 'function') updateDraftBadge();
         if (typeof showToast === 'function') {
-          showToast(isLightning ? '⚡ 闪电记账已捕获账单，已存入草稿箱' : (isBackTap ? '检测到背部轻敲截屏，正在后台调用大模型识别...' : '已自动识别快捷抓屏账单并存入草稿箱'));
+          showToast(isLightning ? '闪电记账已捕获账单，已存入草稿箱' : (isBackTap ? '检测到背部轻敲截屏，正在后台调用大模型识别...' : '已自动识别快捷抓屏账单并存入草稿箱'));
         }
       }
 
@@ -4334,6 +4535,9 @@
   }
 
   async function pollShortcutQueueOnce() {
+    if (typeof window !== 'undefined' && window.location && window.location.protocol === 'file:') {
+      return;
+    }
     if (isPollingShortcutQueue) return;
     if (typeof fetch !== 'function') return;
     isPollingShortcutQueue = true;
@@ -4493,14 +4697,14 @@
     if (isEnabled) {
       badge.textContent = '服务已就绪';
       badge.className = 'text-[11px] text-emerald-400 font-mono whitespace-nowrap';
-      if (btnText) btnText.textContent = '✅ 无障碍服务运行正常 (点击重检)';
+      if (btnText) btnText.textContent = '无障碍服务运行正常 (点击重检)';
       if (btn) {
         btn.className = 'w-full py-2 px-3 rounded-xl bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-500/40 hover:border-emerald-500 text-emerald-300 text-xs font-medium transition-all flex items-center justify-center gap-1.5 tap-highlight';
       }
     } else {
       badge.textContent = '未授权开启';
       badge.className = 'text-[11px] text-amber-400 font-mono whitespace-nowrap';
-      if (btnText) btnText.textContent = '⚡ 前往开启无障碍快捷抓屏服务';
+      if (btnText) btnText.textContent = '前往开启无障碍快捷抓屏服务';
       if (btn) {
         btn.className = 'w-full py-2 px-3 rounded-xl bg-indigo-600/25 hover:bg-indigo-600/40 border border-indigo-500/50 hover:border-indigo-400 text-indigo-200 text-xs font-medium transition-all flex items-center justify-center gap-1.5 tap-highlight';
       }
@@ -4527,7 +4731,7 @@
       mockA11yEnabled = !mockA11yEnabled;
       const ready = checkA11yServiceStatus();
       if (typeof showToast === 'function') {
-        showToast(ready ? '⚡ 无障碍快捷抓屏服务已就绪 (原生端支持直接无感抓屏)' : '已模拟切换为未授权状态，点击可模拟开启');
+        showToast(ready ? '无障碍快捷抓屏服务已就绪 (原生端支持直接无感抓屏)' : '已模拟切换为未授权状态，点击可模拟开启');
       }
     }
   }

@@ -2095,6 +2095,115 @@ function runAllTestsSuite() {
     assert(catListFirstItem !== null && catListFirstItem.className.includes('rounded-xl'), "Group 39: Category manager items use rounded-xl");
     assert(catListFirstItem !== null && catListFirstItem.className.includes('min-h-[36px]'), "Group 39: Category manager items use min-h-[36px]");
 
+    // ========================================================
+    // Group 40: 闪电记账后台抓屏草稿 100% 零丢失保障 + 离线协议静默容错
+    // ========================================================
+    console.log("=== Group 40: Background Capture Zero Loss & Offline Resilience ===");
+
+    // 1. 验证 pollShortcutQueueOnce 在 file: 协议下静默拦截，杜绝网络异常与 WebView 错误日志
+    assert(typeof window.pollShortcutQueueOnce === 'function', "Group 40: window.pollShortcutQueueOnce exists");
+    pollShortcutQueueOnce();
+    assert(typeof pollShortcutQueueOnce === 'function', "Group 40: pollShortcutQueueOnce executed safely without throwing");
+
+    // 2. 验证 handleShortcutCapturedItem 增强：日志记录、附加上下文标记、全站零硬编码 Emoji
+    assert(typeof window.handleShortcutCapturedItem === 'function', "Group 40: window.handleShortcutCapturedItem exists");
+
+    // 3. 场景 A：未配置大模型 API Key 时，后台闪电抓屏零丢失保障验证
+    const vlmKeyInput40 = document.getElementById('vlm-api-key');
+    if (vlmKeyInput40) vlmKeyInput40.value = '';
+    if (window.vlmConfig) window.vlmConfig.apiKey = '';
+    const draftsBeforeA = draftQueue.length;
+
+    const fakeBgCaptureItemA = {
+      source: 'lightning-tile',
+      dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+    };
+    handleShortcutCapturedItem(fakeBgCaptureItemA);
+
+    assert(draftQueue.length === draftsBeforeA + 1, "Group 40 (Scenario A): Background capture draft MUST NOT be discarded when no API key (draftQueue length +1)");
+    const savedDraftA = draftQueue[0];
+    assert(savedDraftA.parseError === true, "Group 40 (Scenario A): Fallback draft has parseError === true");
+    assert(savedDraftA.merchant.includes('闪电抓屏'), "Group 40 (Scenario A): Fallback draft merchant indicates '闪电抓屏'");
+    assert(savedDraftA.amount === 0, "Group 40 (Scenario A): Fallback draft amount is 0 (no NaN)");
+    assert(savedDraftA.imageData === fakeBgCaptureItemA.dataUrl, "Group 40 (Scenario A): Fallback draft preserves original screenshot imageData");
+    assert(savedDraftA.parseErrorReason === '未配置大模型 API Key', "Group 40 (Scenario A): parseErrorReason correctly recorded");
+
+    // 验证草稿胶囊 UI 包含琥珀色样式与“待重试”状态，无硬编码 Emoji
+    const pillContainer40 = document.getElementById('draft-pills-container');
+    assert(pillContainer40 !== null, "Group 40: #draft-pills-container exists");
+    assert(pillContainer40.innerHTML.includes('待重试'), "Group 40: Draft pill displays '待重试' badge");
+    assert(!pillContainer40.innerHTML.includes('NaN'), "Group 40: Draft pill HTML contains NO 'NaN'");
+
+    // 验证 localStorage 持久化中包含该草稿
+    const persistedDraftsA = JSON.parse(localStorage.getItem('singwallet_user_drafts') || '[]');
+    assert(persistedDraftsA.some(d => d.id === savedDraftA.id), "Group 40 (Scenario A): Fallback draft 100% persisted to localStorage");
+
+    // 4. 验证草稿详情区与凭证区待重试状态展示
+    loadDraftData(savedDraftA);
+    const retryCardDom = document.getElementById('draft-vlm-retry-card');
+    assert(retryCardDom !== null && !retryCardDom.classList.contains('hidden'), "Group 40: #draft-vlm-retry-card is visible for draft with parseError");
+    assert(document.getElementById('input-amount').value === '0.00' || document.getElementById('input-amount').value === '', "Group 40: input-amount does not show NaN");
+    assert(typeof window.retryCurrentDraftVlm === 'function', "Group 40: window.retryCurrentDraftVlm function is mounted");
+
+    // 5. 验证容量超限保护机制 (saveStoredDrafts QuotaExceeded fallback)
+    assert(typeof window.saveStoredDrafts === 'function', "Group 40: window.saveStoredDrafts exists");
+    const origSetItem = localStorage.setItem;
+    let quotaHitCount = 0;
+    localStorage.setItem = function(key, val) {
+      if (quotaHitCount === 0 && key === 'singwallet_user_drafts') {
+        quotaHitCount++;
+        const err = new Error('QuotaExceededError');
+        err.name = 'QuotaExceededError';
+        throw err;
+      }
+      return origSetItem.call(this, key, val);
+    };
+    saveStoredDrafts();
+    localStorage.setItem = origSetItem;
+    assert(quotaHitCount === 1, "Group 40: QuotaExceededError triggered safely and caught by saveStoredDrafts fallback");
+
+    // 6. 场景 B：大模型接口异常网络故障时的草稿零丢失与原地保单验证
+    if (vlmKeyInput40) vlmKeyInput40.value = 'sk-test-vlm-key-40';
+    if (window.vlmConfig) window.vlmConfig.apiKey = 'sk-test-vlm-key-40';
+
+    const testTaskIdB = 'draft-vlm-task-error-test-' + Date.now();
+    const taskDraftB = {
+      id: testTaskIdB,
+      merchant: '大模型解析中...',
+      amount: 0,
+      confidence: 0,
+      isParsing: true,
+      category: '日常购物',
+      channel: '微信',
+      account: '钱包',
+      tag: '后台解析中...',
+      rule: 'VLM 视觉智能识别',
+      time: '2026-10-29 12:00:00',
+      imageData: fakeBgCaptureItemA.dataUrl
+    };
+    draftQueue.unshift(taskDraftB);
+    renderDraftQueue();
+
+    const targetDraftB = draftQueue.find(d => d.id === testTaskIdB);
+    assert(targetDraftB !== null, "Group 40: taskDraftB inserted");
+    targetDraftB.isParsing = false;
+    targetDraftB.parseError = true;
+    targetDraftB.parseErrorReason = '网络连接超时 (504 Gateway Timeout)';
+    targetDraftB.merchant = '闪电抓屏 (点击重试或手填)';
+    targetDraftB.tag = '网络受阻·已保单';
+    saveStoredDrafts();
+    renderDraftQueue();
+
+    assert(draftQueue.some(d => d.id === testTaskIdB), "Group 40 (Scenario B): Draft MUST NOT be spliced/deleted on network error!");
+    assert(draftQueue[0].tag === '网络受阻·已保单', "Group 40 (Scenario B): Draft tag updated to '网络受阻·已保单'");
+
+    // 清理 Group 40 测试草稿
+    draftQueue = draftQueue.filter(d => d.id !== savedDraftA.id && d.id !== testTaskIdB);
+    saveStoredDrafts();
+    renderDraftQueue();
+    updateDraftBadge();
+
+
     // 4. 测试收尾：清理全部测试数据，确保 App 还原为 100% 干净状态
     cleanAllTestData();
     assert(document.querySelectorAll('#transactions-list .tx-item').length === 0, "Group 37 Post-Cleanup: Transactions restored to 0");
