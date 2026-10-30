@@ -3,13 +3,13 @@
 SingWallet Web Assets Sync Tool
 --------------------------------
 Automates single-source asset synchronization between web source files
-(singwallet_preview.html & preview/) and the Android native host asset directory
+(web/) and the Android native host asset directory
 (android/app/src/main/assets/).
 
 Usage:
     python tools/sync_web_assets.py --check       # Verify consistency without writing
     python tools/sync_web_assets.py --dry-run     # Preview sync changes
-    python tools/sync_web_assets.py               # Perform sync (root -> assets)
+    python tools/sync_web_assets.py               # Perform sync (web -> assets)
 """
 
 import argparse
@@ -58,46 +58,27 @@ def run_check(src_root: Path, dst_root: Path) -> int:
 
     differences_found = False
 
-    # 1. Check singwallet_preview.html
-    src_html = src_root / "singwallet_preview.html"
-    dst_html = dst_root / "singwallet_preview.html"
+    if not src_root.exists():
+        print(f"[ERROR] Source web directory missing: {src_root}")
+        return 1
 
-    if not src_html.exists():
-        print(f"[ERROR] Source HTML missing: {src_html}")
-        differences_found = True
-    elif not dst_html.exists():
-        print(f"[MISSING] Target HTML missing: {dst_html}")
-        differences_found = True
-    else:
-        src_hash = file_sha256(src_html)
-        dst_hash = file_sha256(dst_html)
-        if src_hash == dst_hash:
-            print(" [MATCH] singwallet_preview.html")
-        else:
-            print(" [DIFF]  singwallet_preview.html (content differs)")
-            differences_found = True
-
-    # 2. Check preview/ directory
-    src_preview_dir = src_root / "preview"
-    dst_preview_dir = dst_root / "preview"
-
-    src_files = collect_tree_files(src_preview_dir)
-    dst_files = collect_tree_files(dst_preview_dir)
+    src_files = collect_tree_files(src_root)
+    dst_files = collect_tree_files(dst_root)
 
     all_keys = sorted(set(src_files.keys()) | set(dst_files.keys()))
 
     for key in all_keys:
         if key in src_files and key in dst_files:
             if file_sha256(src_files[key]) == file_sha256(dst_files[key]):
-                print(f" [MATCH] preview/{key}")
+                print(f" [MATCH] {key}")
             else:
-                print(f" [DIFF]  preview/{key} (content differs)")
+                print(f" [DIFF]  {key} (content differs)")
                 differences_found = True
         elif key in src_files:
-            print(f" [MISSING IN ASSETS] preview/{key}")
+            print(f" [MISSING IN ASSETS] {key}")
             differences_found = True
         else:
-            print(f" [EXTRA IN ASSETS]   preview/{key}")
+            print(f" [EXTRA IN ASSETS]   {key}")
             differences_found = True
 
     print("=" * 60)
@@ -110,7 +91,7 @@ def run_check(src_root: Path, dst_root: Path) -> int:
 
 
 def run_sync(src_root: Path, dst_root: Path, dry_run: bool = False, clean: bool = True) -> int:
-    """Synchronize root web files to android assets."""
+    """Synchronize web files to android assets and clean legacy files."""
     print("=" * 60)
     mode_str = "[DRY-RUN] " if dry_run else ""
     print(f"{mode_str}Synchronizing Single-Source Web Assets -> Android Host Assets")
@@ -118,54 +99,43 @@ def run_sync(src_root: Path, dst_root: Path, dry_run: bool = False, clean: bool 
     print(f"Target Assets: {dst_root}")
     print("=" * 60)
 
-    # 1. Sync singwallet_preview.html
-    src_html = src_root / "singwallet_preview.html"
-    dst_html = dst_root / "singwallet_preview.html"
-
-    if not src_html.exists():
-        print(f"[ERROR] Source file not found: {src_html}")
+    if not src_root.exists():
+        print(f"[ERROR] Source web directory not found: {src_root}")
         return 1
 
     dst_root.mkdir(parents=True, exist_ok=True)
 
-    if not dst_html.exists() or file_sha256(src_html) != file_sha256(dst_html):
-        print(f" -> Copying {src_html.name} -> {dst_html}")
-        if not dry_run:
-            shutil.copy2(src_html, dst_html)
-    else:
-        print(f" -> Up to date: {src_html.name}")
+    src_files = collect_tree_files(src_root)
+    dst_files = collect_tree_files(dst_root)
 
-    # 2. Sync preview/ directory
-    src_preview_dir = src_root / "preview"
-    dst_preview_dir = dst_root / "preview"
-
-    if not src_preview_dir.exists():
-        print(f"[ERROR] Source directory not found: {src_preview_dir}")
-        return 1
-
-    src_files = collect_tree_files(src_preview_dir)
-    dst_files = collect_tree_files(dst_preview_dir)
-
-    # Copy / update
+    # 1. Copy / update current files
     for rel_path, src_path in src_files.items():
-        dst_path = dst_preview_dir / rel_path
+        dst_path = dst_root / rel_path
         if not dst_path.exists() or file_sha256(src_path) != file_sha256(dst_path):
-            print(f" -> Updating preview/{rel_path}")
+            print(f" -> Updating {rel_path}")
             if not dry_run:
                 dst_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src_path, dst_path)
         else:
-            print(f" -> Up to date: preview/{rel_path}")
+            print(f" -> Up to date: {rel_path}")
 
-    # Clean extra files in assets if clean=True
+    # 2. Clean extra/stale files in assets if clean=True (including legacy singwallet_preview.html, preview/*)
     if clean:
         for rel_path, dst_path in dst_files.items():
             if rel_path not in src_files:
-                print(f" -> Removing stale asset: preview/{rel_path}")
+                print(f" -> Removing stale asset: {rel_path}")
                 if not dry_run:
-                    dst_path.unlink()
                     try:
-                        dst_path.parent.rmdir()
+                        dst_path.unlink()
+                    except OSError:
+                        pass
+        # Clean empty directories
+        if not dry_run:
+            for root, dirs, _ in os.walk(dst_root, topdown=False):
+                for d in dirs:
+                    d_path = Path(root) / d
+                    try:
+                        d_path.rmdir()
                     except OSError:
                         pass
 
@@ -195,7 +165,7 @@ def main():
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parent.parent
-    src_root = repo_root
+    src_root = repo_root / "web"
     dst_root = repo_root / "android" / "app" / "src" / "main" / "assets"
 
     if args.check:

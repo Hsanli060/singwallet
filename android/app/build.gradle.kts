@@ -15,8 +15,8 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
-val appVersionName = (project.findProperty("APP_VERSION_NAME") as String?) ?: "1.0.6"
-val appVersionCode = (project.findProperty("APP_VERSION_CODE") as String?)?.toIntOrNull() ?: 7
+val appVersionName = (project.findProperty("APP_VERSION_NAME") as String?) ?: "1.0.7"
+val appVersionCode = (project.findProperty("APP_VERSION_CODE") as String?)?.toIntOrNull() ?: 8
 
 android {
     namespace = "com.singwallet.app"
@@ -67,32 +67,24 @@ kotlin {
     }
 }
 
-// 单源前端资产自动同步任务：APK 构建前自动将根目录 preview 与 singwallet_preview.html 同步至 assets
+// 单源前端资产自动同步任务：APK 构建前自动将根目录 web/ 资产同步至 assets
 val syncWebAssets = tasks.register("syncWebAssets") {
     group = "build"
-    description = "Sync single-source web preview assets into Android main assets."
+    description = "Sync single-source web assets into Android main assets."
 
     val repoRoot = rootDir.parentFile
-    val srcHtml = File(repoRoot, "singwallet_preview.html")
-    val srcPreviewDir = File(repoRoot, "preview")
+    val srcWebDir = File(repoRoot, "web")
     val destAssetsDir = file("src/main/assets")
 
-    inputs.file(srcHtml)
-    inputs.dir(srcPreviewDir)
-    outputs.file(File(destAssetsDir, "singwallet_preview.html"))
-    outputs.dir(File(destAssetsDir, "preview"))
+    inputs.dir(srcWebDir)
+    outputs.dir(destAssetsDir)
 
     doLast {
-        if (srcHtml.exists()) {
+        if (srcWebDir.exists()) {
             destAssetsDir.mkdirs()
-            srcHtml.copyTo(File(destAssetsDir, "singwallet_preview.html"), overwrite = true)
-        }
-        if (srcPreviewDir.exists()) {
-            val destPreviewDir = File(destAssetsDir, "preview")
-            if (destPreviewDir.exists()) {
-                destPreviewDir.deleteRecursively()
-            }
-            srcPreviewDir.copyRecursively(destPreviewDir, overwrite = true)
+            File(destAssetsDir, "singwallet_preview.html").delete()
+            File(destAssetsDir, "preview").deleteRecursively()
+            srcWebDir.copyRecursively(destAssetsDir, overwrite = true)
         }
     }
 }

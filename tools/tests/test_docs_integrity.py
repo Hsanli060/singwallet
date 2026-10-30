@@ -50,10 +50,10 @@ def test_hybrid_architecture_integrity(root_dir=None):
         root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     
     required_assets = [
-        os.path.join(root_dir, "singwallet_preview.html"),
-        os.path.join(root_dir, "preview", "css", "preview.css"),
-        os.path.join(root_dir, "preview", "js", "app_controller.js"),
-        os.path.join(root_dir, "preview", "js", "ocr_vlm_engine.js"),
+        os.path.join(root_dir, "web", "index.html"),
+        os.path.join(root_dir, "web", "css", "preview.css"),
+        os.path.join(root_dir, "web", "js", "app_controller.js"),
+        os.path.join(root_dir, "web", "js", "ocr_vlm_engine.js"),
         os.path.join(root_dir, "android", "app", "src", "main", "kotlin", "com", "singwallet", "app", "MainActivity.kt"),
     ]
     for asset in required_assets:

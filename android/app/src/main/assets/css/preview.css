@@ -489,7 +489,7 @@
 
   /* 移动端三大核心页面顶部 Header 呼吸感统一定义，避免顶边局促拥挤 */
   #view-transactions > .shrink-0 > div:first-child {
-    padding-top: 16px !important;
+    padding-top: 48px !important;
     padding-bottom: 8px !important;
     min-height: 52px !important;
   }
@@ -499,7 +499,7 @@
     min-height: 52px !important;
   }
   #view-rules-accounts > div:first-child {
-    padding-top: 55px !important;
+    padding-top: 48px !important;
     padding-bottom: 8px !important;
     min-height: 52px !important;
   }
@@ -842,21 +842,5 @@ body.native-app #tx-scroll-viewport {
 body.native-app #view-drafts,
 body.native-app #view-rules-accounts {
   padding-bottom: calc(98px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
-}
-
-body.native-app #view-transactions > .shrink-0 > div:first-child {
-  padding-top: 16px !important;
-  padding-bottom: 8px !important;
-  min-height: 52px !important;
-}
-body.native-app #view-drafts > div:first-child {
-  padding-top: 48px !important;
-  padding-bottom: 8px !important;
-  min-height: 52px !important;
-}
-body.native-app #view-rules-accounts > div:first-child {
-  padding-top: 55px !important;
-  padding-bottom: 8px !important;
-  min-height: 52px !important;
 }
 

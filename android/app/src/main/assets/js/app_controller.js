@@ -2035,14 +2035,12 @@
             <div class="text-xs text-slate-400 mt-1 flex items-center space-x-1.5 truncate">
               <span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 shrink-0">${catName}</span>
               <span class="text-slate-400 font-mono text-[11px] shrink-0">${timeOnly}</span>
-              <span class="text-slate-600 shrink-0">•</span>
-              <span class="text-slate-400 text-[11px] whitespace-nowrap">${cleanAcc}</span>
             </div>
           </div>
         </div>
-        <div class="text-right shrink-0 flex flex-col items-end justify-center">
+        <div class="text-right shrink-0 flex flex-col items-end justify-center ml-2">
           <div class="font-bold text-base text-white font-mono tracking-tight whitespace-nowrap">-¥ ${numAmt.toFixed(2)}</div>
-          <span class="tx-source-tag text-[10px] text-emerald-400 font-medium mt-1 block">${txData.badge || '自动识别'}</span>
+          <span class="tx-source-tag text-[11px] text-slate-400 font-normal mt-1 block text-right whitespace-nowrap">${cleanAcc}</span>
         </div>
         <div role="button" class="tx-swipe-delete-btn" onclick="openTxDeleteConfirmModal(this.closest('.tx-item'), event)">
           <svg class="w-4 h-4 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
@@ -2923,15 +2921,13 @@
                 <div class="text-xs text-slate-400 mt-1 flex items-center space-x-1.5 truncate">
                   <span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 shrink-0">${catName}</span>
                   <span class="text-slate-400 font-mono text-[11px] shrink-0">${timeShort}</span>
-                  <span class="text-slate-600 shrink-0">•</span>
-                  <span class="text-slate-400 truncate text-[11px]">${cleanAcc}</span>
                   ${tx.refund ? `<span class="text-slate-600 shrink-0">•</span><span class="text-purple-300 text-[10px] shrink-0 bg-purple-500/20 px-1 rounded">退款</span>` : ''}
                 </div>
               </div>
             </div>
-            <div class="text-right shrink-0 flex flex-col items-end justify-center">
+            <div class="text-right shrink-0 flex flex-col items-end justify-center ml-2">
               <div class="font-bold text-base text-white font-mono tracking-tight whitespace-nowrap">${tx.refund ? '+' : '-'}¥ ${tx.amount.toFixed(2)}</div>
-              <span class="tx-source-tag text-[10px] ${tx.refund ? 'text-purple-300' : 'text-emerald-400'} font-medium mt-1 block">${tx.badge || (tx.refund ? '已退款' : '自动识别')}</span>
+              <span class="tx-source-tag text-[11px] text-slate-400 font-normal mt-1 block text-right whitespace-nowrap">${cleanAcc}</span>
             </div>
             <div role="button" class="tx-swipe-delete-btn" onclick="openTxDeleteConfirmModal(this.closest('.tx-item'), event)">
               <svg class="w-4 h-4 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
@@ -2959,7 +2955,7 @@
     host.querySelectorAll('.singwallet-toast-wrap').forEach(el => el.remove());
 
     const wrap = document.createElement('div');
-    wrap.className = "singwallet-toast-wrap absolute top-3.5 left-4 right-4 z-50 flex justify-center pointer-events-none";
+    wrap.className = "singwallet-toast-wrap absolute top-[160px] left-4 right-4 z-50 flex justify-center pointer-events-none";
     const t = document.createElement('div');
     t.className = "bg-slate-800/95 text-white border border-slate-700/90 px-4 py-2 rounded-2xl text-xs shadow-2xl flex items-center space-x-1.5 animate-fadeIn backdrop-blur-md max-w-full text-center pointer-events-auto";
     t.innerHTML = `<span class="inline-flex items-center space-x-1.5">${msg}</span>`;

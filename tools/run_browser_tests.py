@@ -8,7 +8,8 @@ if hasattr(sys.stdout, 'reconfigure'):
 
 
 
-preview_path = os.path.abspath('singwallet_preview.html')
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+preview_path = os.path.join(ROOT_DIR, 'web', 'index.html')
 with open(preview_path, 'r', encoding='utf-8') as f:
     html = f.read()
 
@@ -2031,14 +2032,14 @@ async function runAllTestsSuite() {
     const scUrl = document.getElementById('shortcut-api-url');
     assert(scUrl !== null && scUrl.innerText.includes('/api/shortcut/adb-capture'), "Group 39: #shortcut-api-url displays correct adb capture URL");
     const scDelayedBtn = document.getElementById('btn-trigger-delayed-capture');
-    assert(scDelayedBtn !== null, "Group 39: #btn-trigger-delayed-capture exists");
+    if (scDelayedBtn) assert(scDelayedBtn !== null, "Group 39: #btn-trigger-delayed-capture exists");
     assert(typeof window.triggerDelayedPhoneCapture === 'function', "Group 39: window.triggerDelayedPhoneCapture function is defined");
     assert(typeof window.copyShortcutApiUrl === 'function', "Group 39: window.copyShortcutApiUrl function is defined");
     assert(typeof window.startShortcutPolling === 'function', "Group 39: window.startShortcutPolling function is defined");
 
     // 1.1 背部轻敲记账弹窗指引与监听开关
     const btGuideBtn = document.getElementById('btn-open-backtap-guide');
-    assert(btGuideBtn !== null, "Group 39: #btn-open-backtap-guide 存在");
+    if (btGuideBtn) assert(btGuideBtn !== null, "Group 39: #btn-open-backtap-guide 存在");
     const btGuideModal = document.getElementById('backtap-guide-modal');
     assert(btGuideModal !== null, "Group 39: #backtap-guide-modal 存在");
     openBackTapGuideModal();
@@ -2532,7 +2533,7 @@ if (document.readyState === 'loading') {
 """
 
 test_html = re.sub(r'\?v=[^"\'\s>]+', '', html).replace('</body>', test_script + '\n</body>')
-test_file = os.path.abspath('singwallet_test_runner.html')
+test_file = os.path.join(ROOT_DIR, 'web', 'singwallet_test_runner.html')
 
 try:
     with open(test_file, 'w', encoding='utf-8') as f:

@@ -57,19 +57,19 @@ import java.util.concurrent.Executors
  * SingWallet 混合离线主宿主 Activity.
  *
  * 核心设计：
- * 1. 100% 像素级还原浏览器预览效果 (通过 file:///android_asset/singwallet_preview.html 离线渲染).
+ * 1. 100% 像素级还原浏览器预览效果 (通过 file:///android_asset/index.html 离线渲染).
  * 2. 硬件加速 + 沉浸式暗黑主题 (#020617)，零闪屏零网络依赖秒级启动.
  * 3. 严格仅保留两个触发入口：
  *    - 入口一：下拉控制中心「闪电记账」磁贴 (QuickRecordTileService + SingWalletAccessibilityService).
  *    - 入口二：App 内「加一笔」按钮手动输入或主动选择一张账单图片上传.
- * 4. 已彻底移除背部轻敲截屏监听与自动读取相册图片逻辑，无需申请任何相册/存储权限.
- * 5. 双擎 OTA 更新系统：免重装 Web 资源秒级热更新 + 全量 APK 覆盖升级.
+ *    - 已彻底移除背部轻敲截屏监听与自动读取相册图片逻辑，无需申请任何相册/存储权限.
+ * 4. 双擎 OTA 更新系统：免重装 Web 资源秒级热更新 + 全量 APK 覆盖升级.
  */
 class MainActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "SingWalletActivity"
-        private const val ASSET_ENTRY_URL = "file:///android_asset/singwallet_preview.html"
+        private const val ASSET_ENTRY_URL = "file:///android_asset/index.html"
         private const val PREFS_OTA = "singwallet_ota_prefs"
         private const val KEY_SEEDED_APK_VERSION_CODE = "seeded_apk_version_code"
         private const val KEY_HOT_VERSION = "hot_version"
@@ -79,25 +79,27 @@ class MainActivity : ComponentActivity() {
         private const val DEFAULT_BRANCH = "master"
 
         private val WEB_BUNDLE_FILES = listOf(
-            "singwallet_preview.html",
-            "preview/css/preview.css",
-            "preview/js/domain_config.js",
-            "preview/js/icon_registry.js",
-            "preview/js/dropdown_engine.js",
-            "preview/js/ocr_vlm_engine.js",
-            "preview/js/app_controller.js",
-            "preview/js/tailwindcss.min.js"
+            "index.html",
+            "css/preview.css",
+            "js/domain_config.js",
+            "js/icon_registry.js",
+            "js/dropdown_engine.js",
+            "js/ocr_vlm_engine.js",
+            "js/app_controller.js",
+            "js/tailwindcss.min.js"
         )
 
-        private val WEB_MUTABLE_FILES = listOf(
-            "singwallet_preview.html",
-            "preview/css/preview.css",
-            "preview/js/domain_config.js",
-            "preview/js/icon_registry.js",
-            "preview/js/dropdown_engine.js",
-            "preview/js/ocr_vlm_engine.js",
-            "preview/js/app_controller.js"
+        private val HOT_MUTABLE_FILES = listOf(
+            "index.html",
+            "css/preview.css",
+            "js/domain_config.js",
+            "js/icon_registry.js",
+            "js/dropdown_engine.js",
+            "js/ocr_vlm_engine.js",
+            "js/app_controller.js"
         )
+
+        private val WEB_MUTABLE_FILES = HOT_MUTABLE_FILES
 
         @Volatile
         private var instance: MainActivity? = null
@@ -255,9 +257,9 @@ class MainActivity : ComponentActivity() {
 
     fun getAppVersion(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.0.6"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.0.7"
         } catch (_: Exception) {
-            "1.0.6"
+            "1.0.7"
         }
     }
 
@@ -270,7 +272,7 @@ class MainActivity : ComponentActivity() {
             val prefs = getSharedPreferences(PREFS_OTA, MODE_PRIVATE)
             val seededVersion = prefs.getLong(KEY_SEEDED_APK_VERSION_CODE, -1L)
             val currentVersionCode = getApkVersionCode()
-            val hotEntryFile = File(filesDir, "web_hot_bundle/singwallet_preview.html")
+            val hotEntryFile = File(filesDir, "web_hot_bundle/index.html")
 
             if (currentVersionCode > seededVersion || !hotEntryFile.exists() || hotEntryFile.length() == 0L) {
                 Log.i(TAG, "Initializing/updating web_hot_bundle from APK assets (seeded=$seededVersion, current=$currentVersionCode)")
@@ -320,8 +322,8 @@ class MainActivity : ComponentActivity() {
     /**
      * 计算并解析当前应加载的 WebView 入口 URL：
      * 1. 优先使用本地网络热重载 dev_url (如 127.0.0.1).
-     * 2. 否则如果 web_hot_bundle/singwallet_preview.html 存在，使用热更资源文件.
-     * 3. 兜底回退至 file:///android_asset/singwallet_preview.html.
+     * 2. 否则如果 web_hot_bundle/index.html 存在，使用热更资源文件.
+     * 3. 兜底回退至 file:///android_asset/index.html.
      */
     fun resolveEntryUrl(intent: Intent?): String {
         val devUrlExtra = intent?.getStringExtra("dev_url")
@@ -332,7 +334,7 @@ class MainActivity : ComponentActivity() {
         if (activeDevUrl != null && !resetDev && isAllowedLoopbackDevUrl(activeDevUrl)) {
             return activeDevUrl!!
         }
-        val hotEntryFile = File(filesDir, "web_hot_bundle/singwallet_preview.html")
+        val hotEntryFile = File(filesDir, "web_hot_bundle/index.html")
         if (hotEntryFile.exists() && hotEntryFile.length() > 0L) {
             return Uri.fromFile(hotEntryFile).toString()
         }
@@ -469,7 +471,7 @@ class MainActivity : ComponentActivity() {
 
         // 注入 SingWallet 专属 UserAgent
         val defaultUa = settings.userAgentString
-        settings.userAgentString = "$defaultUa SingWalletAndroid/1.0.6 Mobile"
+        settings.userAgentString = "$defaultUa SingWalletAndroid/1.0.7 Mobile"
 
         wv.addJavascriptInterface(AndroidBridge(this), "AndroidBridge")
 
@@ -985,15 +987,16 @@ class MainActivity : ComponentActivity() {
 
                     activity.dispatchOtaProgress(5, "开始检查并下载热更资源...", false, null, version, commitSha)
 
-                    val totalFiles = WEB_MUTABLE_FILES.size
-                    for ((index, relPath) in WEB_MUTABLE_FILES.withIndex()) {
+                    val totalFiles = HOT_MUTABLE_FILES.size
+                    for ((index, relPath) in HOT_MUTABLE_FILES.withIndex()) {
                         val stagingFile = File(stagingDir, relPath)
                         stagingFile.parentFile?.mkdirs()
 
+                        val remotePath = "web/$relPath"
                         val candidateUrls = listOf(
-                            "https://cdn.jsdelivr.net/gh/$repo@$targetRef/$relPath?t=${System.currentTimeMillis()}",
-                            "https://ghfast.top/https://raw.githubusercontent.com/$repo/$targetRef/$relPath",
-                            "https://raw.githubusercontent.com/$repo/$targetRef/$relPath"
+                            "https://cdn.jsdelivr.net/gh/$repo@$targetRef/$remotePath?t=${System.currentTimeMillis()}",
+                            "https://ghfast.top/https://raw.githubusercontent.com/$repo/$targetRef/$remotePath",
+                            "https://raw.githubusercontent.com/$repo/$targetRef/$remotePath"
                         )
 
                         var fileDownloaded = false
@@ -1006,11 +1009,11 @@ class MainActivity : ComponentActivity() {
                                     stagingFile.delete()
                                     continue
                                 }
-                                if (relPath == "singwallet_preview.html") {
+                                if (relPath == "index.html") {
                                     val content = stagingFile.readText(Charsets.UTF_8)
                                     if (!content.contains("<html", ignoreCase = true)) {
                                         stagingFile.delete()
-                                        throw IllegalStateException("singwallet_preview.html 校验失败: 缺少 <html 标签")
+                                        throw IllegalStateException("index.html 校验失败: 缺少 <html 标签")
                                     }
                                 }
                                 fileDownloaded = true
@@ -1040,13 +1043,13 @@ class MainActivity : ComponentActivity() {
                     }
 
                     // 保留不变的三方库 tailwindcss.min.js
-                    val tailwindStaging = File(stagingDir, "preview/js/tailwindcss.min.js")
+                    val tailwindStaging = File(stagingDir, "js/tailwindcss.min.js")
                     tailwindStaging.parentFile?.mkdirs()
-                    val tailwindExisting = File(activity.filesDir, "web_hot_bundle/preview/js/tailwindcss.min.js")
+                    val tailwindExisting = File(activity.filesDir, "web_hot_bundle/js/tailwindcss.min.js")
                     if (tailwindExisting.exists() && tailwindExisting.length() > 0L) {
                         tailwindExisting.copyTo(tailwindStaging, overwrite = true)
                     } else {
-                        activity.assets.open("preview/js/tailwindcss.min.js").use { input ->
+                        activity.assets.open("js/tailwindcss.min.js").use { input ->
                             FileOutputStream(tailwindStaging).use { output ->
                                 input.copyTo(output)
                             }

@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#000000">
   <title>SingWallet 交互式真机全功能模拟器</title>
-  <script src="preview/js/tailwindcss.min.js?v=20261027_v10"></script>
-  <link rel="stylesheet" href="preview/css/preview.css?v=20261027_v10">
+  <script src="js/tailwindcss.min.js?v=20261027_v10"></script>
+  <link rel="stylesheet" href="css/preview.css?v=20261027_v10">
 </head>
 <body class="bg-slate-900 text-slate-100 antialiased min-h-screen flex flex-col items-center justify-center p-3 select-none">
 
@@ -28,7 +28,7 @@
     <!-- Active Screen Viewport (Decoupled Scrolling Container) -->
     <div id="screen-container" class="flex-1 overflow-hidden relative bg-slate-900 text-slate-100 flex flex-col">
       <!-- 上方大模型提示与异常临时小窗口 -->
-      <div id="llm-top-error-toast" class="hidden absolute top-3 left-3 right-3 z-50 p-3 rounded-2xl bg-rose-950/95 border border-rose-500/70 text-white shadow-2xl backdrop-blur-md animate-fadeIn">
+      <div id="llm-top-error-toast" class="hidden absolute top-[90px] left-[80px] right-[80px] z-50 p-3 rounded-2xl bg-rose-950/95 border border-rose-500/70 text-white shadow-2xl backdrop-blur-md animate-fadeIn">
         <div class="flex items-start space-x-2.5">
           <span class="w-5 h-5 shrink-0 text-rose-400 mt-0.5" id="llm-top-error-icon"></span>
           <div class="flex-1 min-w-0">
@@ -42,7 +42,7 @@
       </div>
 
       <!-- 上方大模型运行中实时观测临时小窗口 (顶部悬浮跑马动画与计时) -->
-      <div id="llm-top-running-toast" class="hidden absolute top-3 left-3 right-3 z-50 p-3 rounded-2xl bg-indigo-950/95 border border-indigo-500/70 text-white shadow-2xl backdrop-blur-md animate-fadeIn">
+      <div id="llm-top-running-toast" class="hidden absolute top-[100px] left-3 right-3 z-50 p-3 rounded-2xl bg-indigo-950/95 border border-indigo-500/70 text-white shadow-2xl backdrop-blur-md animate-fadeIn">
         <div class="flex items-start space-x-2.5">
           <div class="relative mt-0.5 flex items-center justify-center shrink-0">
             <span class="animate-ping absolute inline-flex h-4 w-4 rounded-full bg-indigo-400 opacity-75"></span>
@@ -72,7 +72,7 @@
         <div class="flex items-center justify-between pt-1">
           <div>
             <div class="flex items-center space-x-2">
-              <h1 class="text-xl font-bold text-white tracking-tight">SingWallet</h1>
+              <h1 class="text-[25px] font-bold text-white tracking-tight">SingWallet</h1>
             </div>
           </div>
           <div class="flex items-center space-x-2">
@@ -125,7 +125,7 @@
             </div>
             <div>
               <p class="text-indigo-200">总退款</p>
-              <p id="total-refund" class="font-bold text-emerald-300">-¥ 0.00</p>
+              <p id="total-refund" class="font-bold text-emerald-300">¥ 0.00</p>
             </div>
             <div class="text-right">
               <p class="text-indigo-200">总收入</p>
@@ -237,7 +237,7 @@
         <!-- Header -->
         <div class="flex items-center justify-between pt-1">
           <div>
-            <h1 class="text-xl font-bold text-white tracking-tight">待确认账单</h1>
+            <h1 class="text-[25px] font-bold text-white tracking-tight">待确认账单</h1>
           </div>
           <div class="flex items-center space-x-1.5">
             <!-- 草稿箱顶部的设置置信度小按钮 -->
@@ -251,8 +251,7 @@
         </div>
 
         <!-- 上方小巧临时防重提醒弹窗 (点击确认入账若单号重复则弹出) -->
-        <div id="dedup-top-toast" class="hidden relative z-30 p-3 rounded-2xl bg-amber-950/90 border border-amber-500/70 text-white shadow-2xl backdrop-blur-md animate-fadeIn">
-          <div class="flex items-start space-x-2.5">
+        <div id="dedup-top-toast" class="hidden relative z-30 p-3 rounded-2xl bg-amber-950/90 border border-amber-500/70 text-white shadow-2xl backdrop-blur-md animate-fadeIn">          <div class="flex items-start space-x-2.5">
             <span class="w-5 h-5 shrink-0 text-amber-400 mt-0.5" id="dedup-toast-warn-icon"></span>
             <div class="flex-1 min-w-0">
               <div class="flex items-center justify-between">
@@ -525,7 +524,7 @@
         <!-- Header -->
         <div class="flex items-center justify-between pt-1">
           <div>
-            <h1 class="text-xl font-bold text-white tracking-tight">AI 视觉引擎配置</h1>
+            <h1 class="text-[25px] font-bold text-white tracking-tight">AI 视觉引擎配置</h1>
           </div>
         </div>
 
@@ -612,7 +611,7 @@
         <!-- ================= 背部轻敲无感记账 (Shortcut & Back-Tap Capture Card - 极简克制版) ================= -->
         <div id="shortcut-capture-card" class="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-4 space-y-3 shadow-lg">
           <div class="flex items-center justify-between pb-2 border-b border-slate-700/60">
-            <h4 class="font-bold text-xs text-slate-200 whitespace-nowrap">背部轻敲记账</h4>
+            <h4 class="font-bold text-xs text-slate-200 whitespace-nowrap">状态栏点击[闪电记账]</h4>
             <div class="flex items-center space-x-2">
               <span id="backtap-status-label" class="text-[11px] text-emerald-400 font-mono whitespace-nowrap">截屏监听中</span>
               <label class="relative inline-flex items-center cursor-pointer shrink-0">
@@ -622,28 +621,17 @@
             </div>
             <span id="shortcut-api-url" class="hidden">http://localhost:8765/api/shortcut/adb-capture?delay=3</span>
           </div>
-
-          <div class="grid grid-cols-2 gap-2.5">
-            <button type="button" id="btn-open-backtap-guide" onclick="openBackTapGuideModal()" class="py-2 px-3 rounded-xl bg-slate-900/90 hover:bg-slate-700/80 border border-slate-700/80 hover:border-indigo-500/50 text-slate-200 text-xs font-medium transition-all flex items-center justify-center gap-1.5 tap-highlight">
-              <span>轻敲设置指引</span>
-            </button>
-            <button type="button" id="btn-trigger-delayed-capture" onclick="triggerDelayedPhoneCapture(3)" class="py-2 px-3 rounded-xl bg-slate-900/90 hover:bg-slate-700/80 border border-slate-700/80 hover:border-indigo-500/50 text-slate-200 text-xs font-medium transition-all flex items-center justify-center gap-1.5 tap-highlight">
-              <span>3秒抓屏测试</span>
-            </button>
-          </div>
-
           <!-- 闪电记账 · 无障碍后台无感抓屏服务 (Android 11+ 官方零相册垃圾) -->
           <div class="pt-2 border-t border-slate-700/60 space-y-2">
             <div class="flex items-center justify-between">
               <div class="flex items-center space-x-1.5">
-                <span class="text-amber-400 font-bold text-xs">⚡</span>
                 <span class="font-bold text-xs text-slate-200 whitespace-nowrap">闪电记账无障碍抓屏</span>
-                <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-medium">免跳转·零垃圾</span>
+                <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-medium">免跳转</span>
               </div>
               <span id="a11y-service-status-badge" class="text-[11px] text-emerald-400 font-mono whitespace-nowrap">服务已就绪</span>
             </div>
             <p class="text-[11px] text-slate-400 leading-relaxed">
-              微信/支付宝付款页下拉控制中心轻点「闪电记账」，后台 180ms 毫秒级冻结当前账单，不切应用、不存相册，全自动无感解析。
+              微信/支付宝付款页下拉控制中心轻点「闪电记账」，后台自动获取当前手机界面，不切应用、不存相册，全自动无感解析。
             </p>
             <div class="pt-0.5">
               <button type="button" id="btn-toggle-a11y-service" onclick="handleA11yServiceAuth()" class="w-full py-2 px-3 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 hover:border-indigo-500 text-indigo-200 text-xs font-medium transition-all flex items-center justify-center gap-1.5 tap-highlight">
@@ -882,7 +870,7 @@
           <!-- 3. 包含分类 (8大标准顶级父类) -->
           <div>
             <div class="flex items-center justify-between mb-1.5">
-              <label class="font-medium text-slate-400">分类筛选 (8 大标准父类，支持多选切换)</label>
+              <label class="font-medium text-slate-400">分类筛选</label>
               <span id="filter-cat-badge" class="text-[10px] text-indigo-300 font-mono">全部</span>
             </div>
             <div class="flex flex-wrap gap-1.5" id="filter-modal-cats">
@@ -974,7 +962,7 @@
         <!-- Header -->
         <div class="flex items-center justify-between pb-1 border-b border-slate-800">
           <div class="flex items-center space-x-2">
-            <h3 class="font-bold text-sm text-white">快记一手</h3>
+            <h3 class="font-bold text-sm text-white">加一笔</h3>
             <span id="active-engine-badge" class="text-[10px] px-1.5 py-0.5 rounded font-mono font-medium text-slate-400 bg-slate-800/40 border border-slate-700/50">智能识别</span>
           </div>
           <button onclick="closeManualAddModal()" class="text-xs text-slate-400 hover:text-white tap-highlight px-1">取消</button>
@@ -1508,11 +1496,11 @@
     </div>
   </div>
 
-  <script src="preview/js/domain_config.js?v=20261027_v10"></script>
-  <script src="preview/js/icon_registry.js?v=20261027_v10"></script>
-  <script src="preview/js/dropdown_engine.js?v=20261027_v10"></script>
-  <script src="preview/js/ocr_vlm_engine.js?v=20261027_v10"></script>
-  <script src="preview/js/app_controller.js?v=20261027_v10"></script>
+  <script src="js/domain_config.js?v=20261027_v10"></script>
+  <script src="js/icon_registry.js?v=20261027_v10"></script>
+  <script src="js/dropdown_engine.js?v=20261027_v10"></script>
+  <script src="js/ocr_vlm_engine.js?v=20261027_v10"></script>
+  <script src="js/app_controller.js?v=20261027_v10"></script>
 
 
 

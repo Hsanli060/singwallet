@@ -165,7 +165,7 @@ def detect_adb_device(adb_path):
     return devices[0]
 
 
-def scan_latest_mtimes(root_dir):
+def scan_latest_mtimes(web_dir):
     """
     扫描并计算当前所有关注静态文件的最大修改时间：
     css_mtime: 仅统计 .css 文件
@@ -174,16 +174,8 @@ def scan_latest_mtimes(root_dir):
     css_mtime = 0.0
     full_mtime = 0.0
 
-    html_file = os.path.join(root_dir, 'singwallet_preview.html')
-    if os.path.isfile(html_file):
-        try:
-            full_mtime = max(full_mtime, os.path.getmtime(html_file))
-        except OSError:
-            pass
-
-    preview_dir = os.path.join(root_dir, 'preview')
-    if os.path.isdir(preview_dir):
-        for dirpath, _, filenames in os.walk(preview_dir):
+    if os.path.isdir(web_dir):
+        for dirpath, _, filenames in os.walk(web_dir):
             for fname in filenames:
                 lower = fname.lower()
                 fpath = os.path.join(dirpath, fname)
@@ -202,12 +194,12 @@ def scan_latest_mtimes(root_dir):
     return css_mtime, full_mtime
 
 
-def create_hot_reload_handler(root_dir):
-    """创建绑定指定工作目录的请求处理器类"""
+def create_hot_reload_handler(web_dir):
+    """创建绑定指定 Web 工作目录的请求处理器类"""
 
     class HotReloadHTTPHandler(SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
-            super().__init__(*args, directory=root_dir, **kwargs)
+            super().__init__(*args, directory=web_dir, **kwargs)
 
         def log_message(self, format, *args):
             # 静默高频轮询与图标请求日志，保持控制台清爽高可读性
@@ -237,7 +229,7 @@ def create_hot_reload_handler(root_dir):
 
             # 1. 毫秒级变更轮询接口
             if path == '/__hot_reload_tick':
-                css_mt, full_mt = scan_latest_mtimes(root_dir)
+                css_mt, full_mt = scan_latest_mtimes(web_dir)
                 payload = json.dumps({
                     'css_mtime': css_mt,
                     'full_mtime': full_mt
@@ -267,8 +259,8 @@ def create_hot_reload_handler(root_dir):
                 return
 
             # 4. 主页面请求：动态在内存中注入热重载脚本（100% 杜绝污染磁盘源文件）
-            if path in ('/singwallet_preview.html', '/'):
-                html_path = os.path.join(root_dir, 'singwallet_preview.html')
+            if path in ('/', '/index.html', '/singwallet_preview.html'):
+                html_path = os.path.join(web_dir, 'index.html')
                 if os.path.isfile(html_path):
                     try:
                         with open(html_path, 'r', encoding='utf-8') as f:
@@ -292,7 +284,11 @@ def create_hot_reload_handler(root_dir):
                         self.send_error(500, f'Error reading html: {e}')
                         return
 
-            # 5. 常规静态资源由父类处理
+            # 5. 向下兼容历史 /preview/ 路径请求 (如 /preview/css/ -> /css/, /preview/js/ -> /js/)
+            if parsed.path.startswith('/preview/'):
+                self.path = self.path.replace('/preview/', '/', 1)
+
+            # 6. 常规静态资源由父类处理
             return super().do_GET()
 
     return HotReloadHTTPHandler
@@ -343,8 +339,10 @@ def main():
         print('[SingWallet] Mobile device is now running 100% offline built-in assets.', flush=True)
         sys.exit(0)
 
+    web_dir = os.path.join(root_dir, 'web')
+
     # 1. 先启动 HTTP 服务，确保端口 100% 绑定就绪
-    handler_class = create_hot_reload_handler(root_dir)
+    handler_class = create_hot_reload_handler(web_dir)
     try:
         httpd = ThreadingHTTPServer((args.host, args.port), handler_class)
     except OSError as e:
@@ -353,7 +351,7 @@ def main():
 
     print('==================================================================', flush=True)
     print(f' SingWallet Mobile Live Hot Reload Server is RUNNING', flush=True)
-    print(f' Local Address:  http://{args.host}:{args.port}/singwallet_preview.html', flush=True)
+    print(f' Local Address:  http://{args.host}:{args.port}/index.html', flush=True)
     print(f' Workspace Root: {root_dir}', flush=True)
     print(f' Features:       CSS Instant Hot-Swap (<0.1s) + Full Reload (<0.3s)', flush=True)
     print(' Press Ctrl+C to stop.', flush=True)
@@ -390,7 +388,7 @@ def main():
                     print('[Warn] Failed to set adb reverse:', rev_res.stderr if rev_res else 'timeout', flush=True)
 
                 # 2. 拉起原生 App 并载入热重载 URL (此时 HTTP 监听已 100% 准备就绪，杜绝 ERR_CONNECTION_REFUSED)
-                dev_url = f'http://127.0.0.1:{args.port}/singwallet_preview.html'
+                dev_url = f'http://127.0.0.1:{args.port}/index.html'
                 am_res = run_adb(adb_path, [
                     'shell', 'am', 'start',
                     '-n', 'com.singwallet.app/.MainActivity',

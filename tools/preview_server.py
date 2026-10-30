@@ -1,3 +1,4 @@
+import os
 import sys
 import json
 import ssl
@@ -10,6 +11,9 @@ import urllib.parse
 import urllib.request
 import urllib.error
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+WEB_DIR = os.path.join(REPO_ROOT, 'web')
 
 # Windows MIME types registration
 mimetypes.add_type('application/javascript', '.js')
@@ -232,6 +236,9 @@ def screenshot_watcher_loop():
         time.sleep(1.2)
 
 class ProxyHTTPRequestHandler(SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=WEB_DIR, **kwargs)
+
     def end_headers(self):
         # Prevent duplicate Access-Control-Allow-Origin headers
         has_cors = False
@@ -267,6 +274,9 @@ class ProxyHTTPRequestHandler(SimpleHTTPRequestHandler):
             self.handle_shortcut_poll()
         elif self.path.startswith('/api/shortcut/watcher-status'):
             self.handle_shortcut_watcher_status_get()
+        elif self.path in ('/', '/singwallet_preview.html'):
+            self.path = '/index.html'
+            super().do_GET()
         else:
             super().do_GET()
 
@@ -390,7 +400,7 @@ class ProxyHTTPRequestHandler(SimpleHTTPRequestHandler):
 <h2>⚡ 抓屏成功！</h2>
 <p>已抓取当前手机账单快照，SingWallet 正在后台自动由大模型识别入账中。</p>
 <p>您可以直接切回微信/支付宝，或点击下方返回账本查看：</p>
-<a href="/singwallet_preview.html">返回 SingWallet 账本</a>
+<a href="/index.html">返回 SingWallet 账本</a>
 </body>
 </html>"""
             self.wfile.write(html.encode('utf-8'))

@@ -13,8 +13,8 @@ SingWallet 采用 **轻量混合架构（WebView 离线前端 + Kotlin 原生宿
 
 ```text
 singwallet/
-├── singwallet_preview.html        # 单页面前端入口（单一事实来源 Single Source of Truth）
-├── preview/                       # 前端交互与离线引擎静态资源
+├── web/                           # 现代标准前端工程结构（单一事实来源 Single Source of Truth）
+│   ├── index.html                 # 单页面前端入口
 │   ├── css/                       # 样式表（preview.css 等）
 │   └── js/                        # 前端控制器与业务逻辑（app_controller.js, ocr_vlm_engine.js 等）
 ├── android/                       # Android Kotlin 原生宿主工程
@@ -56,7 +56,7 @@ python tools/mobile_hot_reload.py
 ```
 
 ### 3. 前端单源同步至 Android Assets
-将根目录的前端核心资产（`singwallet_preview.html` 与 `preview/`）同步至 Android 原生工程的 `android/app/src/main/assets/`：
+将前端核心资产（`web/`）同步至 Android 原生工程的 `android/app/src/main/assets/`：
 ```bash
 python tools/sync_web_assets.py
 ```
