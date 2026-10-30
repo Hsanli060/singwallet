@@ -38,12 +38,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-          cache: true
+          cache: 'gradle'
 
       - name: Resolve Version and Tag
         id: version_step
@@ -95,18 +90,27 @@ jobs:
           EOF
           fi
 
-      - name: Flutter Dependencies
-        run: flutter pub get
+      - name: Sync Single-Source Web Assets
+        run: |
+          mkdir -p android/app/src/main/assets
+          cp singwallet_preview.html android/app/src/main/assets/singwallet_preview.html
+          rm -rf android/app/src/main/assets/preview
+          cp -r preview android/app/src/main/assets/preview
 
       - name: Build Android Release APK
         run: |
-          flutter build apk --release --android-skip-build-dependency-validation
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease \
+            -PAPP_VERSION_NAME="${{ steps.version_step.outputs.CLEAN_VER }}" \
+            -PAPP_VERSION_CODE="$((10 + ${{ github.run_number }}))" \
+            --no-daemon
 
       - name: Upload APK to Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: singwallet-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: android/app/build/outputs/apk/release/app-release.apk
 
       - name: Prepare Release Artifacts & Generate version.json
         id: prepare_artifacts
@@ -115,7 +119,17 @@ jobs:
           CLEAN_VER: ${{ steps.version_step.outputs.CLEAN_VER }}
           REPO_NAME: ${{ github.repository }}
         run: |
-          APK_ORIGIN="build/app/outputs/flutter-apk/app-release.apk"
+          APK_ORIGIN="android/app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$APK_ORIGIN" ]; then
+            FOUND_APK=$(find android/app/build/outputs/apk/release -name "*.apk" 2>/dev/null | head -n 1)
+            if [ -n "$FOUND_APK" ] && [ -f "$FOUND_APK" ]; then
+              APK_ORIGIN="$FOUND_APK"
+            else
+              echo "Error: Release APK not found at $APK_ORIGIN"
+              exit 1
+            fi
+          fi
+
           FINAL_APK_NAME="singwallet-${TAG_NAME}-release.apk"
           cp "$APK_ORIGIN" "$FINAL_APK_NAME"
           
@@ -133,7 +147,7 @@ jobs:
           {
             "version": "${CLEAN_VER}",
             "tagName": "${TAG_NAME}",
-            "buildNumber": ${{ github.run_number }},
+            "buildNumber": $((10 + ${{ github.run_number }})),
             "releaseDate": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
             "changelog": "${CHANGELOG}",
             "downloadUrl": "${DOWNLOAD_URL}",

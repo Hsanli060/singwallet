@@ -286,8 +286,9 @@
     
     showToast(`[自动入账成功] 置信度 99% ≥ ${autoCommitThreshold}%，${merchant} ¥${amount.toFixed(2)} 已免人工确认直接记入账本！`);
     
+    const targetMonthKey = '2026-10';
     // Update totals
-    adjustMonthlyTotals(amount);
+    adjustMonthlyTotals(amount, true, 1, targetMonthKey);
 
     insertTransactionToList({
       id: "item-tx-" + Date.now(),
@@ -306,14 +307,65 @@
       txDate: '2026-10-26',
       timeOnly: '15:45:00',
       orderId: orderId,
-      badge: '自动入账 99%'
+      badge: '自动入账 99%',
+      _totalsAdjusted: true
     });
     applyActiveFilters();
     updateDynamicCategoryChips();
     updateActiveFilterCapsules();
   }
 
-  function renderDraftQueue() {
+  /**
+   * Bug 3 修复：将当前聚焦草稿表单的已修改内容同步回内存中的 draftQueue[currentDraftIndex]，
+   * 避免后台新抓屏入队或切换草稿时冲掉用户正在编辑的输入内容。
+   */
+  function syncActiveDraftFormToMemory() {
+    if (!draftQueue || !Array.isArray(draftQueue) || draftQueue.length === 0) return;
+    if (currentDraftIndex < 0 || currentDraftIndex >= draftQueue.length) return;
+    const cur = draftQueue[currentDraftIndex];
+    if (!cur || cur.isParsing) return;
+
+    const inAmt = document.getElementById('input-amount');
+    const inMer = document.getElementById('input-merchant');
+    const inOrder = document.getElementById('input-order');
+    const inTime = document.getElementById('input-time');
+    const selChan = document.getElementById('select-channel');
+    const selAcc = document.getElementById('select-account');
+    const selCat = document.getElementById('select-draft-category');
+
+    if (inAmt && inAmt.value !== '') {
+      const parsedAmt = parseFloat(inAmt.value);
+      if (!isNaN(parsedAmt)) {
+        cur.amount = parsedAmt;
+        cur.amountInCents = Math.round(parsedAmt * 100);
+      }
+    }
+    if (inMer && inMer.value.trim() !== '') {
+      cur.merchant = inMer.value.trim();
+      cur.merchantHeader = cur.merchant.slice(0, 8);
+    }
+    if (inOrder && inOrder.value.trim() !== '') {
+      cur.orderId = inOrder.value.trim();
+    }
+    if (inTime && inTime.value.trim() !== '') {
+      cur.time = inTime.value.trim();
+      cur.orderTime = inTime.value.trim();
+    }
+    if (selChan && selChan.value) {
+      cur.channel = selChan.value;
+    }
+    if (selAcc && selAcc.value) {
+      cur.account = selAcc.value;
+    }
+    if (selCat && selCat.value) {
+      cur.category = selCat.value;
+      cur.categoryName = selCat.value;
+      cur.categoryIcon = getAppCatIcon(selCat.value);
+    }
+  }
+  window.syncActiveDraftFormToMemory = syncActiveDraftFormToMemory;
+
+  function renderDraftQueue(options = {}) {
     const container = document.getElementById('draft-pills-container');
     const countEl = document.getElementById('draft-queue-count');
     const batchCountEl = document.getElementById('batch-high-count');
@@ -417,8 +469,14 @@
       }).join('');
     }
 
-    // Load current draft details into UI
-    loadDraftData(draftQueue[currentDraftIndex]);
+    if (currentDraftIndex < 0 || currentDraftIndex >= draftQueue.length) {
+      currentDraftIndex = Math.max(0, draftQueue.length - 1);
+    }
+
+    // Load current draft details into UI unless explicitly skipped (e.g. background capture / non-active task completed)
+    if (!options || !options.skipFormReload) {
+      loadDraftData(draftQueue[currentDraftIndex]);
+    }
   }
 
   function switchDraft(idx) {
@@ -803,11 +861,13 @@
     // 3. 仅对 validList 进行入账并从 draftQueue 中剔除
     let totalAmt = 0;
     if (validList.length > 0) {
+      const activeMonthKey = `${currentActiveYear}-${String(currentActiveMonth).padStart(2, '0')}`;
       validList.forEach(draft => {
-        totalAmt += draft.amount;
+        totalAmt = Math.round((totalAmt + draft.amount) * 100) / 100;
         const txTime = draft.time || '2026-10-26 12:00:00';
         const txDate = txTime.split(' ')[0] || '2026-10-26';
         const timeOnly = txTime.includes(' ') ? txTime.split(' ')[1] : txTime;
+        const targetMonthKey = (/^\d{4}-\d{2}/.test(txDate)) ? txDate.slice(0, 7) : activeMonthKey;
         const cat = draft.categoryName || draft.category;
         const parentCat = (typeof resolveParentCategory === 'function' ? resolveParentCategory(cat) : cat) || '其他支出';
         const catIcon = getAppCatIcon(parentCat);
@@ -815,6 +875,8 @@
         if (draft.orderId) {
           committedOrderIds.add(draft.orderId.trim());
         }
+
+        adjustMonthlyTotals(draft.amount, true, 1, targetMonthKey);
 
         const batchPayment = draft.payment || (typeof parsePaymentMethodString === 'function' ? parsePaymentMethodString(`${draft.channel} · ${draft.account}`) : { channel: draft.channel, display_name: `${draft.channel} · ${draft.account}` });
         insertTransactionToList({
@@ -834,12 +896,10 @@
           txDate: txDate,
           timeOnly: timeOnly,
           orderId: draft.orderId,
-          badge: '批量入账'
+          badge: '批量入账',
+          _totalsAdjusted: true
         });
       });
-
-      // 调整总账与月度模型
-      adjustMonthlyTotals(totalAmt);
 
       // 从 draftQueue 移除已成功入账的草稿
       const validIds = new Set(validList.map(d => d.id));
@@ -1876,9 +1936,6 @@
 
   // Shared Transaction Insertion Engine with Dynamic Date Grouping & Exact Time Tracking
   function insertTransactionToList(txData) {
-    const emptyState = document.getElementById('tx-empty-state');
-    if (emptyState) emptyState.classList.add('hidden');
-
     const norm = normalizeTxCategory(txData);
     const catName = norm.catName;
     const parentCat = norm.parentCat;
@@ -1887,141 +1944,166 @@
     txData.category = catName;
     txData.cat = catName;
 
-    const txDate = txData.txDate || '2026-10-26';
-    const txTime = txData.txTime || (txDate + ' 12:00:00');
-    const timeOnly = txData.timeOnly || (txTime.includes(' ') ? txTime.split(' ')[1] : txTime);
+    const rawTxTime = txData.txTime || txData.orderTime || txData.fullTime || '';
+    const txDate = txData.txDate || txData.date || (rawTxTime && rawTxTime.includes(' ') ? rawTxTime.split(' ')[0] : '') || '2026-10-26';
+    const txTime = rawTxTime || (txDate + ' 12:00:00');
+    const timeOnly = txData.timeOnly || txData.time || (txTime.includes(' ') ? txTime.split(' ')[1] : txTime);
+
+    const activeMonthKey = `${currentActiveYear}-${String(currentActiveMonth).padStart(2, '0')}`;
+    const targetMonthKey = (/^\d{4}-\d{2}/.test(txDate)) ? txDate.slice(0, 7) : activeMonthKey;
+    const isTargetActiveMonth = (targetMonthKey === activeMonthKey);
 
     let groupName = `${parseInt(txDate.slice(5, 7))}月${parseInt(txDate.slice(8, 10))}日`;
     if (txDate === '2026-10-26') groupName += ' 今天';
     else if (txDate === '2026-10-25') groupName += ' 昨天';
 
-    // Find or create day group
-    let dayGroup = document.querySelector(`.day-group[data-date="${txDate}"]`);
-    const listContainer = document.getElementById('transactions-list');
-    if (!dayGroup && listContainer) {
-      dayGroup = document.createElement('div');
-      dayGroup.className = "space-y-2 day-group";
-      dayGroup.setAttribute('data-date', txDate);
-      dayGroup.innerHTML = `
-        <div onclick="toggleDayFilter('${txDate}', '${groupName}')" class="day-header flex items-center justify-between text-xs text-slate-400 px-2 py-1.5 rounded-xl hover:bg-slate-800/80 cursor-pointer tap-highlight font-mono group transition-all" title="点击日标题或小计，即可按日筛选">
-          <div class="flex items-center space-x-2">
-            <span class="font-bold text-slate-200 group-hover:text-indigo-300 transition-colors">${groupName}</span>
-            <span class="day-filter-btn text-[10px] bg-slate-800 group-hover:bg-indigo-600 text-indigo-300 group-hover:text-white px-2 py-0.5 rounded-lg border border-slate-700/80 transition-all flex items-center space-x-1">
-              <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
-              <span class="day-filter-btn-text">仅看此日</span>
-            </span>
+    const numAmt = Math.round((Number(txData.amount) || 0) * 100) / 100;
+    txData.amount = numAmt;
+    const merchantName = txData.merchant || txData.name || '日常消费';
+    txData.merchant = merchantName;
+
+    if (isTargetActiveMonth) {
+      const emptyState = document.getElementById('tx-empty-state');
+      if (emptyState) emptyState.classList.add('hidden');
+
+      // Find or create day group
+      let dayGroup = document.querySelector(`.day-group[data-date="${txDate}"]`);
+      const listContainer = document.getElementById('transactions-list');
+      if (!dayGroup && listContainer) {
+        dayGroup = document.createElement('div');
+        dayGroup.className = "space-y-2 day-group";
+        dayGroup.setAttribute('data-date', txDate);
+        dayGroup.innerHTML = `
+          <div onclick="toggleDayFilter('${txDate}', '${groupName}')" class="day-header flex items-center justify-between text-xs text-slate-400 px-2 py-1.5 rounded-xl hover:bg-slate-800/80 cursor-pointer tap-highlight font-mono group transition-all" title="点击日标题或小计，即可按日筛选">
+            <div class="flex items-center space-x-2">
+              <span class="font-bold text-slate-200 group-hover:text-indigo-300 transition-colors">${groupName}</span>
+              <span class="day-filter-btn text-[10px] bg-slate-800 group-hover:bg-indigo-600 text-indigo-300 group-hover:text-white px-2 py-0.5 rounded-lg border border-slate-700/80 transition-all flex items-center space-x-1">
+                <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+                <span class="day-filter-btn-text">仅看此日</span>
+              </span>
+            </div>
+            <span class="day-subtotal group-hover:text-indigo-300 font-semibold transition-colors">小计: -¥ 0.00</span>
           </div>
-          <span class="day-subtotal group-hover:text-indigo-300 font-semibold transition-colors">小计: -¥ 0.00</span>
+        `;
+        // Insert in chronological order (newer dates first)
+        const existingGroups = Array.from(listContainer.querySelectorAll('.day-group'));
+        let inserted = false;
+        for (const eg of existingGroups) {
+          if (txDate > (eg.getAttribute('data-date') || '')) {
+            listContainer.insertBefore(dayGroup, eg);
+            inserted = true;
+            break;
+          }
+        }
+        if (!inserted) listContainer.appendChild(dayGroup);
+      }
+
+      const newTx = document.createElement('div');
+      newTx.className = "tx-item flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 shadow-md hover:border-indigo-500 transition-all cursor-pointer tap-highlight animate-fadeIn";
+      newTx.setAttribute('data-cat', catName);
+      newTx.setAttribute('data-parent', parentCat);
+      newTx.setAttribute('data-category', parentCat);
+      newTx.setAttribute('data-type', 'expense');
+      newTx.setAttribute('data-date', txDate);
+      newTx.setAttribute('data-account', txData.account || txData.channel);
+      newTx.setAttribute('data-channel', txData.channel);
+      newTx.setAttribute('data-order', txData.orderId || '');
+      newTx.dataset.order = txData.orderId || '';
+      newTx.setAttribute('data-amount', numAmt);
+      newTx.dataset.amount = numAmt;
+      newTx.id = txData.id;
+      newTx.onclick = () => viewTransactionDetail(merchantName, numAmt.toFixed(2), `${parentCat}（${catName}）`, txData.account || txData.channel, txTime, txData.orderId);
+      
+      const cleanAcc = (txData.account || txData.channel || '微信钱包').replace('支付 · ', '');
+      const icon = getAppCatIcon(parentCat, txData.catIcon || getAppStatusIcon('fallbackCategory'));
+      
+      let iconSquircle = window.renderSquircleIcon 
+        ? window.renderSquircleIcon(parentCat, 'w-10 h-10') 
+        : `<div class="w-10 h-10 rounded-2xl bg-slate-700/50 flex items-center justify-center text-lg shrink-0 border border-slate-600/40 shadow-sm" data-cat-icon="${parentCat}">${icon}</div>`;
+      
+      if (!iconSquircle.includes('data-cat-icon')) {
+        iconSquircle = iconSquircle.replace('class="', `data-cat-icon="${parentCat}" class="`);
+      }
+
+      newTx.innerHTML = `
+        <div class="flex items-center space-x-3 min-w-0 flex-1 mr-2.5">
+          ${iconSquircle}
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center">
+              <span class="font-semibold text-sm text-slate-100 truncate">${merchantName}</span>
+            </div>
+            <div class="text-xs text-slate-400 mt-1 flex items-center space-x-1.5 truncate">
+              <span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 shrink-0">${catName}</span>
+              <span class="text-slate-400 font-mono text-[11px] shrink-0">${timeOnly}</span>
+              <span class="text-slate-600 shrink-0">•</span>
+              <span class="text-slate-400 text-[11px] whitespace-nowrap">${cleanAcc}</span>
+            </div>
+          </div>
+        </div>
+        <div class="text-right shrink-0 flex flex-col items-end justify-center">
+          <div class="font-bold text-base text-white font-mono tracking-tight whitespace-nowrap">-¥ ${numAmt.toFixed(2)}</div>
+          <span class="tx-source-tag text-[10px] text-emerald-400 font-medium mt-1 block">${txData.badge || '自动识别'}</span>
+        </div>
+        <div role="button" class="tx-swipe-delete-btn" onclick="openTxDeleteConfirmModal(this.closest('.tx-item'), event)">
+          <svg class="w-4 h-4 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          <span>删除</span>
         </div>
       `;
-      // Insert in chronological order (newer dates first)
-      const existingGroups = Array.from(listContainer.querySelectorAll('.day-group'));
-      let inserted = false;
-      for (const eg of existingGroups) {
-        if (txDate > (eg.getAttribute('data-date') || '')) {
-          listContainer.insertBefore(dayGroup, eg);
-          inserted = true;
-          break;
-        }
+
+      if (dayGroup) {
+        dayGroup.appendChild(newTx);
+        // Recalculate day subtotal with IEEE 754 precision rounding
+        const items = dayGroup.querySelectorAll('.tx-item:not(.soft-deleted)');
+        let dayTotal = 0;
+        items.forEach(el => {
+          const amtStr = el.querySelector('.text-base')?.innerText?.replace(/[^\d.]/g, '') || '0';
+          dayTotal = Math.round((dayTotal + parseFloat(amtStr)) * 100) / 100;
+        });
+        const subEl = dayGroup.querySelector('.day-subtotal');
+        if (subEl) subEl.innerText = `小计: -¥ ${dayTotal.toFixed(2)}`;
       }
-      if (!inserted) listContainer.appendChild(dayGroup);
     }
 
-    const newTx = document.createElement('div');
-    newTx.className = "tx-item flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 shadow-md hover:border-indigo-500 transition-all cursor-pointer tap-highlight animate-fadeIn";
-    newTx.setAttribute('data-cat', catName);
-    newTx.setAttribute('data-parent', parentCat);
-    newTx.setAttribute('data-category', parentCat);
-    newTx.setAttribute('data-type', 'expense');
-    newTx.setAttribute('data-date', txDate);
-    newTx.setAttribute('data-account', txData.account || txData.channel);
-    newTx.setAttribute('data-channel', txData.channel);
-    newTx.setAttribute('data-order', txData.orderId || '');
-    newTx.dataset.order = txData.orderId || '';
-    newTx.setAttribute('data-amount', txData.amount);
-    newTx.dataset.amount = txData.amount;
-    newTx.id = txData.id;
-    newTx.onclick = () => viewTransactionDetail(txData.merchant, txData.amount.toFixed(2), `${parentCat}（${catName}）`, txData.account || txData.channel, txTime, txData.orderId);
-    
-    const timeOnlyStr = timeOnly && timeOnly.includes(':') ? timeOnly.split(':').slice(0, 2).join(':') : timeOnly;
-    const cleanAcc = (txData.account || txData.channel || '微信钱包').replace('支付 · ', '');
-    const icon = getAppCatIcon(parentCat, txData.catIcon || getAppStatusIcon('fallbackCategory'));
-    
-    let iconSquircle = window.renderSquircleIcon 
-      ? window.renderSquircleIcon(parentCat, 'w-10 h-10') 
-      : `<div class="w-10 h-10 rounded-2xl bg-slate-700/50 flex items-center justify-center text-lg shrink-0 border border-slate-600/40 shadow-sm" data-cat-icon="${parentCat}">${icon}</div>`;
-    
-    if (!iconSquircle.includes('data-cat-icon')) {
-      iconSquircle = iconSquircle.replace('class="', `data-cat-icon="${parentCat}" class="`);
+    // Bug 2 修复：动态按 txDate 所属月份写入 allMonthlyData[targetMonthKey]，禁止硬编码 '2026-10'
+    if (!allMonthlyData[targetMonthKey]) {
+      allMonthlyData[targetMonthKey] = { net: '0.00', exp: '0.00', ref: '0.00', inc: '0.00', count: '0 笔', avg: '¥0.00', txs: [] };
     }
-
-    newTx.innerHTML = `
-      <div class="flex items-center space-x-3 min-w-0 flex-1 mr-2.5">
-        ${iconSquircle}
-        <div class="min-w-0 flex-1">
-          <div class="flex items-center">
-            <span class="font-semibold text-sm text-slate-100 truncate">${txData.merchant}</span>
-          </div>
-          <div class="text-xs text-slate-400 mt-1 flex items-center space-x-1.5 truncate">
-            <span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 shrink-0">${catName}</span>
-            <span class="text-slate-400 font-mono text-[11px] shrink-0">${timeOnly}</span>
-            <span class="text-slate-600 shrink-0">•</span>
-            <span class="text-slate-400 text-[11px] whitespace-nowrap">${cleanAcc}</span>
-          </div>
-        </div>
-      </div>
-      <div class="text-right shrink-0 flex flex-col items-end justify-center">
-        <div class="font-bold text-base text-white font-mono tracking-tight whitespace-nowrap">-¥ ${txData.amount.toFixed(2)}</div>
-        <span class="tx-source-tag text-[10px] text-emerald-400 font-medium mt-1 block">${txData.badge || '自动识别'}</span>
-      </div>
-      <div role="button" class="tx-swipe-delete-btn" onclick="openTxDeleteConfirmModal(this.closest('.tx-item'), event)">
-        <svg class="w-4 h-4 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-        <span>删除</span>
-      </div>
-    `;
-
-    if (dayGroup) {
-      dayGroup.appendChild(newTx);
-      // Recalculate day subtotal
-      const items = dayGroup.querySelectorAll('.tx-item:not(.soft-deleted)');
-      let dayTotal = 0;
-      items.forEach(el => {
-        const amtStr = el.querySelector('.text-base')?.innerText?.replace(/[^\d.]/g, '') || '0';
-        dayTotal += parseFloat(amtStr);
-      });
-      const subEl = dayGroup.querySelector('.day-subtotal');
-      if (subEl) subEl.innerText = `小计: -¥ ${dayTotal.toFixed(2)}`;
+    if (!Array.isArray(allMonthlyData[targetMonthKey].txs)) {
+      allMonthlyData[targetMonthKey].txs = [];
     }
-
-    // Synchronize into allMonthlyData
-    if (!allMonthlyData['2026-10']) {
-      allMonthlyData['2026-10'] = { net: '0.00', exp: '0.00', ref: '0.00', inc: '0.00', txs: [] };
-    }
-    allMonthlyData['2026-10'].txs.unshift({
+    allMonthlyData[targetMonthKey].txs.unshift({
       id: txData.id,
-      name: txData.merchant,
-      merchant: txData.merchant,
+      name: merchantName,
+      merchant: merchantName,
       cat: catName,
       category: catName,
       catName: catName,
       parentCat: parentCat,
-      icon: txData.catIcon,
+      icon: txData.catIcon || txData.icon,
       channel: txData.channel,
       account: txData.account,
       payment: txData.payment,
-      amount: txData.amount,
-      amountInCents: txData.amountInCents || Math.round(txData.amount * 100),
+      amount: numAmt,
+      amountInCents: txData.amountInCents || Math.round(numAmt * 100),
       date: txDate,
+      txDate: txDate,
       dateGroup: groupName,
       time: timeOnly,
       txTime: txTime,
       fullTime: txTime,
       orderTime: txData.orderTime || txTime,
       badge: txData.badge,
-      orderId: txData.orderId
+      orderId: txData.orderId,
+      softDeleted: false
     });
+
+    // 若外部直接调用 insertTransactionToList 插入非当前激活月份的跨月账单且尚未调整该月统计，自动同步目标月统计
+    if (!isTargetActiveMonth && !txData._totalsAdjusted) {
+      adjustMonthlyTotals(numAmt, true, 1, targetMonthKey);
+    }
+
     saveUserTransactionsToStorage();
-    if (typeof renderMonthlyCategoryChart === 'function') {
+    if (isTargetActiveMonth && typeof renderMonthlyCategoryChart === 'function') {
       renderMonthlyCategoryChart();
     }
   }
@@ -2087,8 +2169,11 @@
 
     showToast(`${getAppStatusIcon('success')} 入账成功: ${merchant} ¥${amount.toFixed(2)}`);
     
-    // Update Monthly Dashboard
-    adjustMonthlyTotals(amount);
+    const activeMonthKey = `${currentActiveYear}-${String(currentActiveMonth).padStart(2, '0')}`;
+    const targetMonthKey = (/^\d{4}-\d{2}/.test(txDate)) ? txDate.slice(0, 7) : activeMonthKey;
+
+    // Update Monthly Dashboard for targetMonthKey
+    adjustMonthlyTotals(amount, true, 1, targetMonthKey);
 
     insertTransactionToList({
       id: "item-tx-" + Date.now(),
@@ -2107,7 +2192,8 @@
       txDate: txDate,
       timeOnly: timeOnly,
       orderId: orderId,
-      badge: '刚刚入账'
+      badge: '刚刚入账',
+      _totalsAdjusted: true
     });
 
     applyActiveFilters();
@@ -2127,23 +2213,57 @@
     return true;
   }
 
-  // Helper: Adjust monthly expense & net expense
-  function adjustMonthlyTotals(deltaAmount) {
+  // Helper: Adjust monthly expense & net expense (Bug 2 & Bug 6 修复：动态月份键 + 消除 IEEE 754 浮点尾差)
+  function adjustMonthlyTotals(deltaAmount, isExpense = true, deltaCount = 0, targetMonthKey = null) {
+    const activeMonthKey = `${currentActiveYear}-${String(currentActiveMonth).padStart(2, '0')}`;
+    const monthKey = (targetMonthKey && /^\d{4}-\d{2}$/.test(targetMonthKey)) ? targetMonthKey : activeMonthKey;
+    const isTargetActive = (monthKey === activeMonthKey);
+
+    if (!allMonthlyData[monthKey]) {
+      allMonthlyData[monthKey] = { net: '0.00', exp: '0.00', ref: '0.00', inc: '0.00', count: '0 笔', avg: '¥0.00', txs: [] };
+    }
+    const mData = allMonthlyData[monthKey];
+    const delta = Number(deltaAmount) || 0;
+
+    if (isExpense === false) {
+      const baseInc = parseFloat(String(mData.inc || '0').replace(/[¥\s,]/g, '') || 0);
+      const nextInc = Math.max(0, Math.round((baseInc + delta) * 100) / 100);
+      mData.inc = nextInc.toFixed(2);
+      if (isTargetActive) {
+        const incEl = document.getElementById('total-income');
+        if (incEl) incEl.innerText = `¥ ${nextInc.toFixed(2)}`;
+      }
+      return;
+    }
+
     const curExpEl = document.getElementById('total-expense');
     const curNetEl = document.getElementById('total-net-expense');
     const monthlyNetEl = document.getElementById('monthly-net-expense');
-    const curExpense = Math.max(0, (curExpEl ? parseFloat(curExpEl.innerText.replace(/[¥\s,]/g, '') || 0) : 0) + deltaAmount);
-    const baseNet = curNetEl ? parseFloat(curNetEl.innerText.replace(/[¥\s,]/g, '') || 0) : (monthlyNetEl ? parseFloat(monthlyNetEl.innerText.replace(/[¥\s,]/g, '') || 0) : 0);
-    const curNet = Math.max(0, baseNet + deltaAmount);
-    if (curExpEl) curExpEl.innerText = `¥ ${curExpense.toFixed(2)}`;
-    if (curNetEl) curNetEl.innerText = `¥ ${curNet.toFixed(2)}`;
-    if (monthlyNetEl) monthlyNetEl.innerText = `¥ ${curNet.toFixed(2)}`;
-    if (allMonthlyData['2026-10']) {
-      allMonthlyData['2026-10'].exp = curExpense.toFixed(2);
-      allMonthlyData['2026-10'].net = curNet.toFixed(2);
-    }
-    if (typeof renderMonthlyCategoryChart === 'function') {
-      renderMonthlyCategoryChart();
+    const homeExpEl = document.getElementById('home-total-expense');
+
+    const baseExp = isTargetActive && curExpEl
+      ? parseFloat(curExpEl.innerText.replace(/[¥\s,]/g, '') || 0)
+      : parseFloat(String(mData.exp || '0').replace(/[¥\s,]/g, '') || 0);
+    const baseNet = isTargetActive && (curNetEl || monthlyNetEl)
+      ? parseFloat((curNetEl ? curNetEl.innerText : monthlyNetEl.innerText).replace(/[¥\s,]/g, '') || 0)
+      : parseFloat(String(mData.net || mData.exp || '0').replace(/[¥\s,]/g, '') || 0);
+
+    const curExpense = Math.max(0, Math.round((baseExp + delta) * 100) / 100);
+    const curNet = Math.max(0, Math.round((baseNet + delta) * 100) / 100);
+
+    mData.exp = curExpense.toFixed(2);
+    mData.net = curNet.toFixed(2);
+    const activeTxCount = Array.isArray(mData.txs) ? mData.txs.filter(t => t && !t.softDeleted).length : Math.max(0, deltaCount);
+    mData.count = `${activeTxCount} 笔`;
+
+    if (isTargetActive) {
+      if (curExpEl) curExpEl.innerText = `¥ ${curExpense.toFixed(2)}`;
+      if (curNetEl) curNetEl.innerText = `¥ ${curNet.toFixed(2)}`;
+      if (monthlyNetEl) monthlyNetEl.innerText = `¥ ${curNet.toFixed(2)}`;
+      if (homeExpEl) homeExpEl.innerText = `¥ ${curExpense.toFixed(2)}`;
+      if (typeof renderMonthlyCategoryChart === 'function') {
+        renderMonthlyCategoryChart();
+      }
     }
   }
 
@@ -2156,7 +2276,7 @@
       let dayTotal = 0;
       items.forEach(el => {
         const amtStr = el.querySelector('.text-base')?.innerText?.replace(/[^\d.]/g, '') || '0';
-        dayTotal += parseFloat(amtStr);
+        dayTotal = Math.round((dayTotal + parseFloat(amtStr)) * 100) / 100;
       });
       const subEl = dayGroup.querySelector('.day-subtotal');
       if (subEl) subEl.innerText = `小计: -¥ ${dayTotal.toFixed(2)}`;
@@ -2179,20 +2299,46 @@
 
 
   function deleteTransaction(itemId, name, amount) {
+    // Bug 1 修复：同步在 allMonthlyData 各月份 txs 中标记 tx.softDeleted = true，确保 saveUserTransactionsToStorage 不会将已删账单写回 localStorage
+    let foundMonthKey = null;
+    let foundTx = null;
+    Object.keys(allMonthlyData).forEach(mKey => {
+      const m = allMonthlyData[mKey];
+      if (m && Array.isArray(m.txs)) {
+        m.txs.forEach(tx => {
+          if (tx && tx.id === itemId) {
+            tx.softDeleted = true;
+            foundMonthKey = mKey;
+            foundTx = tx;
+          }
+        });
+      }
+    });
+
     const item = document.getElementById(itemId);
-    if (item) {
-      item.classList.add('soft-deleted');
-      item.style.display = 'none';
+    const resolvedName = name || (foundTx && (foundTx.merchant || foundTx.name)) || '账单';
+    const resolvedAmount = (typeof amount === 'number' && !isNaN(amount))
+      ? amount
+      : (foundTx ? Number(foundTx.amount) || 0 : (item ? parseFloat(item.getAttribute('data-amount') || '0') : 0));
+
+    if (item || foundTx) {
+      if (item) {
+        item.classList.add('soft-deleted');
+        item.style.display = 'none';
+      }
       lastDeletedId = itemId;
-      deletedItems.push({ id: itemId, name, amount });
+      deletedItems = deletedItems.filter(i => i.id !== itemId);
+      deletedItems.push({ id: itemId, name: resolvedName, amount: resolvedAmount, monthKey: foundMonthKey });
 
       // Deduct from monthly totals & recalculate day subtotal
-      adjustMonthlyTotals(-amount);
-      updateDaySubtotalForElement(item);
+      adjustMonthlyTotals(-resolvedAmount, true, -1, foundMonthKey);
+      if (item) {
+        updateDaySubtotalForElement(item);
+      }
 
       const bar = document.getElementById('undo-snackbar');
       const snackText = document.getElementById('snackbar-text');
-      if (snackText) snackText.innerText = `已移入回收站: ${name} (-¥${amount.toFixed(2)})`;
+      if (snackText) snackText.innerText = `已移入回收站: ${resolvedName} (-¥${resolvedAmount.toFixed(2)})`;
       if (bar) bar.classList.remove('hidden');
 
       updateTrashBadge();
@@ -2209,24 +2355,42 @@
 
   function undoDelete() {
     if (lastDeletedId) {
+      let foundMonthKey = null;
+      let restoredTx = null;
+      Object.keys(allMonthlyData).forEach(mKey => {
+        const m = allMonthlyData[mKey];
+        if (m && Array.isArray(m.txs)) {
+          m.txs.forEach(tx => {
+            if (tx && tx.id === lastDeletedId) {
+              tx.softDeleted = false;
+              foundMonthKey = mKey;
+              restoredTx = tx;
+            }
+          });
+        }
+      });
+
       const item = document.getElementById(lastDeletedId);
       const lastItem = deletedItems[deletedItems.length - 1];
+      const restoreAmt = (lastItem && typeof lastItem.amount === 'number')
+        ? lastItem.amount
+        : (restoredTx ? Number(restoredTx.amount) || 0 : 0);
+      const targetKey = (lastItem && lastItem.monthKey) || foundMonthKey;
+
       if (item) {
         item.classList.remove('soft-deleted');
         item.style.display = 'flex';
-        if (lastItem && typeof lastItem.amount === 'number') {
-          adjustMonthlyTotals(lastItem.amount);
-        }
         updateDaySubtotalForElement(item);
+      }
+      if (item || restoredTx) {
+        adjustMonthlyTotals(restoreAmt, true, 1, targetKey);
       }
       const undoBar = document.getElementById('undo-snackbar');
       if (undoBar) undoBar.classList.add('hidden');
       deletedItems.pop();
-      if (deletedItems.length === 0) {
-        updateTrashBadge();
+      lastDeletedId = deletedItems.length > 0 ? deletedItems[deletedItems.length - 1].id : null;
+      updateTrashBadge();
       saveUserTransactionsToStorage();
-      }
-      lastDeletedId = null;
       applyActiveFilters();
       updateDynamicCategoryChips();
       if (typeof renderMonthlyCategoryChart === 'function') renderMonthlyCategoryChart();
@@ -2253,21 +2417,42 @@
   }
 
   function restoreTrash(id) {
+    let foundMonthKey = null;
+    let restoredTx = null;
+    Object.keys(allMonthlyData).forEach(mKey => {
+      const m = allMonthlyData[mKey];
+      if (m && Array.isArray(m.txs)) {
+        m.txs.forEach(tx => {
+          if (tx && tx.id === id) {
+            tx.softDeleted = false;
+            foundMonthKey = mKey;
+            restoredTx = tx;
+          }
+        });
+      }
+    });
+
     const item = document.getElementById(id);
     const found = deletedItems.find(i => i.id === id);
+    const restoreAmt = (found && typeof found.amount === 'number')
+      ? found.amount
+      : (restoredTx ? Number(restoredTx.amount) || 0 : 0);
+    const targetKey = (found && found.monthKey) || foundMonthKey;
+
     if (item) {
       item.classList.remove('soft-deleted');
       item.style.display = 'flex';
-      if (found && typeof found.amount === 'number') {
-        adjustMonthlyTotals(found.amount);
-      }
       updateDaySubtotalForElement(item);
     }
-    deletedItems = deletedItems.filter(i => i.id !== id);
-    if (deletedItems.length === 0) {
-      updateTrashBadge();
-      saveUserTransactionsToStorage();
+    if (item || restoredTx) {
+      adjustMonthlyTotals(restoreAmt, true, 1, targetKey);
     }
+    deletedItems = deletedItems.filter(i => i.id !== id);
+    if (lastDeletedId === id) {
+      lastDeletedId = deletedItems.length > 0 ? deletedItems[deletedItems.length - 1].id : null;
+    }
+    updateTrashBadge();
+    saveUserTransactionsToStorage();
     openTrashDialog();
     applyActiveFilters();
     updateDynamicCategoryChips();
@@ -2399,13 +2584,15 @@
     closeManualAddModal();
     showToast(`记账成功: ${merchant} -¥${amount.toFixed(2)}`);
 
-    adjustMonthlyTotals(amount);
-
     const parentCat = (typeof resolveParentCategory === 'function' ? resolveParentCategory(cat) : cat) || '其他支出';
     const icon = getAppCatIcon(parentCat);
 
     const txDate = txTime.split(' ')[0] || `${currentActiveYear}-${currentActiveMonth}-26`;
     const timeOnly = txTime.includes(' ') ? txTime.split(' ')[1] : '16:30:00';
+    const activeMonthKey = `${currentActiveYear}-${String(currentActiveMonth).padStart(2, '0')}`;
+    const targetMonthKey = (/^\d{4}-\d{2}/.test(txDate)) ? txDate.slice(0, 7) : activeMonthKey;
+
+    adjustMonthlyTotals(amount, true, 1, targetMonthKey);
 
     insertTransactionToList({
       id: "item-tx-" + Date.now(),
@@ -2424,7 +2611,8 @@
       txDate: txDate,
       timeOnly: timeOnly,
       orderId: orderId,
-      badge: '手动录入'
+      badge: '手动录入',
+      _totalsAdjusted: true
     });
     applyActiveFilters();
     updateDynamicCategoryChips();
@@ -2656,15 +2844,16 @@
   // Render Monthly Transactions Grouped by Date
   function renderMonthTransactions(year, month) {
     const data = getMonthlyData(year, month);
-    const list = data.txs || [];
+    const list = (data.txs || []).filter(tx => tx && !tx.softDeleted);
     const container = document.getElementById('transactions-list');
     if (!container) return;
 
     // Group transactions by dateGroup
     const groups = {};
     list.forEach(tx => {
-      if (!groups[tx.dateGroup]) groups[tx.dateGroup] = [];
-      groups[tx.dateGroup].push(tx);
+      const gKey = tx.dateGroup || `${parseInt(String(tx.date || '2026-10-26').slice(5, 7))}月${parseInt(String(tx.date || '2026-10-26').slice(8, 10))}日`;
+      if (!groups[gKey]) groups[gKey] = [];
+      groups[gKey].push(tx);
     });
 
     if (Object.keys(groups).length === 0) {
@@ -2691,8 +2880,8 @@
 
     let html = '';
     for (const [groupName, items] of Object.entries(groups)) {
-      const subtotal = items.reduce((acc, cur) => acc + cur.amount, 0);
-      const groupDate = items[0]?.date || '';
+      const subtotal = items.reduce((acc, cur) => Math.round((acc + (Number(cur.amount) || 0)) * 100) / 100, 0);
+      const groupDate = items[0]?.date || items[0]?.txDate || '';
       html += `
         <div class="space-y-2 day-group" data-date="${groupDate}">
           <div onclick="toggleDayFilter('${groupDate}', '${groupName}')" class="day-header flex items-center justify-between text-xs text-slate-400 px-2 py-1.5 rounded-xl hover:bg-slate-800/80 cursor-pointer tap-highlight font-mono group transition-all" title="点击日标题或小计，即可按日筛选">
@@ -2720,14 +2909,16 @@
           }
 
           const timeShort = tx.time && tx.time.includes(':') ? tx.time.split(':').slice(0, 2).join(':') : (tx.time || '');
-          const cleanAcc = (tx.channel || '钱包').replace('支付 · ', '');
+          const cleanAcc = (tx.account || tx.channel || '钱包').replace('支付 · ', '');
+          const txOrd = tx.orderId || `${tx.id}_ORDER`;
+          const txTitle = tx.name || tx.merchant || '日常消费';
           html += `
-          <div data-cat="${catName}" data-parent="${parentCat}" data-category="${parentCat}" data-type="expense" data-date="${tx.date}" data-account="${tx.channel}" data-channel="${tx.channel}" data-amount="${tx.amount}" class="tx-item flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 shadow-md hover:border-indigo-500 transition-all cursor-pointer tap-highlight animate-fadeIn" id="${tx.id}" onclick="viewTransactionDetail('${tx.name}', '${tx.amount.toFixed(2)}', '${parentCat}（${catName}）', '${tx.channel}', '${groupName} ${tx.time}', '${tx.id}_ORDER')">
+          <div data-cat="${catName}" data-parent="${parentCat}" data-category="${parentCat}" data-type="expense" data-date="${tx.date || tx.txDate || ''}" data-account="${tx.account || tx.channel}" data-channel="${tx.channel}" data-order="${txOrd}" data-amount="${tx.amount}" class="tx-item flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 shadow-md hover:border-indigo-500 transition-all cursor-pointer tap-highlight animate-fadeIn" id="${tx.id}" onclick="viewTransactionDetail('${txTitle}', '${Number(tx.amount).toFixed(2)}', '${parentCat}（${catName}）', '${tx.account || tx.channel}', '${groupName} ${tx.time}', '${txOrd}')">
             <div class="flex items-center space-x-3 min-w-0 flex-1 mr-2.5">
               ${iconSquircle}
               <div class="min-w-0 flex-1">
                 <div class="flex items-center">
-                  <span class="font-semibold text-sm text-slate-100 truncate">${tx.name}</span>
+                  <span class="font-semibold text-sm text-slate-100 truncate">${txTitle}</span>
                 </div>
                 <div class="text-xs text-slate-400 mt-1 flex items-center space-x-1.5 truncate">
                   <span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 shrink-0">${catName}</span>
@@ -2886,7 +3077,9 @@
       committedOrderIds.add(draft.orderId.trim());
     }
 
-    adjustMonthlyTotals(amount);
+    const activeMonthKey = `${currentActiveYear}-${String(currentActiveMonth).padStart(2, '0')}`;
+    const targetMonthKey = (/^\d{4}-\d{2}/.test(txDate)) ? txDate.slice(0, 7) : activeMonthKey;
+    adjustMonthlyTotals(amount, true, 1, targetMonthKey);
 
     insertTransactionToList({
       id: "item-tx-" + Date.now(),
@@ -2905,12 +3098,16 @@
       txDate: txDate,
       timeOnly: timeOnly,
       orderId: orderId,
-      badge: `自动入账 ${draft.confidence || 98}%`
+      badge: `自动入账 ${draft.confidence || 98}%`,
+      _totalsAdjusted: true
     });
 
     const idx = draftQueue.findIndex(d => d.id === draft.id);
     if (idx !== -1) {
       draftQueue.splice(idx, 1);
+      if (idx < currentDraftIndex) {
+        currentDraftIndex = Math.max(0, currentDraftIndex - 1);
+      }
     }
     if (currentDraftIndex >= draftQueue.length) {
       currentDraftIndex = Math.max(0, draftQueue.length - 1);
@@ -3341,8 +3538,89 @@
       ? window.DomainRegistry.removeCategory(name)
       : false;
     if (success) {
+      // Bug 6 修复：删除自定义分类时，将已使用该分类的账单（allMonthlyData / DOM / draftQueue）平滑迁移至「其他支出」，消除孤儿分类
+      const remainingCats = (window.DomainRegistry && typeof window.DomainRegistry.getParentCategories === 'function')
+        ? window.DomainRegistry.getParentCategories()
+        : (window.CORE_PARENT_CATEGORIES || ['其他支出']);
+      const fallbackCat = remainingCats.includes('其他支出') ? '其他支出' : (remainingCats[0] || '其他支出');
+      const fallbackIcon = getAppCatIcon(fallbackCat);
+
+      // 1. 迁移内存账单池 allMonthlyData 中的孤儿分类账单
+      if (typeof allMonthlyData === 'object' && allMonthlyData) {
+        Object.keys(allMonthlyData).forEach(mKey => {
+          const mObj = allMonthlyData[mKey];
+          if (mObj && Array.isArray(mObj.txs)) {
+            mObj.txs.forEach(tx => {
+              if (!tx) return;
+              if (tx.cat === name || tx.category === name || tx.catName === name || tx.parentCat === name) {
+                tx.cat = fallbackCat;
+                tx.category = fallbackCat;
+                tx.catName = fallbackCat;
+                tx.parentCat = fallbackCat;
+                tx.icon = fallbackIcon;
+              }
+            });
+          }
+        });
+      }
+
+      // 2. 迁移当前页面 DOM 中的已入账流水节点
+      document.querySelectorAll('#transactions-list .tx-item, #tx-list-container .tx-item, .tx-item').forEach(item => {
+        const dCat = item.getAttribute('data-cat');
+        const dParent = item.getAttribute('data-parent');
+        const dCategory = item.getAttribute('data-category');
+        if (dCat === name || dParent === name || dCategory === name) {
+          item.setAttribute('data-cat', fallbackCat);
+          item.setAttribute('data-parent', fallbackCat);
+          item.setAttribute('data-category', fallbackCat);
+          if (item.dataset) {
+            item.dataset.cat = fallbackCat;
+            item.dataset.parent = fallbackCat;
+            item.dataset.category = fallbackCat;
+          }
+          const badgeEl = item.querySelector('.bg-indigo-500\\/15');
+          if (badgeEl) badgeEl.innerText = fallbackCat;
+          const iconEl = item.querySelector('[data-cat-icon]');
+          if (iconEl) {
+            iconEl.setAttribute('data-cat-icon', fallbackCat);
+            iconEl.innerHTML = fallbackIcon;
+          }
+        }
+      });
+
+      // 3. 迁移草稿队列 draftQueue 与当前选中的草稿分类
+      if (Array.isArray(draftQueue)) {
+        draftQueue.forEach(d => {
+          if (!d) return;
+          if (d.category === name || d.categoryName === name) {
+            d.category = fallbackCat;
+            d.categoryName = fallbackCat;
+            d.categoryIcon = fallbackIcon;
+          }
+        });
+        saveStoredDrafts();
+      }
+      if (currentDraftCategory && currentDraftCategory.name === name) {
+        currentDraftCategory.name = fallbackCat;
+        currentDraftCategory.icon = fallbackIcon;
+      }
+
+      // 4. 清理筛选器中已被删除的分类
+      if (typeof currentFilterKey !== 'undefined' && currentFilterKey === name) {
+        currentFilterKey = 'all';
+      }
+      if (typeof selectedFilterCats !== 'undefined' && selectedFilterCats && selectedFilterCats.has(name)) {
+        selectedFilterCats.delete(name);
+        if (selectedFilterCats.size === 0) selectedFilterCats.add('all');
+      }
+
+      saveUserTransactionsToStorage();
       syncAllCategoryUIs();
+      if (typeof renderDraftQueue === 'function') renderDraftQueue();
       if (typeof updateDynamicCategoryChips === 'function') updateDynamicCategoryChips();
+      if (typeof updateActiveFilterCapsules === 'function') updateActiveFilterCapsules();
+      if (typeof applyActiveFilters === 'function') applyActiveFilters();
+      if (typeof renderMonthlyCategoryChart === 'function') renderMonthlyCategoryChart();
       if (typeof updateBackupStatsLabel === 'function') updateBackupStatsLabel();
       showToast(`已删除分类：${name}`);
     } else {
@@ -4103,18 +4381,39 @@
       return false;
     }
 
-    if (!snapshot) {
-      showToast('导入失败：备份数据为空');
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+      showToast('导入失败：备份数据为空或格式无效');
       return false;
     }
 
-    // 1. SQLite v1 -> v2 无损迁移与数据解构
-    const rawData = snapshot.data || snapshot;
-    const categories = rawData.categories || [];
-    const incomingMonthlyData = rawData.allMonthlyData || null;
-    const incomingTransactions = rawData.transactions || [];
+    // Bug 6 修复：校验解析后的 JSON 必须是非空对象且包含合法备份字段，禁止空对象 {} 静默导入成功
+    const validBackupKeys = [
+      'version', 'schemaVersion', 'dbSchemaVersion', 'backupMagic', 'format',
+      'transactions', 'user_transactions', 'allMonthlyData', 'monthlyData',
+      'categories', 'custom_categories', 'customCategories',
+      'budget', 'monthly_budget', 'vlm_configs', 'vlmConfig', 'data'
+    ];
+    const hasValidTopKey = validBackupKeys.some(k => Object.prototype.hasOwnProperty.call(snapshot, k));
+    if (!hasValidTopKey) {
+      showToast('导入失败：未检测到有效备份结构字段');
+      return false;
+    }
+
+    const rawData = (snapshot.data && typeof snapshot.data === 'object' && !Array.isArray(snapshot.data))
+      ? snapshot.data
+      : snapshot;
+    const rawDataKeys = Object.keys(rawData);
+    if (rawDataKeys.length === 0) {
+      showToast('导入失败：备份内容为空对象');
+      return false;
+    }
+
+    // 1. SQLite v1 -> v2 无损迁移与数据解构 (兼容 snake_case 与 camelCase 备份字段)
+    const categories = rawData.categories || rawData.custom_categories || rawData.customCategories || [];
+    const incomingMonthlyData = rawData.allMonthlyData || rawData.monthlyData || null;
+    const incomingTransactions = rawData.transactions || rawData.user_transactions || [];
     const incomingOrders = rawData.committedOrderIds || [];
-    const incomingVlm = rawData.vlmConfig || null;
+    const incomingVlm = rawData.vlmConfig || rawData.vlm_configs || null;
     const incomingDrafts = rawData.draftQueue || null;
 
     // 2. 还原分类 (无损迁移：增量补充，恢复备份中的分类)
@@ -4179,11 +4478,14 @@
         window.allMonthlyData[m] = mObj;
       });
     } else if (incomingTransactions.length > 0 && window.allMonthlyData) {
-      if (!window.allMonthlyData['2026-10']) {
-        window.allMonthlyData['2026-10'] = { net: '0.00', exp: '0.00', ref: '0.00', inc: '0.00', txs: [] };
+      const activeMonthKey = `${currentActiveYear || '2026'}-${String(currentActiveMonth || '10').padStart(2, '0')}`;
+      if (!window.allMonthlyData[activeMonthKey]) {
+        window.allMonthlyData[activeMonthKey] = { net: '0.00', exp: '0.00', ref: '0.00', inc: '0.00', txs: [] };
       }
-      window.allMonthlyData['2026-10'].txs = incomingTransactions;
+      window.allMonthlyData[activeMonthKey].txs = incomingTransactions;
     }
+
+    saveUserTransactionsToStorage();
 
     // 7. 彻底恢复 DOM 中可能被 soft-delete 的节点
     document.querySelectorAll('#transactions-list .tx-item, #tx-list-container .tx-item, .tx-item').forEach(item => {
@@ -4385,12 +4687,20 @@
     });
 
     // 7. Load stored user transactions from localStorage if any
-    const storedTxs = loadUserTransactionsFromStorage();
+    const storedTxs = loadUserTransactionsFromStorage().filter(t => t && !t.softDeleted);
     if (Array.isArray(storedTxs) && storedTxs.length > 0) {
+      const activeMonthKey = `${currentActiveYear}-${String(currentActiveMonth).padStart(2, '0')}`;
+      const monthSums = {};
       storedTxs.forEach(tx => {
-        insertTransactionToList(tx);
+        const rawTime = tx.txTime || tx.orderTime || tx.fullTime || '';
+        const txDate = tx.txDate || tx.date || (rawTime && rawTime.includes(' ') ? rawTime.split(' ')[0] : '') || '2026-10-26';
+        const mKey = (/^\d{4}-\d{2}/.test(txDate)) ? txDate.slice(0, 7) : activeMonthKey;
+        monthSums[mKey] = Math.round(((monthSums[mKey] || 0) + (Number(tx.amount) || 0)) * 100) / 100;
+        insertTransactionToList({ ...tx, txDate, _totalsAdjusted: true });
       });
-      adjustMonthlyTotals(storedTxs.reduce((sum, t) => sum + (t.amount || 0), 0));
+      Object.keys(monthSums).forEach(mKey => {
+        adjustMonthlyTotals(monthSums[mKey], true, 0, mKey);
+      });
     } else {
       // Clean initial state: 0 bills
       const emptyState = document.getElementById('tx-empty-state');
@@ -4510,9 +4820,16 @@
           tag: isLightning ? '闪电抓屏智能识别' : (isBackTap ? '背部轻敲智能识别' : '快捷指令智能识别')
         };
         if (!window.draftQueue) window.draftQueue = [];
+        const hadExistingDrafts = window.draftQueue.length > 0;
+        if (hadExistingDrafts && typeof syncActiveDraftFormToMemory === 'function') {
+          syncActiveDraftFormToMemory();
+        }
         window.draftQueue.unshift(draft);
+        if (hadExistingDrafts) {
+          currentDraftIndex = (typeof currentDraftIndex === 'number' ? currentDraftIndex : 0) + 1;
+        }
         saveStoredDrafts();
-        if (typeof renderDraftQueue === 'function') renderDraftQueue();
+        if (typeof renderDraftQueue === 'function') renderDraftQueue({ skipFormReload: hadExistingDrafts });
         if (typeof updateDraftBadge === 'function') updateDraftBadge();
         if (typeof showToast === 'function') {
           showToast(isLightning ? '闪电记账已捕获账单，已存入草稿箱' : (isBackTap ? '检测到背部轻敲截屏，正在后台调用大模型识别...' : '已自动识别快捷抓屏账单并存入草稿箱'));
@@ -4560,12 +4877,6 @@
   function startShortcutPolling() {
     if (!shortcutListenersBound && typeof document !== 'undefined' && typeof window !== 'undefined') {
       shortcutListenersBound = true;
-      document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) {
-          pollShortcutQueueOnce();
-        }
-      });
-      window.addEventListener('focus', pollShortcutQueueOnce);
       document.addEventListener('keydown', (evt) => {
         if (evt.key === 'Escape') {
           closeEditCategoryModal();
@@ -4574,14 +4885,9 @@
         }
       });
     }
-    if (shortcutPollingStarted) return;
-    if (typeof window === 'undefined' || !window.location || !window.location.protocol.startsWith('http')) {
-      return;
-    }
-    shortcutPollingStarted = true;
-    setInterval(() => {
-      pollShortcutQueueOnce();
-    }, 2000);
+    // 新规范：背部轻敲截屏监听已弃用，不自动后台轮询相册/本地目录，
+    // 仅保留【点击闪电记账】与【App内加一笔按钮】两个触发入口。
+    shortcutPollingStarted = false;
   }
 
   function openBackTapGuideModal() {
@@ -4774,7 +5080,31 @@
     return false;
   };
 
-  // 小米 HyperOS 下拉控制中心「闪电记账」快捷开关触发响应
+  // 小米 HyperOS 下拉控制中心「闪电记账」快捷开关触发响应与原生截屏回调入口
+  window.onNativeScreenshotCaptured = async function(dataUrl, fileName, isQuickTile = true) {
+    if (!dataUrl) return false;
+    await handleShortcutCapturedItem({
+      source: isQuickTile ? 'lightning-tile' : 'shortcut-capture',
+      dataUrl: dataUrl,
+      fileName: fileName || ('闪电抓屏_' + Date.now() + '.png')
+    });
+    return true;
+  };
+
+  window.triggerQuickTileCapture = async function(mockDataUrl = null) {
+    if (mockDataUrl) {
+      return await window.onNativeScreenshotCaptured(mockDataUrl, '闪电抓屏_' + Date.now() + '.png', true);
+    }
+    if (window.AndroidBridge && typeof window.AndroidBridge.requestQuickTileCapture === 'function') {
+      window.AndroidBridge.requestQuickTileCapture();
+      return true;
+    }
+    if (typeof window.onTileQuickRecordTriggered === 'function') {
+      window.onTileQuickRecordTriggered();
+    }
+    return true;
+  };
+
   window.onTileQuickRecordTriggered = function() {
     if (typeof openManualAddModal === 'function') {
       openManualAddModal();

@@ -304,6 +304,9 @@
 }
 
 /* Monthly Category Breakdown Solid Pie & Legend */
+#monthly-pie-chart {
+  transform: translateY(2px) !important;
+}
 #monthly-pie-chart svg .pie-slice {
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
@@ -455,17 +458,12 @@
   /* 移动端与原生宿主：系统状态栏自适应占位安全区，留出 44px 舒适物理顶距，杜绝系统时间/电量与标题文字重叠拥挤 */
   #simulator-status-bar,
   .max-w-\[410px\] > .h-11 {
-    display: block !important;
-    height: 48px !important;
-    height: max(env(safe-area-inset-top, 0px), 48px) !important;
-    min-height: 48px !important;
-    background-color: #020617 !important;
-    border-bottom: none !important;
+    display: none !important;
+    height: 0 !important;
+    min-height: 0 !important;
     padding: 0 !important;
     margin: 0 !important;
-    flex-shrink: 0 !important;
-    width: 100% !important;
-    z-index: 20 !important;
+    border: none !important;
   }
 
   /* 隐藏模拟器内部的假刘海、假时间(09:41)、假离线指示，仅保留纯黑安全占位区承托真机系统状态栏 */
@@ -490,10 +488,18 @@
   }
 
   /* 移动端三大核心页面顶部 Header 呼吸感统一定义，避免顶边局促拥挤 */
-  #view-transactions > .shrink-0 > div:first-child,
-  #view-drafts > div:first-child,
+  #view-transactions > .shrink-0 > div:first-child {
+    padding-top: 16px !important;
+    padding-bottom: 8px !important;
+    min-height: 52px !important;
+  }
+  #view-drafts > div:first-child {
+    padding-top: 48px !important;
+    padding-bottom: 8px !important;
+    min-height: 52px !important;
+  }
   #view-rules-accounts > div:first-child {
-    padding-top: 14px !important;
+    padding-top: 55px !important;
     padding-bottom: 8px !important;
     min-height: 52px !important;
   }
@@ -505,8 +511,8 @@
     left: 0 !important;
     right: 0 !important;
     height: auto !important;
-    min-height: calc(74px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
-    max-height: none !important;
+    min-height: 45px !important;
+    max-height: 73px !important;
     background-color: #020617 !important;
     border-top: 1px solid rgba(30, 41, 59, 0.8) !important;
     display: grid !important;
@@ -577,9 +583,9 @@
   #tx-quick-record-bar button {
     pointer-events: auto !important;
     width: 100% !important;
-    max-width: 240px !important;
-    height: 42px !important;
-    min-height: 42px !important;
+    max-width: 200px !important;
+    height: 46px !important;
+    min-height: 46px !important;
     padding: 0 1.25rem !important;
     border-radius: 14px !important;
     font-size: 13.5px !important;
@@ -738,17 +744,12 @@ body.native-app #mobile-device-shell {
   ring: none !important;
 }
 body.native-app #simulator-status-bar {
-  display: block !important;
-  height: 48px !important;
-  height: max(env(safe-area-inset-top, 0px), 48px) !important;
-  min-height: 48px !important;
-  background-color: #020617 !important;
-  border-bottom: none !important;
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
   padding: 0 !important;
   margin: 0 !important;
-  flex-shrink: 0 !important;
-  width: 100% !important;
-  z-index: 20 !important;
+  border: none !important;
 }
 body.native-app #simulator-status-bar > * {
   display: none !important;
@@ -769,8 +770,8 @@ body.native-app #bottom-nav-bar {
   left: 0 !important;
   right: 0 !important;
   height: auto !important;
-  min-height: calc(74px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
-  max-height: none !important;
+  min-height: 45px !important;
+  max-height: 73px !important;
   background-color: #020617 !important;
   border-top: 1px solid rgba(30, 41, 59, 0.8) !important;
   display: grid !important;
@@ -822,6 +823,13 @@ body.native-app #tx-quick-record-bar {
   position: fixed !important;
   bottom: calc(74px + max(env(safe-area-inset-bottom, 0px), 18px) + 16px) !important;
 }
+body.native-app #tx-quick-record-bar button {
+  max-width: 200px !important;
+  height: 46px !important;
+}
+body.native-app #monthly-pie-chart {
+  transform: translateY(2px) !important;
+}
 
 body.native-app #view-transactions {
   padding-bottom: calc(74px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
@@ -836,10 +844,18 @@ body.native-app #view-rules-accounts {
   padding-bottom: calc(98px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
 }
 
-body.native-app #view-transactions > .shrink-0 > div:first-child,
-body.native-app #view-drafts > div:first-child,
+body.native-app #view-transactions > .shrink-0 > div:first-child {
+  padding-top: 16px !important;
+  padding-bottom: 8px !important;
+  min-height: 52px !important;
+}
+body.native-app #view-drafts > div:first-child {
+  padding-top: 48px !important;
+  padding-bottom: 8px !important;
+  min-height: 52px !important;
+}
 body.native-app #view-rules-accounts > div:first-child {
-  padding-top: 14px !important;
+  padding-top: 55px !important;
   padding-bottom: 8px !important;
   min-height: 52px !important;
 }

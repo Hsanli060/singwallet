@@ -26,9 +26,9 @@ SCREENSHOT_DIRS = ['/sdcard/DCIM/Screenshots', '/sdcard/Pictures/Screenshots']
 SHORTCUT_QUEUE = []
 QUEUE_LOCK = threading.Lock()
 
-# Back-tap screenshot watcher global state & baseline isolation
-WATCH_SCREENSHOTS_ENABLED = True
-AUTO_CLEAN_SCREENSHOTS = True  # 识后即删：识别读取后自动清理手机相册截图，杜绝相册垃圾堆积
+# Back-tap screenshot watcher global state & baseline isolation (DEPRECATED & DISABLED by default)
+WATCH_SCREENSHOTS_ENABLED = False
+AUTO_CLEAN_SCREENSHOTS = False  # 已停用后台自动读取相册截图与自动清理逻辑
 SEEN_SCREENSHOTS = set()
 BASELINE_INITIALIZED = False
 WATCHER_LOCK = threading.Lock()
@@ -538,12 +538,17 @@ class ScreenshotWatcher(threading.Thread):
 
 
 def run_server(port=8765):
-    watcher = ScreenshotWatcher()
-    watcher.start()
+    # Back-tap screenshot watcher thread is intentionally NOT started by default.
+    # Only two capture entry points are retained:
+    # 1. Control Center "Lightning Record" Quick Settings Tile
+    # 2. In-app "+ Add Record" button
+    if WATCH_SCREENSHOTS_ENABLED:
+        watcher = ScreenshotWatcher()
+        watcher.start()
 
     server_address = ('0.0.0.0', port)
     httpd = ThreadingHTTPServer(server_address, ProxyHTTPRequestHandler)
-    print(f'SingWallet preview server with /api/proxy & BackTap Watcher running on http://0.0.0.0:{port}', flush=True)
+    print(f'SingWallet preview server with /api/proxy running on http://0.0.0.0:{port} (auto album watcher disabled)', flush=True)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

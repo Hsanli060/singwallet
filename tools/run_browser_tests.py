@@ -2203,6 +2203,138 @@ function runAllTestsSuite() {
     renderDraftQueue();
     updateDraftBadge();
 
+    // ========================================================
+    // Group 41: Backend Audit Bug Fixes (Bug 1 ~ Bug 6) & New Capture Spec Regression Suite
+    // ========================================================
+    console.log("=== Group 41: Backend Audit Bug Fixes & Capture Spec Verification ===");
+    cleanAllTestData();
+
+    // --- Bug 1 (P0): 删除账单刷新后不复活 & undoDelete 同步恢复 ---
+    insertTransactionToList({
+      id: "item-tx-bug1-test",
+      merchant: "待删不复活测试店",
+      amount: 66.60,
+      catName: "餐饮美食",
+      txDate: "2026-10-26",
+      txTime: "2026-10-26 12:00:00",
+      orderId: "ORD_BUG1_001"
+    });
+    adjustMonthlyTotals(66.60, true, 1, '2026-10');
+    assert(JSON.parse(localStorage.getItem('singwallet_user_transactions') || '[]').some(t => t.id === 'item-tx-bug1-test'), "Group 41 (Bug 1): Transaction persisted before delete");
+
+    deleteTransaction("item-tx-bug1-test", "待删不复活测试店", 66.60);
+    const txInMemAfterDel = allMonthlyData['2026-10'].txs.find(t => t.id === 'item-tx-bug1-test');
+    assert(txInMemAfterDel && txInMemAfterDel.softDeleted === true, "Group 41 (Bug 1): deleteTransaction marks tx.softDeleted = true in allMonthlyData");
+    const storedAfterDel = JSON.parse(localStorage.getItem('singwallet_user_transactions') || '[]');
+    assert(!storedAfterDel.some(t => t.id === 'item-tx-bug1-test'), "Group 41 (Bug 1): Deleted transaction is filtered out from localStorage (will not resurrect on reload)");
+
+    undoDelete();
+    assert(txInMemAfterDel && txInMemAfterDel.softDeleted === false, "Group 41 (Bug 1): undoDelete restores tx.softDeleted = false in allMonthlyData");
+    const storedAfterUndo = JSON.parse(localStorage.getItem('singwallet_user_transactions') || '[]');
+    assert(storedAfterUndo.some(t => t.id === 'item-tx-bug1-test'), "Group 41 (Bug 1): undoDelete re-saves restored transaction to localStorage");
+
+    // --- Bug 2 (P0): 跨月账单动态路由至目标月且不污染当前激活月 ---
+    const octCountBefore = document.querySelectorAll('#transactions-list .tx-item:not(.soft-deleted)').length;
+    const octExpBefore = allMonthlyData['2026-10'].exp;
+    insertTransactionToList({
+      id: "item-tx-bug2-sep",
+      merchant: "九月跨月书店",
+      amount: 88.00,
+      catName: "日常购物",
+      txDate: "2026-09-15",
+      txTime: "2026-09-15 10:20:00",
+      orderId: "ORD_BUG2_SEP"
+    });
+    assert(allMonthlyData['2026-09'] && allMonthlyData['2026-09'].txs.some(t => t.id === 'item-tx-bug2-sep'), "Group 41 (Bug 2): 2026-09 transaction routed to allMonthlyData['2026-09']");
+    assert(allMonthlyData['2026-09'].exp === '88.00', "Group 41 (Bug 2): allMonthlyData['2026-09'].exp updated to 88.00 (got " + allMonthlyData['2026-09'].exp + ")");
+    assert(allMonthlyData['2026-10'].exp === octExpBefore, "Group 41 (Bug 2): 2026-10 exp untouched by 2026-09 insertion");
+    assert(document.querySelectorAll('#transactions-list .tx-item:not(.soft-deleted)').length === octCountBefore, "Group 41 (Bug 2): 2026-10 active DOM list not polluted by 2026-09 bill");
+
+    // --- Bug 3 (P0): 后台闪电记账入队不冲掉当前正在编辑的草稿表单 ---
+    draftQueue = [{
+      id: 'draft-editing-now',
+      merchant: '原草稿商户',
+      amount: 20.00,
+      confidence: 96,
+      isParsing: false,
+      category: '餐饮美食',
+      categoryName: '餐饮美食',
+      channel: '微信',
+      account: '钱包',
+      orderId: 'ORD_EDIT_001',
+      time: '2026-10-26 09:00:00'
+    }];
+    currentDraftIndex = 0;
+    renderDraftQueue();
+    document.getElementById('input-merchant').value = '用户正在手改的商户名';
+    document.getElementById('input-amount').value = '99.50';
+
+    if (window.vlmConfig) window.vlmConfig.apiKey = '';
+    const vlmKeyEl41 = document.getElementById('vlm-api-key');
+    if (vlmKeyEl41) vlmKeyEl41.value = '';
+    window.currentOcrEngine = 'llm';
+
+    handleManualScreenshotUpload({
+      target: { files: [new File([new Uint8Array(10)], 'bg_capture.png', { type: 'image/png' })] },
+      isBackgroundCapture: true,
+      captureSource: 'lightning-tile',
+      sourceDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+    });
+    assert(draftQueue.length === 2, "Group 41 (Bug 3): Background capture unshifted into draftQueue (length=2)");
+    assert(currentDraftIndex === 1, "Group 41 (Bug 3): currentDraftIndex incremented to 1 to stay on user's active draft");
+    assert(document.getElementById('input-merchant').value === '用户正在手改的商户名', "Group 41 (Bug 3): Active merchant input preserved without being wiped");
+    assert(document.getElementById('input-amount').value === '99.50', "Group 41 (Bug 3): Active amount input preserved without being wiped");
+    assert(draftQueue[1].merchant === '用户正在手改的商户名' && draftQueue[1].amount === 99.50, "Group 41 (Bug 3): In-progress edits synced to draftQueue[currentDraftIndex]");
+    window.currentOcrEngine = 'local';
+
+    // --- Bug 4 (P1): 智谱 GLM (/api/paas/v4) 端点 URL 拼接无 /v1 污染 ---
+    const zhipuBase = 'https://open.bigmodel.cn/api/paas/v4';
+    assert(normalizeApiEndpoint(zhipuBase, 'openai') === 'https://open.bigmodel.cn/api/paas/v4/chat/completions', "Group 41 (Bug 4): Zhipu /api/paas/v4 normalized to /api/paas/v4/chat/completions");
+    assert(getBaseOriginPath('https://open.bigmodel.cn/api/paas/v4/chat/completions') === 'https://open.bigmodel.cn/api/paas/v4', "Group 41 (Bug 4): getBaseOriginPath preserves /api/paas/v4");
+    assert(normalizeApiEndpoint('https://api.openai.com/v1', 'openai') === 'https://api.openai.com/v1/chat/completions', "Group 41 (Bug 4): Standard /v1 endpoint remains 100% compatible");
+
+    // --- Bug 5 (P1): VLM 金额符号/负数清洗、思维链 <think> 与尾逗号解析、本地引擎移除纯文件大小盲猜 ---
+    const formattedVlm = formatVlmResult({ merchant: '测试店', amount: '-¥1,234.56', category: '餐饮美食' });
+    assert(formattedVlm.amount === 1234.56, "Group 41 (Bug 5): formatVlmResult cleans currency/comma/negative to 1234.56 (got " + formattedVlm.amount + ")");
+    const thinkRaw = '<think>\n正在分析账单金额...\n</think>\n```json\n{"merchant": "思维链商户", "amount": "¥35.80", "category": "餐饮美食",}\n```';
+    const parsedThink = window.extractJsonFromVlmResponse(thinkRaw);
+    assert(parsedThink && parsedThink.merchant === '思维链商户', "Group 41 (Bug 5): extractJsonFromVlmResponse strips <think> block and trailing comma");
+    const random70kFile = { name: 'random_photo_20261030.png', size: 70000 };
+    const localRes70k = parseBillWithLocalEngine(random70kFile);
+    assert(!localRes70k.merchant.includes('星巴克'), "Group 41 (Bug 5): parseBillWithLocalEngine no longer misclassifies arbitrary 70KB file as Starbucks (got " + localRes70k.merchant + ")");
+
+    // --- Bug 6 (P1/P2): 删除自定义分类孤儿数据迁移、空对象备份拒绝、浮点精度 ---
+    addCustomCategory(); // no-op with empty input
+    if (window.DomainRegistry && typeof window.DomainRegistry.addCategory === 'function') {
+      window.DomainRegistry.addCategory('测试孤儿分类');
+    }
+    insertTransactionToList({
+      id: 'item-tx-orphan-cat',
+      merchant: '孤儿分类测试商户',
+      amount: 12.30,
+      catName: '测试孤儿分类',
+      txDate: '2026-10-26',
+      txTime: '2026-10-26 15:00:00',
+      orderId: 'ORD_ORPHAN_001'
+    });
+    removeCustomCategory('测试孤儿分类');
+    const migratedTx = allMonthlyData['2026-10'].txs.find(t => t.id === 'item-tx-orphan-cat');
+    assert(migratedTx && migratedTx.category === '其他支出' && migratedTx.parentCat === '其他支出', "Group 41 (Bug 6): Orphan transaction migrated to '其他支出' after custom category deletion");
+    const migratedDom = document.getElementById('item-tx-orphan-cat');
+    assert(migratedDom && migratedDom.getAttribute('data-category') === '其他支出', "Group 41 (Bug 6): Orphan DOM .tx-item migrated to '其他支出'");
+
+    assert(importBackupFromJson('{}') === false, "Group 41 (Bug 6): Empty object '{}' rejected by importBackupFromJson");
+    assert(importBackupFromJson('{"hello":"world"}') === false, "Group 41 (Bug 6): Object without valid backup keys rejected by importBackupFromJson");
+
+    allMonthlyData['2026-11'] = { net: '0.00', exp: '0.00', ref: '0.00', inc: '0.00', txs: [] };
+    adjustMonthlyTotals(0.1, true, 1, '2026-11');
+    adjustMonthlyTotals(0.2, true, 1, '2026-11');
+    assert(allMonthlyData['2026-11'].exp === '0.30', "Group 41 (Bug 6): IEEE 754 float precision 0.1 + 0.2 === '0.30'");
+
+    // --- 新规范：背部轻敲截屏监听已弃用，不自动轮询相册，保留双触发入口 ---
+    assert(typeof window.initLocalShortcutWatcher === 'function' && window.initLocalShortcutWatcher() === false, "Group 41 (Capture Spec): initLocalShortcutWatcher is disabled (returns false, no auto album polling)");
+    assert(typeof window.onNativeScreenshotCaptured === 'function' && typeof window.triggerQuickTileCapture === 'function', "Group 41 (Capture Spec): Lightning tile capture entrypoints are exposed");
+
 
     // 4. 测试收尾：清理全部测试数据，确保 App 还原为 100% 干净状态
     cleanAllTestData();

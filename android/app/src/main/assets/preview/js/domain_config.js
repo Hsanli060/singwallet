@@ -761,11 +761,11 @@
         const amt = Math.abs(parseFloat(tx.amount) || 0);
         if (amt <= 0) return;
 
-        totals[resolvedCat] = (totals[resolvedCat] || 0) + amt;
+        totals[resolvedCat] = Math.round(((totals[resolvedCat] || 0) + amt) * 100) / 100;
       });
     }
 
-    const total = Object.values(totals).reduce((a, b) => a + b, 0);
+    const total = Object.values(totals).reduce((a, b) => Math.round((a + b) * 100) / 100, 0);
     if (total <= 0) {
       return {
         totalExpense: 0,
@@ -999,16 +999,17 @@
       }
     }
 
-    if (!parsed || typeof parsed !== 'object') {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return { valid: false, error: '无效的备份文件格式' };
     }
 
-    // 必须包含 data 节点或根级 transactions / customCategories
-    const hasDataObj = parsed.data && typeof parsed.data === 'object';
-    const hasRootTx = Array.isArray(parsed.transactions);
-    const hasRootCats = Array.isArray(parsed.customCategories);
+    // 必须包含合法备份结构字段，禁止空对象 {} 静默通过
+    const hasDataObj = Boolean(parsed.data && typeof parsed.data === 'object' && !Array.isArray(parsed.data) && Object.keys(parsed.data).length > 0);
+    const hasRootTx = Array.isArray(parsed.transactions) || Array.isArray(parsed.user_transactions);
+    const hasRootCats = Array.isArray(parsed.customCategories) || Array.isArray(parsed.custom_categories) || Array.isArray(parsed.categories);
+    const hasMetaKeys = Boolean(parsed.version || parsed.schemaVersion || parsed.dbSchemaVersion || parsed.backupMagic || parsed.budget !== undefined || parsed.monthly_budget !== undefined || parsed.vlm_configs || parsed.vlmConfig);
 
-    if (!hasDataObj && !hasRootTx && !hasRootCats) {
+    if (!hasDataObj && !hasRootTx && !hasRootCats && !hasMetaKeys) {
       return { valid: false, error: '无效的备份文件格式' };
     }
 

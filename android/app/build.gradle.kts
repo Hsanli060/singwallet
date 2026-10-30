@@ -1,10 +1,10 @@
 import java.util.Properties
 import java.io.FileInputStream
+import java.io.File
 
 plugins {
     id("com.android.application")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
-    id("dev.flutter.flutter-gradle-plugin")
+    id("org.jetbrains.kotlin.android")
 }
 
 // 铁律 1: 持久化 Release 签名配置加载
@@ -15,10 +15,12 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
+val appVersionName = (project.findProperty("APP_VERSION_NAME") as String?) ?: "1.0.5"
+val appVersionCode = (project.findProperty("APP_VERSION_CODE") as String?)?.toIntOrNull() ?: 6
+
 android {
     namespace = "com.singwallet.app"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    compileSdk = 35
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -30,9 +32,9 @@ android {
         // 严禁更改包名，确保应用覆盖安装升级时历史账单与 SQLite 数据库 100% 无损保留
         applicationId = "com.singwallet.app"
         minSdk = 24
-        targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        targetSdk = 35
+        versionCode = appVersionCode
+        versionName = appVersionName
     }
 
     signingConfigs {
@@ -65,13 +67,42 @@ kotlin {
     }
 }
 
+// 单源前端资产自动同步任务：APK 构建前自动将根目录 preview 与 singwallet_preview.html 同步至 assets
+val syncWebAssets = tasks.register("syncWebAssets") {
+    group = "build"
+    description = "Sync single-source web preview assets into Android main assets."
+
+    val repoRoot = rootDir.parentFile
+    val srcHtml = File(repoRoot, "singwallet_preview.html")
+    val srcPreviewDir = File(repoRoot, "preview")
+    val destAssetsDir = file("src/main/assets")
+
+    inputs.file(srcHtml)
+    inputs.dir(srcPreviewDir)
+    outputs.file(File(destAssetsDir, "singwallet_preview.html"))
+    outputs.dir(File(destAssetsDir, "preview"))
+
+    doLast {
+        if (srcHtml.exists()) {
+            destAssetsDir.mkdirs()
+            srcHtml.copyTo(File(destAssetsDir, "singwallet_preview.html"), overwrite = true)
+        }
+        if (srcPreviewDir.exists()) {
+            val destPreviewDir = File(destAssetsDir, "preview")
+            if (destPreviewDir.exists()) {
+                destPreviewDir.deleteRecursively()
+            }
+            srcPreviewDir.copyRecursively(destPreviewDir, overwrite = true)
+        }
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn(syncWebAssets)
+}
+
 dependencies {
-    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-ktx:1.9.3")
     implementation("androidx.webkit:webkit:1.12.0")
-}
-
-flutter {
-    source = "../.."
 }

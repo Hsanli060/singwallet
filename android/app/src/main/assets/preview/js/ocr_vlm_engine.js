@@ -43,13 +43,14 @@
   let llmStartTime = 0;
   let llmExecutionStartTime = 0;
 
-  // 检测是否存在历史拼接污染特征（如重复 /v1/、completion/v1/、残缺后缀等）
+  // 检测是否存在历史拼接污染特征（如重复 /v1/、/v4/v1/、completion/v1/、残缺后缀等）
   function isPollutedEndpointUrl(url) {
     if (!url || typeof url !== 'string') return false;
     const u = url.trim();
     if (!u) return false;
     const v1Matches = u.match(/\/v1(?:beta\d*)?(?:\/|$)/gi);
     if (v1Matches && v1Matches.length >= 2) return true;
+    if (/\/v\d+(?:beta\d*)?\/v\d+/i.test(u)) return true;
     if (/completions?\/v\d+/i.test(u) || /messages?\/v\d+/i.test(u) || /responses?\/v\d+/i.test(u) || /:generateContent\/v\d+/i.test(u)) return true;
     if (/(?:\/chat\/completions?){2,}/i.test(u) || /(?:\/messages?){2,}/i.test(u) || /(?:\/responses?){2,}/i.test(u) || /(?::generateContent){2,}/i.test(u)) return true;
     if (/\/chat\/completion$/i.test(u)) return true;
@@ -279,17 +280,13 @@
   }
 
   /**
-   * 使用本地引擎解析账单截图
+   * 使用本地引擎解析账单截图（仅当文件名显式命中预设样本特征词时返回预设样本，严禁纯凭文件大小范围盲目匹配）
    */
   function parseBillWithLocalEngine(file) {
     const fileName = (file && file.name) ? file.name.toLowerCase() : '账单截图.png';
-    const size = (file && file.size) ? file.size : 0;
 
     for (const b of BILL_KNOWLEDGE_BASE) {
       if (b.keys && b.keys.some(k => fileName.includes(k.toLowerCase()))) {
-        return { ...b };
-      }
-      if (size > 0 && b.sizeRange && b.sizeRange[0] > 0 && size >= b.sizeRange[0] && size <= b.sizeRange[1]) {
         return { ...b };
       }
     }
@@ -552,14 +549,15 @@
     }
 
     const suffixPatterns = [
-      /\/v\d+(?:beta\d*)?\/chat(?:\/.*)?$/i,
+      /\/v1(?:beta\d*)?\/chat(?:\/.*)?$/i,
       /\/chat\/completions?(?:\/.*)?$/i,
-      /\/v\d+(?:beta\d*)?\/messages?(?:\/.*)?$/i,
+      /\/v1(?:beta\d*)?\/messages?(?:\/.*)?$/i,
       /\/messages?(?:\/.*)?$/i,
-      /\/v\d+(?:beta\d*)?\/responses?(?:\/.*)?$/i,
+      /\/v1(?:beta\d*)?\/responses?(?:\/.*)?$/i,
       /\/responses?(?:\/.*)?$/i,
-      /\/v\d+(?:beta\d*)?\/models(?:\/.*)?$/i,
+      /\/v1(?:beta\d*)?\/models(?:\/.*)?$/i,
       /\/models\/[^/]+:generateContent(?:\/.*)?$/i,
+      /\/models(?:\/)?$/i,
       /:generateContent(?:\/.*)?$/i,
       /\/v1beta\d*(?:\/)?$/i,
       /\/v1(?:\/)?$/i
@@ -578,7 +576,11 @@
       }
     } while (changed);
 
-    return u.replace(/\/+$/, '');
+    u = u.replace(/\/+$/, '');
+    if (/open\.bigmodel\.cn\/api\/paas$/i.test(u)) {
+      u = u + '/v4';
+    }
+    return u;
   }
 
   function applyProtocolSuffixToUrl(rawUrl, protocol, model) {
@@ -595,30 +597,32 @@
     const base = getBaseOriginPath(rawEndpoint);
     if (!base) return '';
 
+    const hasExplicitVersion = /\/v\d+(?:beta\d*)?$/i.test(base) || /\/api\/paas\/v\d+/i.test(base);
+
     let proto = (protocol || 'openai_chat').toLowerCase();
-    if (proto === 'openai' || proto === 'qwen' || proto === 'custom') proto = 'openai_chat';
+    if (proto === 'openai' || proto === 'qwen' || proto === 'custom' || proto === 'zhipu' || proto === 'glm') proto = 'openai_chat';
     if (proto === 'gemini') proto = 'gemini_native';
     if (proto === 'anthropic' || proto === 'claude') proto = 'anthropic_messages';
     if (proto === 'responses') proto = 'openai_responses';
 
     if (proto === 'openai_chat') {
-      return `${base}/v1/chat/completions`;
+      return hasExplicitVersion ? `${base}/chat/completions` : `${base}/v1/chat/completions`;
     }
     if (proto === 'anthropic_messages') {
-      return `${base}/v1/messages`;
+      return hasExplicitVersion ? `${base}/messages` : `${base}/v1/messages`;
     }
     if (proto === 'openai_responses') {
-      return `${base}/v1/responses`;
+      return hasExplicitVersion ? `${base}/responses` : `${base}/v1/responses`;
     }
     if (proto === 'gemini_native') {
       const m = extractedModel || 'gemini-1.5-flash';
-      return `${base}/v1beta/models/${m}:generateContent`;
+      return hasExplicitVersion ? `${base}/models/${m}:generateContent` : `${base}/v1beta/models/${m}:generateContent`;
     }
-    return `${base}/v1/chat/completions`;
+    return hasExplicitVersion ? `${base}/chat/completions` : `${base}/v1/chat/completions`;
   }
 
   /**
-   * 跨源透传 Fetch 辅助函数 (当浏览器跨域拦截 Failed to fetch 时自动回退至本地 /api/proxy)
+   * 跨源透传 Fetch 辅助函数 (当浏览器跨域拦截 Failed to fetch 时自动回退至本地 /api/proxy；Android 原生 WebView 或 file: 协议下直接抛出原始网络错误)
    */
   async function fetchWithCorsFallback(url, options = {}) {
     try {
@@ -626,6 +630,9 @@
       return res;
     } catch (err) {
       if (err.name === 'AbortError') throw err;
+      if (typeof window !== 'undefined' && (window.AndroidBridge || (window.location && window.location.protocol === 'file:'))) {
+        throw err;
+      }
       try {
         let bodyPayload = options.body;
         if (typeof bodyPayload === 'string') {
@@ -828,7 +835,9 @@
       // 如果 model 填的是 Auto 且上游返回模型不存在类错误，尝试透明探测可用模型并代测一次 (绝不修改输入框里的 Auto)
       if (!res.ok && model.toLowerCase() === 'auto' && (res.status === 400 || res.status === 404 || res.status === 422 || res.status === 500)) {
         try {
-          const modelsUrl = `${getBaseOriginPath(rawEndpoint)}/v1/models`;
+          const baseOrigin = getBaseOriginPath(rawEndpoint);
+          const hasExplicitVer = /\/v\d+(?:beta\d*)?$/i.test(baseOrigin) || /\/api\/paas\/v\d+/i.test(baseOrigin);
+          const modelsUrl = hasExplicitVer ? `${baseOrigin}/models` : `${baseOrigin}/v1/models`;
           const mRes = await fetchWithCorsFallback(modelsUrl, {
             method: 'GET',
             headers: { 'Authorization': `Bearer ${apiKey}` },
@@ -896,8 +905,10 @@
   }
 
   function formatVlmResult(parsed, file) {
-    const amt = parseFloat(parsed.amount) || 0.00;
-    const merchant = (parsed.merchant || '已识别商户').trim();
+    const cleanedAmtStr = String((parsed && parsed.amount !== undefined && parsed.amount !== null) ? parsed.amount : '').replace(/[¥￥$€£,\s]/g, '');
+    const parsedFloat = parseFloat(cleanedAmtStr);
+    const amt = (!isNaN(parsedFloat) && isFinite(parsedFloat)) ? Math.round(Math.abs(parsedFloat) * 100) / 100 : 0.00;
+    const merchant = ((parsed && parsed.merchant) || '已识别商户').trim();
     const resolver = window.resolveParentCategory || (window.DomainRegistry && window.DomainRegistry.resolveParentCategory);
     const currentCats = (window.DomainRegistry && typeof window.DomainRegistry.getParentCategories === 'function')
       ? window.DomainRegistry.getParentCategories()
@@ -1015,6 +1026,39 @@
       if (previewBox) previewBox.classList.remove('hidden');
     } else {
       if (emptyPlaceholder) emptyPlaceholder.classList.remove('hidden');
+    }
+  }
+
+  /**
+   * 鲁棒提取大模型响应中的 JSON 对象（支持剥离 <think>...</think> 思维链、Markdown 代码块及尾随逗号）
+   */
+  function extractJsonFromVlmResponse(rawText) {
+    if (!rawText || typeof rawText !== 'string') return null;
+    let cleaned = rawText
+      .replace(/<think>[\s\S]*?<\/think>/gi, '')
+      .replace(/<think>[\s\S]*$/gi, '')
+      .replace(/```(?:json)?/gi, '')
+      .replace(/```/g, '')
+      .trim();
+    if (!cleaned) return null;
+
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+      return null;
+    }
+    const jsonCandidate = cleaned.slice(firstBrace, lastBrace + 1);
+    try {
+      return JSON.parse(jsonCandidate);
+    } catch (e1) {
+      const sanitized = jsonCandidate
+        .replace(/,\s*([}\]])/g, '$1')
+        .replace(/[\u0000-\u0019]+/g, ' ');
+      try {
+        return JSON.parse(sanitized);
+      } catch (e2) {
+        return null;
+      }
     }
   }
 
@@ -1159,10 +1203,8 @@
         throw new Error(`Gemini 接口调用失败: ${errMsg}`);
       }
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text || data.choices?.[0]?.message?.content || '';
-      let cleaned = text.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
-      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+      const parsed = extractJsonFromVlmResponse(text);
+      if (parsed) {
         return formatVlmResult(parsed, file);
       }
     } else if (proto === 'anthropic_messages') {
@@ -1197,10 +1239,8 @@
         throw new Error(`Anthropic 接口调用失败: ${errMsg}`);
       }
       const text = data?.content?.[0]?.text || data?.choices?.[0]?.message?.content || '';
-      let cleaned = text.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
-      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+      const parsed = extractJsonFromVlmResponse(text);
+      if (parsed) {
         return formatVlmResult(parsed, file);
       }
     } else if (proto === 'openai_responses') {
@@ -1254,10 +1294,8 @@
         throw new Error(`Responses API 接口调用失败: ${errMsg}`);
       }
       const text = data?.output_text || data?.output?.[0]?.content?.[0]?.text || data?.choices?.[0]?.message?.content || '';
-      let cleaned = text.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
-      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+      const parsed = extractJsonFromVlmResponse(text);
+      if (parsed) {
         return formatVlmResult(parsed, file);
       }
     } else {
@@ -1340,10 +1378,8 @@
         throw new Error(`大模型接口调用失败: ${errMsg}`);
       }
       const text = data?.choices?.[0]?.message?.content || '';
-      let cleaned = text.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
-      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+      const parsed = extractJsonFromVlmResponse(text);
+      if (parsed) {
         return formatVlmResult(parsed, file);
       }
     }
@@ -1405,13 +1441,20 @@
           if (!window.draftQueue || !Array.isArray(window.draftQueue)) {
             window.draftQueue = [];
           }
+          const hadExistingDrafts = window.draftQueue.length > 0;
+          if (hadExistingDrafts && typeof window.syncActiveDraftFormToMemory === 'function') {
+            window.syncActiveDraftFormToMemory();
+          }
           window.draftQueue.unshift(fallbackDraft);
+          if (hadExistingDrafts) {
+            window.currentDraftIndex = (typeof window.currentDraftIndex === 'number' ? window.currentDraftIndex : 0) + 1;
+          }
 
           if (typeof window.saveStoredDrafts === 'function') {
             window.saveStoredDrafts();
           }
           if (typeof window.renderDraftQueue === 'function') {
-            window.renderDraftQueue();
+            window.renderDraftQueue({ skipFormReload: hadExistingDrafts });
           }
           if (typeof window.updateDraftBadge === 'function') {
             window.updateDraftBadge();
@@ -1458,13 +1501,21 @@
       if (!window.draftQueue || !Array.isArray(window.draftQueue)) {
         window.draftQueue = [];
       }
+      const hadExistingDrafts = window.draftQueue.length > 0;
+      const preserveActiveDraft = Boolean(isBackgroundCapture && hadExistingDrafts);
+      if (hadExistingDrafts && typeof window.syncActiveDraftFormToMemory === 'function') {
+        window.syncActiveDraftFormToMemory();
+      }
       window.draftQueue.unshift(taskDraft);
+      if (preserveActiveDraft) {
+        window.currentDraftIndex = (typeof window.currentDraftIndex === 'number' ? window.currentDraftIndex : 0) + 1;
+      }
 
       if (typeof window.saveStoredDrafts === 'function') {
         window.saveStoredDrafts();
       }
       if (typeof window.renderDraftQueue === 'function') {
-        window.renderDraftQueue();
+        window.renderDraftQueue({ skipFormReload: preserveActiveDraft });
       }
       if (typeof window.updateDraftBadge === 'function') {
         window.updateDraftBadge();
@@ -1495,7 +1546,10 @@
         try {
           const result = await parseBillWithVlm(file);
           clearInterval(progTimer);
-          const targetDraft = (window.draftQueue && Array.isArray(window.draftQueue)) ? window.draftQueue.find(item => item.id === taskId) : null;
+          const finishedIdx = (window.draftQueue && Array.isArray(window.draftQueue))
+            ? window.draftQueue.findIndex(item => item.id === taskId)
+            : -1;
+          const targetDraft = finishedIdx !== -1 ? window.draftQueue[finishedIdx] : null;
           if (!targetDraft) return;
 
           targetDraft.progress = 100;
@@ -1553,6 +1607,9 @@
               const idx = window.draftQueue.findIndex(item => item.id === taskId);
               if (idx !== -1) {
                 window.draftQueue.splice(idx, 1);
+                if (typeof window.currentDraftIndex === 'number' && idx < window.currentDraftIndex) {
+                  window.currentDraftIndex = Math.max(0, window.currentDraftIndex - 1);
+                }
               }
               if (window.committedOrderIds && targetDraft.orderId) {
                 window.committedOrderIds.add(targetDraft.orderId.trim());
@@ -1575,8 +1632,9 @@
             if (typeof window.saveStoredDrafts === 'function') {
               window.saveStoredDrafts();
             }
+            const activeIdx = typeof window.currentDraftIndex === 'number' ? window.currentDraftIndex : 0;
             if (typeof window.renderDraftQueue === 'function') {
-              window.renderDraftQueue();
+              window.renderDraftQueue({ skipFormReload: finishedIdx !== activeIdx });
             }
             if (typeof window.updateDraftBadge === 'function') {
               window.updateDraftBadge();
@@ -1596,7 +1654,10 @@
 
           if (isBackgroundCapture) {
             // 场景 B：后台抓屏零丢失保障，绝不 splice 删除草稿！原地保底
-            const targetDraft = (window.draftQueue && Array.isArray(window.draftQueue)) ? window.draftQueue.find(item => item.id === taskId) : null;
+            const finishedIdx = (window.draftQueue && Array.isArray(window.draftQueue))
+              ? window.draftQueue.findIndex(item => item.id === taskId)
+              : -1;
+            const targetDraft = finishedIdx !== -1 ? window.draftQueue[finishedIdx] : null;
             if (targetDraft) {
               targetDraft.isParsing = false;
               targetDraft.parseError = true;
@@ -1610,8 +1671,9 @@
             if (typeof window.saveStoredDrafts === 'function') {
               window.saveStoredDrafts();
             }
+            const activeIdx = typeof window.currentDraftIndex === 'number' ? window.currentDraftIndex : 0;
             if (typeof window.renderDraftQueue === 'function') {
-              window.renderDraftQueue();
+              window.renderDraftQueue({ skipFormReload: finishedIdx !== activeIdx });
             }
             if (typeof window.updateDraftBadge === 'function') {
               window.updateDraftBadge();
@@ -1625,6 +1687,9 @@
               const idx = window.draftQueue.findIndex(item => item.id === taskId);
               if (idx !== -1) {
                 window.draftQueue.splice(idx, 1);
+                if (typeof window.currentDraftIndex === 'number' && idx < window.currentDraftIndex) {
+                  window.currentDraftIndex = Math.max(0, window.currentDraftIndex - 1);
+                }
               }
             }
             if (typeof window.saveStoredDrafts === 'function') {
@@ -1661,9 +1726,16 @@
           rawFile: file
         };
         if (!window.draftQueue) window.draftQueue = [];
+        const hadExistingDrafts = window.draftQueue.length > 0;
+        if (hadExistingDrafts && typeof window.syncActiveDraftFormToMemory === 'function') {
+          window.syncActiveDraftFormToMemory();
+        }
         window.draftQueue.unshift(draft);
+        if (hadExistingDrafts) {
+          window.currentDraftIndex = (typeof window.currentDraftIndex === 'number' ? window.currentDraftIndex : 0) + 1;
+        }
         if (typeof window.saveStoredDrafts === 'function') window.saveStoredDrafts();
-        if (typeof window.renderDraftQueue === 'function') window.renderDraftQueue();
+        if (typeof window.renderDraftQueue === 'function') window.renderDraftQueue({ skipFormReload: hadExistingDrafts });
         if (typeof window.updateDraftBadge === 'function') window.updateDraftBadge();
         if (typeof window.showToast === 'function') {
           window.showToast('已自动识别抓屏账单并存入草稿箱');
@@ -1852,6 +1924,15 @@
     window.lastUploadedData = null;
   }
 
+  /**
+   * 新规范：背部轻敲截屏监听已弃用，不自动后台轮询相册/本地目录，
+   * 仅保留【点击闪电记账】与【App内加一笔按钮】两个触发入口。
+   * 保留函数签名以兼容外部/测试调用，但不启动任何自动轮询定时器。
+   */
+  function initLocalShortcutWatcher() {
+    return false;
+  }
+
   // 挂载至全局对象
   window.BILL_KNOWLEDGE_BASE = BILL_KNOWLEDGE_BASE;
   window.getAdaptiveBillFromFeatures = getAdaptiveBillFromFeatures;
@@ -1889,11 +1970,16 @@
   window.getBaseOriginPath = getBaseOriginPath;
   window.normalizeApiEndpoint = normalizeApiEndpoint;
   window.testVlmConnection = testVlmConnection;
+  window.fetchWithCorsFallback = fetchWithCorsFallback;
+  window.extractJsonFromVlmResponse = extractJsonFromVlmResponse;
   window.startLlmExecutionFeedback = startLlmExecutionFeedback;
   window.stopLlmExecutionFeedback = stopLlmExecutionFeedback;
   window.parseBillWithVlm = parseBillWithVlm;
   window.parseBillWithLlm = parseBillWithLlm;
+  window.callCloudVlmEngine = parseBillWithVlm;
   window.handleManualScreenshotUpload = handleManualScreenshotUpload;
+  window.triggerRealOcrAndVlmTask = handleManualScreenshotUpload;
+  window.initLocalShortcutWatcher = initLocalShortcutWatcher;
   window.loadSampleScreenshot = loadSampleScreenshot;
   window.applyOcrResultToManualForm = applyOcrResultToManualForm;
   window.sendUploadedToDrafts = sendUploadedToDrafts;
