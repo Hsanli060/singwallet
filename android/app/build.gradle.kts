@@ -15,8 +15,8 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
-val appVersionName = (project.findProperty("APP_VERSION_NAME") as String?) ?: "1.0.5"
-val appVersionCode = (project.findProperty("APP_VERSION_CODE") as String?)?.toIntOrNull() ?: 6
+val appVersionName = (project.findProperty("APP_VERSION_NAME") as String?) ?: "1.0.6"
+val appVersionCode = (project.findProperty("APP_VERSION_CODE") as String?)?.toIntOrNull() ?: 7
 
 android {
     namespace = "com.singwallet.app"

@@ -29,6 +29,7 @@ import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -37,11 +38,18 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
 import com.singwallet.app.services.QuickRecordTileService
 import com.singwallet.app.services.SingWalletAccessibilityService
 import org.json.JSONObject
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.IOException
+import java.io.InputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.security.MessageDigest
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -55,12 +63,41 @@ import java.util.concurrent.Executors
  *    - 入口一：下拉控制中心「闪电记账」磁贴 (QuickRecordTileService + SingWalletAccessibilityService).
  *    - 入口二：App 内「加一笔」按钮手动输入或主动选择一张账单图片上传.
  * 4. 已彻底移除背部轻敲截屏监听与自动读取相册图片逻辑，无需申请任何相册/存储权限.
+ * 5. 双擎 OTA 更新系统：免重装 Web 资源秒级热更新 + 全量 APK 覆盖升级.
  */
 class MainActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "SingWalletActivity"
         private const val ASSET_ENTRY_URL = "file:///android_asset/singwallet_preview.html"
+        private const val PREFS_OTA = "singwallet_ota_prefs"
+        private const val KEY_SEEDED_APK_VERSION_CODE = "seeded_apk_version_code"
+        private const val KEY_HOT_VERSION = "hot_version"
+        private const val KEY_HOT_COMMIT_SHA = "hot_commit_sha"
+        private const val KEY_HOT_UPDATED_AT = "hot_updated_at"
+        private const val DEFAULT_REPO = "Hsanli060/singwallet"
+        private const val DEFAULT_BRANCH = "master"
+
+        private val WEB_BUNDLE_FILES = listOf(
+            "singwallet_preview.html",
+            "preview/css/preview.css",
+            "preview/js/domain_config.js",
+            "preview/js/icon_registry.js",
+            "preview/js/dropdown_engine.js",
+            "preview/js/ocr_vlm_engine.js",
+            "preview/js/app_controller.js",
+            "preview/js/tailwindcss.min.js"
+        )
+
+        private val WEB_MUTABLE_FILES = listOf(
+            "singwallet_preview.html",
+            "preview/css/preview.css",
+            "preview/js/domain_config.js",
+            "preview/js/icon_registry.js",
+            "preview/js/dropdown_engine.js",
+            "preview/js/ocr_vlm_engine.js",
+            "preview/js/app_controller.js"
+        )
 
         @Volatile
         private var instance: MainActivity? = null
@@ -98,6 +135,7 @@ class MainActivity : ComponentActivity() {
     private val pendingScreenshots = mutableListOf<Triple<String, String, Boolean>>() // (base64Image, fileName, isQuickTile)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ingestionExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val otaExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private var activeDevUrl: String? = null
 
@@ -136,7 +174,10 @@ class MainActivity : ComponentActivity() {
             // 1. 设置沉浸式纯黑底色与状态栏/导航栏
             applyWindowDecorations()
 
-            // 2. 创建并配置硬件加速全屏 WebView
+            // 2. 初始化/种子化离线热更资源目录
+            ensureWebHotBundleInitialized()
+
+            // 3. 创建并配置硬件加速全屏 WebView
             val rootLayout = FrameLayout(this).apply {
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -160,13 +201,13 @@ class MainActivity : ComponentActivity() {
 
             configureWebView(wv)
 
-            // 3. 注册返回手势/物理按键拦截 (优先关闭 H5 内置弹窗)
+            // 4. 注册返回手势/物理按键拦截 (优先关闭 H5 内置弹窗)
             setupBackPressHandler(wv)
 
-            // 4. 处理可能带入的启动 Intent (控制中心闪电记账快捷磁贴 / USB 实时热重载 dev_url)
+            // 5. 处理可能带入的启动 Intent (控制中心闪电记账快捷磁贴 / USB 实时热重载 dev_url)
             handleIntent(intent, isFromCreate = true)
 
-            // 5. 扫描未处理的离线闪电抓屏任务
+            // 6. 扫描未处理的离线闪电抓屏任务
             scanPendingLightningCaptures()
         } catch (t: Throwable) {
             Log.e(TAG, "Error in onCreate: ${t.message}", t)
@@ -196,6 +237,205 @@ class MainActivity : ComponentActivity() {
         } catch (e: Throwable) {
             Log.w(TAG, "applyWindowDecorations warning: ${e.message}")
         }
+    }
+
+    fun getApkVersionCode(): Long {
+        return try {
+            val pInfo = packageManager.getPackageInfo(packageName, 0)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                pInfo.longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                pInfo.versionCode.toLong()
+            }
+        } catch (_: Exception) {
+            1L
+        }
+    }
+
+    fun getAppVersion(): String {
+        return try {
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.0.6"
+        } catch (_: Exception) {
+            "1.0.6"
+        }
+    }
+
+    /**
+     * 初始化/种子化离线热更资源目录：
+     * 每次 APK 覆盖安装（versionCode 升级）或 web_hot_bundle 缺失时，完整同步 assets 中的最新静态资源作为基线
+     */
+    private fun ensureWebHotBundleInitialized() {
+        try {
+            val prefs = getSharedPreferences(PREFS_OTA, MODE_PRIVATE)
+            val seededVersion = prefs.getLong(KEY_SEEDED_APK_VERSION_CODE, -1L)
+            val currentVersionCode = getApkVersionCode()
+            val hotEntryFile = File(filesDir, "web_hot_bundle/singwallet_preview.html")
+
+            if (currentVersionCode > seededVersion || !hotEntryFile.exists() || hotEntryFile.length() == 0L) {
+                Log.i(TAG, "Initializing/updating web_hot_bundle from APK assets (seeded=$seededVersion, current=$currentVersionCode)")
+                val copied = copyAssetsToWebHotBundle()
+                if (copied) {
+                    prefs.edit()
+                        .putLong(KEY_SEEDED_APK_VERSION_CODE, currentVersionCode)
+                        .putString(KEY_HOT_COMMIT_SHA, "")
+                        .putString(KEY_HOT_VERSION, "")
+                        .putLong(KEY_HOT_UPDATED_AT, 0L)
+                        .apply()
+                    Log.i(TAG, "web_hot_bundle seeded successfully for versionCode $currentVersionCode")
+                } else {
+                    Log.w(TAG, "Failed to copy built-in assets to web_hot_bundle")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "ensureWebHotBundleInitialized error: ${e.message}", e)
+        }
+    }
+
+    /**
+     * 将 APK 内置 assets 中的核心前端资源写入 web_hot_bundle 目录
+     */
+    private fun copyAssetsToWebHotBundle(): Boolean {
+        val hotBundleDir = File(filesDir, "web_hot_bundle")
+        if (!hotBundleDir.exists()) {
+            hotBundleDir.mkdirs()
+        }
+        return try {
+            for (relPath in WEB_BUNDLE_FILES) {
+                val destFile = File(hotBundleDir, relPath)
+                destFile.parentFile?.mkdirs()
+                assets.open(relPath).use { input ->
+                    FileOutputStream(destFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "copyAssetsToWebHotBundle failed: ${e.message}", e)
+            false
+        }
+    }
+
+    /**
+     * 计算并解析当前应加载的 WebView 入口 URL：
+     * 1. 优先使用本地网络热重载 dev_url (如 127.0.0.1).
+     * 2. 否则如果 web_hot_bundle/singwallet_preview.html 存在，使用热更资源文件.
+     * 3. 兜底回退至 file:///android_asset/singwallet_preview.html.
+     */
+    fun resolveEntryUrl(intent: Intent?): String {
+        val devUrlExtra = intent?.getStringExtra("dev_url")
+        val resetDev = intent?.getBooleanExtra("reset_dev", false) == true || devUrlExtra.equals("off", ignoreCase = true)
+        if (!resetDev && isAllowedLoopbackDevUrl(devUrlExtra)) {
+            return devUrlExtra!!
+        }
+        if (activeDevUrl != null && !resetDev && isAllowedLoopbackDevUrl(activeDevUrl)) {
+            return activeDevUrl!!
+        }
+        val hotEntryFile = File(filesDir, "web_hot_bundle/singwallet_preview.html")
+        if (hotEntryFile.exists() && hotEntryFile.length() > 0L) {
+            return Uri.fromFile(hotEntryFile).toString()
+        }
+        return ASSET_ENTRY_URL
+    }
+
+    /**
+     * 向 WebView 派发 OTA 进度回调
+     */
+    fun dispatchOtaProgress(
+        percent: Int,
+        status: String,
+        done: Boolean,
+        error: String? = null,
+        version: String = "",
+        commitSha: String = ""
+    ) {
+        mainHandler.post {
+            try {
+                val payload = JSONObject().apply {
+                    put("percent", percent)
+                    put("status", status)
+                    put("done", done)
+                    if (error != null) {
+                        put("error", error)
+                    } else {
+                        put("error", JSONObject.NULL)
+                    }
+                    put("version", version)
+                    put("commitSha", commitSha)
+                }.toString()
+                val script = """
+                    if (typeof window.onNativeOtaProgress === 'function') {
+                        window.onNativeOtaProgress($payload);
+                    }
+                """.trimIndent()
+                webView?.evaluateJavascript(script, null)
+            } catch (e: Exception) {
+                Log.w(TAG, "dispatchOtaProgress error: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 通用 HTTP/HTTPS 下载工具，带 30x 重定向自动跟踪与进度回调
+     */
+    private fun downloadUrlToFile(
+        urlStr: String,
+        destFile: File,
+        onProgress: ((downloaded: Long, total: Long) -> Unit)? = null
+    ) {
+        var curUrl = urlStr
+        var redirects = 0
+        while (redirects < 5) {
+            val url = URL(curUrl)
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 10000
+                readTimeout = 25000
+                instanceFollowRedirects = true
+                setRequestProperty("User-Agent", "SingWallet-OTA/${getAppVersion()} Mobile")
+                setRequestProperty("Accept", "*/*")
+            }
+            val responseCode = conn.responseCode
+            if (responseCode in 301..308) {
+                val location = conn.getHeaderField("Location")
+                conn.disconnect()
+                if (location != null) {
+                    curUrl = if (location.startsWith("http://") || location.startsWith("https://")) {
+                        location
+                    } else {
+                        URL(url, location).toString()
+                    }
+                    redirects++
+                    continue
+                }
+            }
+            if (responseCode !in 200..299) {
+                conn.disconnect()
+                throw IOException("HTTP $responseCode from $curUrl")
+            }
+            val totalLength = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                conn.contentLengthLong
+            } else {
+                conn.contentLength.toLong()
+            }
+            conn.inputStream.use { input ->
+                destFile.parentFile?.mkdirs()
+                FileOutputStream(destFile).use { output ->
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    var totalBytesRead = 0L
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        output.write(buffer, 0, bytesRead)
+                        totalBytesRead += bytesRead
+                        onProgress?.invoke(totalBytesRead, totalLength)
+                    }
+                    output.flush()
+                }
+            }
+            conn.disconnect()
+            return
+        }
+        throw IOException("Too many redirects: $curUrl")
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -229,14 +469,14 @@ class MainActivity : ComponentActivity() {
 
         // 注入 SingWallet 专属 UserAgent
         val defaultUa = settings.userAgentString
-        settings.userAgentString = "$defaultUa SingWalletAndroid/1.0.5 Mobile"
+        settings.userAgentString = "$defaultUa SingWalletAndroid/1.0.6 Mobile"
 
         wv.addJavascriptInterface(AndroidBridge(this), "AndroidBridge")
 
         wv.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url?.toString() ?: return false
-                if (url.startsWith("file:///android_asset/") ||
+                if (url.startsWith("file://") ||
                     url.startsWith("data:") ||
                     url.startsWith("blob:") ||
                     isAllowedLoopbackDevUrl(url)
@@ -251,6 +491,36 @@ class MainActivity : ComponentActivity() {
                     Log.w(TAG, "Cannot launch external url: $url", e)
                 }
                 return true
+            }
+
+            override fun shouldInterceptRequest(
+                view: WebView?,
+                request: WebResourceRequest?
+            ): WebResourceResponse? {
+                val url = request?.url?.toString() ?: return super.shouldInterceptRequest(view, request)
+                if (url.startsWith("file:///android_asset/")) {
+                    val cleanUrl = url.substringBefore('?').substringBefore('#')
+                    val relPath = cleanUrl.removePrefix("file:///android_asset/")
+                    val hotFile = File(filesDir, "web_hot_bundle/$relPath")
+                    if (hotFile.exists() && hotFile.isFile && hotFile.canRead()) {
+                        val mimeType = when {
+                            relPath.endsWith(".html", ignoreCase = true) -> "text/html"
+                            relPath.endsWith(".css", ignoreCase = true) -> "text/css"
+                            relPath.endsWith(".js", ignoreCase = true) -> "application/javascript"
+                            relPath.endsWith(".json", ignoreCase = true) -> "application/json"
+                            relPath.endsWith(".png", ignoreCase = true) -> "image/png"
+                            relPath.endsWith(".jpg", ignoreCase = true) || relPath.endsWith(".jpeg", ignoreCase = true) -> "image/jpeg"
+                            relPath.endsWith(".svg", ignoreCase = true) -> "image/svg+xml"
+                            else -> "application/octet-stream"
+                        }
+                        try {
+                            return WebResourceResponse(mimeType, "UTF-8", FileInputStream(hotFile))
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed reading hot file $relPath: ${e.message}")
+                        }
+                    }
+                }
+                return super.shouldInterceptRequest(view, request)
             }
 
             override fun onReceivedError(
@@ -268,7 +538,7 @@ class MainActivity : ComponentActivity() {
                     Log.w(TAG, "Dev server unreachable, auto-falling back to built-in offline assets")
                     activeDevUrl = null
                     view?.settings?.cacheMode = WebSettings.LOAD_DEFAULT
-                    view?.loadUrl(ASSET_ENTRY_URL)
+                    view?.loadUrl(resolveEntryUrl(null))
                     Toast.makeText(this@MainActivity, "开发服务未连接，已自动切回内置离线版", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -441,7 +711,7 @@ class MainActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent?, isFromCreate: Boolean = false) {
         if (intent == null) {
             if (isFromCreate && webView != null) {
-                webView?.loadUrl(ASSET_ENTRY_URL)
+                webView?.loadUrl(resolveEntryUrl(null))
             }
             return
         }
@@ -453,7 +723,7 @@ class MainActivity : ComponentActivity() {
         if (resetDev) {
             activeDevUrl = null
             webView?.settings?.cacheMode = WebSettings.LOAD_DEFAULT
-            webView?.loadUrl(ASSET_ENTRY_URL)
+            webView?.loadUrl(resolveEntryUrl(null))
             Log.i(TAG, "Switched back to built-in offline assets")
             Toast.makeText(this, "已切回内置离线版", Toast.LENGTH_SHORT).show()
         } else if (isAllowedLoopbackDevUrl(devUrlExtra)) {
@@ -464,8 +734,8 @@ class MainActivity : ComponentActivity() {
             Log.i(TAG, "Loading live hot-reload dev_url: $devUrlExtra")
             Toast.makeText(this, "已连接电脑 UI 实时热重载模式", Toast.LENGTH_SHORT).show()
         } else if (isFromCreate) {
-            // 冷启动且未指定 dev_url 时，默认加载内置离线页面
-            webView?.loadUrl(ASSET_ENTRY_URL)
+            // 冷启动且未指定 dev_url 时，默认加载热更或内置离线页面
+            webView?.loadUrl(resolveEntryUrl(intent))
         }
 
         // 2. 处理下拉控制中心「闪电记账」磁贴 Intent
@@ -519,6 +789,7 @@ class MainActivity : ComponentActivity() {
         }
         mainHandler.removeCallbacksAndMessages(null)
         ingestionExecutor.shutdownNow()
+        otaExecutor.shutdownNow()
         webView?.apply {
             loadUrl("about:blank")
             clearHistory()
@@ -632,11 +903,7 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun getAppVersion(): String {
-            return try {
-                activity.packageManager.getPackageInfo(activity.packageName, 0).versionName ?: "1.0.5"
-            } catch (_: Exception) {
-                "1.0.5"
-            }
+            return activity.getAppVersion()
         }
 
         @JavascriptInterface
@@ -670,6 +937,292 @@ class MainActivity : ComponentActivity() {
                     Log.e(TAG, "Failed to open accessibility settings: ${e.message}", e)
                     Toast.makeText(activity, "无法打开系统设置，请手动开启无障碍快捷抓屏服务", Toast.LENGTH_SHORT).show()
                 }
+            }
+        }
+
+        // ==========================================
+        //  双擎 OTA 更新系统 JavaScriptInterface 接口
+        // ==========================================
+
+        /**
+         * 获取当前原生宿主与 Web 热更元数据信息
+         */
+        @JavascriptInterface
+        fun getHotUpdateInfo(): String {
+            val prefs = activity.getSharedPreferences(PREFS_OTA, MODE_PRIVATE)
+            return JSONObject().apply {
+                put("apkVersion", activity.getAppVersion())
+                put("apkVersionCode", activity.getApkVersionCode())
+                put("hotVersion", prefs.getString(KEY_HOT_VERSION, "") ?: "")
+                put("hotCommitSha", prefs.getString(KEY_HOT_COMMIT_SHA, "") ?: "")
+                put("hotUpdatedAt", prefs.getLong(KEY_HOT_UPDATED_AT, 0L))
+                put("repo", DEFAULT_REPO)
+            }.toString()
+        }
+
+        /**
+         * 执行免重装 Web 资源秒级热更新：
+         * 从 GitHub / CDN 镜像拉取最新核心前端文件至 web_hot_bundle，校验后秒级原地刷新
+         */
+        @JavascriptInterface
+        fun performWebHotUpdate(configJson: String) {
+            activity.otaExecutor.execute {
+                val config = try {
+                    if (configJson.isNotBlank()) JSONObject(configJson) else JSONObject()
+                } catch (_: Exception) {
+                    JSONObject()
+                }
+                val repo = config.optString("repo", DEFAULT_REPO).ifBlank { DEFAULT_REPO }
+                val branch = config.optString("branch", DEFAULT_BRANCH).ifBlank { DEFAULT_BRANCH }
+                val version = config.optString("version", "")
+                val commitSha = config.optString("commitSha", "").trim()
+                val targetRef = if (commitSha.isNotEmpty()) commitSha else branch
+
+                val stagingDir = File(activity.filesDir, "web_hot_staging")
+                try {
+                    stagingDir.deleteRecursively()
+                    stagingDir.mkdirs()
+
+                    activity.dispatchOtaProgress(5, "开始检查并下载热更资源...", false, null, version, commitSha)
+
+                    val totalFiles = WEB_MUTABLE_FILES.size
+                    for ((index, relPath) in WEB_MUTABLE_FILES.withIndex()) {
+                        val stagingFile = File(stagingDir, relPath)
+                        stagingFile.parentFile?.mkdirs()
+
+                        val candidateUrls = listOf(
+                            "https://cdn.jsdelivr.net/gh/$repo@$targetRef/$relPath?t=${System.currentTimeMillis()}",
+                            "https://ghfast.top/https://raw.githubusercontent.com/$repo/$targetRef/$relPath",
+                            "https://raw.githubusercontent.com/$repo/$targetRef/$relPath"
+                        )
+
+                        var fileDownloaded = false
+                        var lastErr: Throwable? = null
+
+                        for (urlStr in candidateUrls) {
+                            try {
+                                activity.downloadUrlToFile(urlStr, stagingFile)
+                                if (!stagingFile.exists() || stagingFile.length() == 0L) {
+                                    stagingFile.delete()
+                                    continue
+                                }
+                                if (relPath == "singwallet_preview.html") {
+                                    val content = stagingFile.readText(Charsets.UTF_8)
+                                    if (!content.contains("<html", ignoreCase = true)) {
+                                        stagingFile.delete()
+                                        throw IllegalStateException("singwallet_preview.html 校验失败: 缺少 <html 标签")
+                                    }
+                                }
+                                fileDownloaded = true
+                                break
+                            } catch (t: Throwable) {
+                                lastErr = t
+                                Log.w(TAG, "Download attempt failed for $relPath ($urlStr): ${t.message}")
+                                if (stagingFile.exists()) {
+                                    stagingFile.delete()
+                                }
+                            }
+                        }
+
+                        if (!fileDownloaded || !stagingFile.exists()) {
+                            throw IllegalStateException("文件 $relPath 下载失败 (所有镜像源均不可用): ${lastErr?.message}")
+                        }
+
+                        val percent = 10 + ((index + 1) * 80 / totalFiles)
+                        activity.dispatchOtaProgress(
+                            percent,
+                            "已更新组件 (${index + 1}/$totalFiles): ${relPath.substringAfterLast('/')}",
+                            false,
+                            null,
+                            version,
+                            commitSha
+                        )
+                    }
+
+                    // 保留不变的三方库 tailwindcss.min.js
+                    val tailwindStaging = File(stagingDir, "preview/js/tailwindcss.min.js")
+                    tailwindStaging.parentFile?.mkdirs()
+                    val tailwindExisting = File(activity.filesDir, "web_hot_bundle/preview/js/tailwindcss.min.js")
+                    if (tailwindExisting.exists() && tailwindExisting.length() > 0L) {
+                        tailwindExisting.copyTo(tailwindStaging, overwrite = true)
+                    } else {
+                        activity.assets.open("preview/js/tailwindcss.min.js").use { input ->
+                            FileOutputStream(tailwindStaging).use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                    }
+
+                    // 全部文件校验完毕，覆盖拷贝到 web_hot_bundle
+                    val hotBundleDir = File(activity.filesDir, "web_hot_bundle").apply { mkdirs() }
+                    stagingDir.walkTopDown().forEach { file ->
+                        if (file.isFile) {
+                            val rel = file.relativeTo(stagingDir).path
+                            val target = File(hotBundleDir, rel)
+                            target.parentFile?.mkdirs()
+                            file.copyTo(target, overwrite = true)
+                        }
+                    }
+
+                    // 记录热更版本信息
+                    val prefs = activity.getSharedPreferences(PREFS_OTA, MODE_PRIVATE)
+                    prefs.edit()
+                        .putString(KEY_HOT_VERSION, version)
+                        .putString(KEY_HOT_COMMIT_SHA, commitSha)
+                        .putLong(KEY_HOT_UPDATED_AT, System.currentTimeMillis())
+                        .apply()
+
+                    activity.dispatchOtaProgress(100, "热更完成，正在重新加载页面...", true, null, version, commitSha)
+
+                    // 延迟 400ms 清理缓存并刷新 WebView
+                    activity.mainHandler.postDelayed({
+                        try {
+                            activity.webView?.clearCache(true)
+                            activity.webView?.loadUrl(activity.resolveEntryUrl(activity.intent))
+                            Toast.makeText(activity, "热更新已生效！", Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "WebView reload error: ${e.message}", e)
+                        }
+                    }, 400L)
+                } catch (e: Throwable) {
+                    Log.e(TAG, "performWebHotUpdate error: ${e.message}", e)
+                    activity.dispatchOtaProgress(0, "热更新失败: ${e.message}", true, e.message, version, commitSha)
+                } finally {
+                    try {
+                        stagingDir.deleteRecursively()
+                    } catch (_: Throwable) {}
+                }
+            }
+        }
+
+        /**
+         * 全量 APK 应用内后台多源加速下载并校验 SHA-256，通过 FileProvider 调起系统安装器
+         */
+        @JavascriptInterface
+        fun downloadAndInstallApk(apkUrl: String, expectedSha256: String?) {
+            activity.otaExecutor.execute {
+                val otaDir = File(activity.cacheDir, "ota_apk").apply { mkdirs() }
+                val apkFile = File(otaDir, "singwallet-update.apk")
+                if (apkFile.exists()) {
+                    apkFile.delete()
+                }
+
+                val candidateUrls = mutableListOf<String>()
+                candidateUrls.add(apkUrl)
+                if (apkUrl.contains("github.com") && !apkUrl.startsWith("https://ghfast.top/")) {
+                    candidateUrls.add("https://ghfast.top/$apkUrl")
+                }
+
+                var downloaded = false
+                var lastErr: Throwable? = null
+
+                for (targetUrl in candidateUrls) {
+                    try {
+                        Log.i(TAG, "Attempting APK download from: $targetUrl")
+                        activity.dispatchOtaProgress(0, "正在连接下载节点...", false, null)
+                        var lastPercent = -1
+                        var lastTime = 0L
+
+                        activity.downloadUrlToFile(targetUrl, apkFile) { curBytes, totalBytes ->
+                            if (totalBytes > 0) {
+                                val pct = ((curBytes * 100) / totalBytes).toInt().coerceIn(0, 99)
+                                val now = System.currentTimeMillis()
+                                if (pct != lastPercent && (now - lastTime > 250 || pct == 99)) {
+                                    lastPercent = pct
+                                    lastTime = now
+                                    activity.dispatchOtaProgress(pct, "正在下载新版本安装包 ($pct%)...", false, null)
+                                }
+                            }
+                        }
+
+                        if (apkFile.exists() && apkFile.length() > 1024L) {
+                            downloaded = true
+                            break
+                        } else {
+                            apkFile.delete()
+                        }
+                    } catch (t: Throwable) {
+                        lastErr = t
+                        Log.w(TAG, "Failed to download APK from $targetUrl: ${t.message}")
+                        if (apkFile.exists()) apkFile.delete()
+                    }
+                }
+
+                if (!downloaded || !apkFile.exists()) {
+                    val msg = lastErr?.message ?: "安装包下载失败"
+                    activity.dispatchOtaProgress(0, "下载失败: $msg", true, msg)
+                    return@execute
+                }
+
+                // SHA-256 完整性校验
+                if (!expectedSha256.isNullOrBlank()) {
+                    activity.dispatchOtaProgress(99, "正在校验安装包完整性...", false, null)
+                    val digest = MessageDigest.getInstance("SHA-256")
+                    apkFile.inputStream().use { input ->
+                        val buf = ByteArray(8192)
+                        var len: Int
+                        while (input.read(buf).also { len = it } != -1) {
+                            digest.update(buf, 0, len)
+                        }
+                    }
+                    val actualSha256 = digest.digest().joinToString("") { "%02x".format(it) }
+                    if (!actualSha256.equals(expectedSha256.trim(), ignoreCase = true)) {
+                        apkFile.delete()
+                        val errMsg = "SHA-256 校验不匹配 (预期: $expectedSha256, 实际: $actualSha256)"
+                        Log.e(TAG, errMsg)
+                        activity.dispatchOtaProgress(0, errMsg, true, errMsg)
+                        return@execute
+                    }
+                }
+
+                activity.dispatchOtaProgress(100, "安装包下载完成，正在调起系统安装...", true, null)
+
+                activity.mainHandler.post {
+                    try {
+                        val apkUri = FileProvider.getUriForFile(
+                            activity,
+                            "${activity.packageName}.fileprovider",
+                            apkFile
+                        )
+                        val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(apkUri, "application/vnd.android.package-archive")
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        activity.startActivity(installIntent)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to start install activity: ${e.message}", e)
+                        Toast.makeText(activity, "调起安装器失败: ${e.message}", Toast.LENGTH_LONG).show()
+                        activity.dispatchOtaProgress(100, "调起安装器失败: ${e.message}", true, e.message)
+                    }
+                }
+            }
+        }
+
+        /**
+         * 热更一键安全回退：从 APK 内置 assets 重新覆盖至 web_hot_bundle 并刷新界面
+         */
+        @JavascriptInterface
+        fun rollbackWebHotUpdate(): Boolean {
+            return try {
+                val success = activity.copyAssetsToWebHotBundle()
+                if (success) {
+                    val prefs = activity.getSharedPreferences(PREFS_OTA, MODE_PRIVATE)
+                    prefs.edit()
+                        .putString(KEY_HOT_COMMIT_SHA, "")
+                        .putString(KEY_HOT_VERSION, "")
+                        .putLong(KEY_HOT_UPDATED_AT, System.currentTimeMillis())
+                        .apply()
+                    activity.mainHandler.post {
+                        activity.webView?.clearCache(true)
+                        activity.webView?.loadUrl(activity.resolveEntryUrl(activity.intent))
+                        Toast.makeText(activity, "已恢复内置出厂版本", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                success
+            } catch (e: Exception) {
+                Log.e(TAG, "rollbackWebHotUpdate failed: ${e.message}", e)
+                false
             }
         }
     }

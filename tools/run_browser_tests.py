@@ -14,6 +14,7 @@ with open(preview_path, 'r', encoding='utf-8') as f:
 
 test_script = r"""
 <script>
+window.__SW_DISABLE_NET_OTA__ = true;
 window.__TEST_RESULTS__ = [];
 function assert(cond, msg) {
   if (cond) {
@@ -24,7 +25,7 @@ function assert(cond, msg) {
   }
 }
 
-function runAllTestsSuite() {
+async function runAllTestsSuite() {
   try {
     console.log("=== COMPREHENSIVE BROWSER DROPDOWN TEST SUITE ===");
 
@@ -2334,6 +2335,166 @@ function runAllTestsSuite() {
     // --- 新规范：背部轻敲截屏监听已弃用，不自动轮询相册，保留双触发入口 ---
     assert(typeof window.initLocalShortcutWatcher === 'function' && window.initLocalShortcutWatcher() === false, "Group 41 (Capture Spec): initLocalShortcutWatcher is disabled (returns false, no auto album polling)");
     assert(typeof window.onNativeScreenshotCaptured === 'function' && typeof window.triggerQuickTileCapture === 'function', "Group 41 (Capture Spec): Lightning tile capture entrypoints are exposed");
+
+    // ========================================================
+    // Group 42: Dual-Engine GitHub OTA (Commit Web Hot Update & Release APK Upgrade)
+    // ========================================================
+    console.log("=== Group 42: Dual-Engine GitHub OTA & Bridge Execution ===");
+
+    // 1. 验证领域层 SSOT 元数据与新版仓库配置
+    const otaMeta = window.SingWalletDomain ? window.SingWalletDomain.APP_VERSION_META : window.APP_VERSION_META;
+    assert(!!otaMeta, "Group 42: APP_VERSION_META exists in domain SSOT");
+    assert(otaMeta.githubRepo === 'Hsanli060/singwallet', "Group 42: default githubRepo is locked to 'Hsanli060/singwallet'");
+    assert(otaMeta.githubBranch === 'master', "Group 42: default githubBranch is locked to 'master'");
+    assert(otaMeta.repo === 'Hsanli060/singwallet', "Group 42: repo compatibility field is 'Hsanli060/singwallet'");
+    assert(otaMeta.branch === 'master', "Group 42: branch compatibility field is 'master'");
+    assert(otaMeta.currentVersion === '1.0.0', "Group 42: currentVersion remains '1.0.0' for test suite compatibility");
+    assert(otaMeta.releasesApiUrl.includes('Hsanli060/singwallet/releases/latest'), "Group 42: releasesApiUrl points to GitHub releases/latest");
+    assert(otaMeta.commitsApiUrl.includes('Hsanli060/singwallet/commits/master'), "Group 42: commitsApiUrl points to GitHub commits/master");
+
+    // 2. 验证别名与入口挂载
+    assert(typeof window.checkAppUpdate === 'function', "Group 42: window.checkAppUpdate alias is mounted");
+    assert(window.checkAppUpdate === window.checkOtaUpdate, "Group 42: checkAppUpdate === checkOtaUpdate");
+    assert(typeof window.triggerOtaInstall === 'function', "Group 42: window.triggerOtaInstall alias is mounted");
+    assert(window.triggerOtaInstall === window.executeOtaInPlaceUpgrade, "Group 42: triggerOtaInstall === executeOtaInPlaceUpgrade");
+    assert(typeof window.fetchAndRenderGitHubOtaUpdate === 'function', "Group 42: fetchAndRenderGitHubOtaUpdate is exposed");
+    assert(typeof window.onNativeOtaProgress === 'function', "Group 42: window.onNativeOtaProgress is exposed");
+
+    // 3. 验证 Commit 免编译 Web 秒级热更新检测与 DOM 渲染 (双擎之一)
+    const originalFetch = window.fetch;
+    const mockCommitSha = '8f9a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a';
+    const mockShortSha = '8f9a2b3';
+    try {
+      localStorage.removeItem('singwallet_hot_commit_sha');
+      localStorage.setItem('singwallet_app_version', '1.0.0');
+
+      window.fetch = async function(url, options) {
+        if (url.includes('/commits/')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              sha: mockCommitSha,
+              commit: {
+                message: "feat: instant web hot update engine\n- zero install web reload\n- preserve sqlite data",
+                author: { name: "Hsanli", date: "2026-10-30T10:00:00Z" }
+              }
+            })
+          };
+        }
+        if (url.includes('/releases/latest')) {
+          return { ok: false, status: 404, json: async () => ({ message: "Not Found" }) };
+        }
+        return { ok: false, status: 404, json: async () => ({}) };
+      };
+
+      const hotCheckRes = await window.fetchAndRenderGitHubOtaUpdate('Hsanli060/singwallet');
+      assert(hotCheckRes && hotCheckRes.hasUpdate === true, "Group 42: Web hot update detected successfully from GitHub commits");
+
+      const otaBoxEl = document.getElementById('ota-check-result-box');
+      assert(otaBoxEl && !otaBoxEl.classList.contains('hidden'), "Group 42: #ota-check-result-box expanded for web hot update");
+
+      const titleEl = document.getElementById('ota-version-title');
+      assert(titleEl && titleEl.innerText.includes(mockShortSha), "Group 42: #ota-version-title displays hot update shortSha #" + mockShortSha);
+
+      const changelogListEl = document.getElementById('ota-changelog-list');
+      assert(changelogListEl && changelogListEl.innerHTML.includes('instant web hot update engine'), "Group 42: Changelog renders GitHub commit messages");
+
+      const triggerBtn = document.getElementById('btn-trigger-ota-upgrade');
+      assert(triggerBtn && triggerBtn.innerText.includes('立即热更新 (免安装秒级生效)'), "Group 42: Trigger button text shows '立即热更新 (免安装秒级生效)'");
+      assert(window.__pendingOtaUpdateMeta && window.__pendingOtaUpdateMeta.mode === 'web_hot', "Group 42: Update meta mode is 'web_hot'");
+      assert(window.__pendingOtaUpdateMeta.commitSha === mockCommitSha, "Group 42: Update meta records full commitSha");
+
+      // 4. 验证 AndroidBridge 原生调用 performWebHotUpdate 与秒级热更新闭环
+      let capturedPerformHotUpdateJson = null;
+      window.AndroidBridge = {
+        performWebHotUpdate: function(jsonStr) {
+          capturedPerformHotUpdateJson = JSON.parse(jsonStr);
+        }
+      };
+
+      window.triggerOtaInstall();
+      assert(capturedPerformHotUpdateJson !== null, "Group 42: AndroidBridge.performWebHotUpdate called");
+      assert(capturedPerformHotUpdateJson.repo === 'Hsanli060/singwallet', "Group 42: performWebHotUpdate repo is 'Hsanli060/singwallet'");
+      assert(capturedPerformHotUpdateJson.branch === 'master', "Group 42: performWebHotUpdate branch is 'master'");
+      assert(capturedPerformHotUpdateJson.commitSha === mockCommitSha, "Group 42: performWebHotUpdate commitSha matches remote");
+
+      // 5. 验证原生进度回调 onNativeOtaProgress
+      // 5.1 过程更新中
+      window.onNativeOtaProgress({ percent: 55, status: '正在秒级热更 (55%)...' });
+      const pBar = document.getElementById('ota-download-progress-bar');
+      const pText = document.getElementById('ota-download-progress-text');
+      const pStatus = document.getElementById('ota-download-status-text');
+      assert(pBar && pBar.style.width === '55%', "Group 42: onNativeOtaProgress updates progress bar width to 55%");
+      assert(pText && pText.innerText === '55%', "Group 42: onNativeOtaProgress updates progress text to 55%");
+      assert(pStatus && pStatus.innerText.includes('55%'), "Group 42: onNativeOtaProgress updates status text");
+
+      // 5.2 错误状态处理
+      window.onNativeOtaProgress({ error: '资源哈希校验不匹配' });
+      assert(!triggerBtn.disabled, "Group 42: onNativeOtaProgress with error re-enables trigger button");
+      assert(triggerBtn.innerText.includes('重试更新'), "Group 42: Trigger button text shows '重试更新'");
+
+      // 5.3 成功完成处理
+      window.onNativeOtaProgress({ done: true, percent: 100, status: '热更新补丁已装载' });
+      assert(localStorage.getItem('singwallet_hot_commit_sha') === mockCommitSha, "Group 42: localStorage singwallet_hot_commit_sha saved");
+      assert(triggerBtn.disabled === true, "Group 42: Trigger button disabled after update complete");
+      assert(triggerBtn.innerText.includes('已完成更新'), "Group 42: Trigger button text shows '已完成更新'");
+      const vBadge = document.getElementById('app-current-version-badge');
+      assert(vBadge && vBadge.innerText.includes(mockShortSha), "Group 42: Version badge updated with commit shortSha #" + mockShortSha);
+
+      // 6. 验证 GitHub Release APK 更新流 (双擎之二)
+      const mockApkUrl = 'https://github.com/Hsanli060/singwallet/releases/download/v1.2.0/singwallet-v1.2.0.apk';
+      window.fetch = async function(url, options) {
+        if (url.includes('/releases/latest')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              tag_name: "v1.2.0",
+              name: "SingWallet v1.2.0 Release",
+              body: "### 升级日志\n* 升级 Android 架构底层\n* 新增分类实心圆环",
+              assets: [
+                {
+                  name: "singwallet-v1.2.0.apk",
+                  size: 19800000,
+                  browser_download_url: mockApkUrl
+                }
+              ]
+            })
+          };
+        }
+        if (url.includes('/commits/')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ sha: '9999999999999999999999999999999999999999', commit: { message: "release 1.2.0" } })
+          };
+        }
+        return { ok: false, status: 404, json: async () => ({}) };
+      };
+
+      const apkCheckRes = await window.fetchAndRenderGitHubOtaUpdate('Hsanli060/singwallet');
+      assert(apkCheckRes && apkCheckRes.hasUpdate === true, "Group 42: APK Release update detected successfully");
+      assert(window.__pendingOtaUpdateMeta && window.__pendingOtaUpdateMeta.mode === 'apk_or_web', "Group 42: Update meta mode is 'apk_or_web'");
+      assert(window.__pendingOtaUpdateMeta.apkDownloadUrl === mockApkUrl, "Group 42: Update meta has correct apkDownloadUrl");
+      assert(titleEl && titleEl.innerText.includes('v1.2.0'), "Group 42: Release update displays title '发现新版本 v1.2.0'");
+      assert(triggerBtn && triggerBtn.innerText.includes('立即更新 (v1.2.0)'), "Group 42: Trigger button text shows '立即更新 (v1.2.0)'");
+
+      // 7. 验证 AndroidBridge 原生调用 downloadAndInstallApk
+      let capturedDownloadUrl = null;
+      window.AndroidBridge = {
+        downloadAndInstallApk: function(url, sha) {
+          capturedDownloadUrl = url;
+        }
+      };
+
+      window.triggerOtaInstall();
+      assert(capturedDownloadUrl === mockApkUrl, "Group 42: AndroidBridge.downloadAndInstallApk called with correct APK url");
+
+    } finally {
+      window.fetch = originalFetch;
+      delete window.AndroidBridge;
+    }
 
 
     // 4. 测试收尾：清理全部测试数据，确保 App 还原为 100% 干净状态

@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <files-path name="pending_captures" path="pending_captures/" />
+    <files-path name="web_hot_bundle" path="web_hot_bundle/" />
     <cache-path name="shared_images" path="shared_images/" />
+    <cache-path name="ota_apk" path="ota_apk/" />
 </paths>

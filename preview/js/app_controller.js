@@ -4263,11 +4263,15 @@
     const badge = document.getElementById('app-current-version-badge');
     if (!badge) return;
     const savedVer = localStorage.getItem('singwallet_app_version');
-    if (savedVer === '1.1.0') {
-      badge.innerText = 'v1.1.0';
+    const savedSha = localStorage.getItem('singwallet_hot_commit_sha');
+    if (savedVer) {
+      const cleanVer = savedVer.replace(/^[vV]/, '');
+      const shaTag = savedSha ? ` #${savedSha.slice(0, 7)}` : '';
+      badge.innerText = `v${cleanVer}${shaTag}`;
       badge.className = "text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono whitespace-nowrap";
     } else {
-      badge.innerText = 'v1.0.0';
+      const defaultVer = (window.APP_VERSION_META && window.APP_VERSION_META.currentVersion) ? window.APP_VERSION_META.currentVersion : '1.0.0';
+      badge.innerText = `v${defaultVer.replace(/^[vV]/, '')}`;
       badge.className = "text-[10px] px-2 py-0.5 rounded-md bg-slate-700/60 text-slate-300 font-mono whitespace-nowrap";
     }
   }
@@ -4529,7 +4533,338 @@
     reader.readAsText(file);
   }
 
-  function checkOtaUpdate(mockPayload = null) {
+  /**
+   * 解析更新源配置，支持：
+   * - 缺省空值: 默认使用 APP_VERSION_META 配置 (Hsanli060/singwallet / master)
+   * - owner/repo 或 owner/repo@branch
+   * - GitHub 网页或 API 完整 URL
+   */
+  function resolveRepoAndBranch(customInput) {
+    const meta = window.APP_VERSION_META || {};
+    let defaultRepo = meta.githubRepo || meta.repo || 'Hsanli060/singwallet';
+    let defaultBranch = meta.githubBranch || meta.branch || 'master';
+
+    if (!customInput || typeof customInput !== 'string') {
+      return { repo: defaultRepo, branch: defaultBranch };
+    }
+
+    let str = customInput.trim();
+    if (str.startsWith('{') && str.endsWith('}')) {
+      return { repo: defaultRepo, branch: defaultBranch };
+    }
+
+    str = str.split('?')[0].split('#')[0];
+
+    const ghUrlMatch = str.match(/(?:github\.com\/|api\.github\.com\/repos\/)([^\/\s]+)\/([^\/\s]+)/);
+    if (ghUrlMatch) {
+      let repoName = `${ghUrlMatch[1]}/${ghUrlMatch[2].replace(/\.git$/, '')}`;
+      const branchMatch = str.match(/(?:tree|commits|releases\/tag)\/([^\/\s]+)/);
+      let branchName = branchMatch ? branchMatch[1] : defaultBranch;
+      return { repo: repoName, branch: branchName };
+    }
+
+    const directMatch = str.match(/^([a-zA-Z0-9_\-\.]+)\/([a-zA-Z0-9_\-\.]+)(?:@([a-zA-Z0-9_\-\.\/]+))?$/);
+    if (directMatch) {
+      return {
+        repo: `${directMatch[1]}/${directMatch[2]}`,
+        branch: directMatch[3] || defaultBranch
+      };
+    }
+
+    return { repo: defaultRepo, branch: defaultBranch };
+  }
+
+  /**
+   * 原生 AndroidBridge OTA 下载与装载进度实时回调
+   */
+  function onNativeOtaProgress(progressData) {
+    if (!progressData || typeof progressData !== 'object') return;
+    const progressWrap = document.getElementById('ota-download-progress-wrap');
+    const progressBar = document.getElementById('ota-download-progress-bar');
+    const progressText = document.getElementById('ota-download-progress-text');
+    const percentSpan = document.getElementById('ota-download-percent-text');
+    const statusText = document.getElementById('ota-download-status-text');
+    const badge = document.getElementById('app-current-version-badge');
+    const btnTrigger = document.getElementById('btn-trigger-ota-upgrade');
+
+    const meta = window.__pendingOtaUpdateMeta || {};
+    const targetVer = (meta.version || '1.1.0').replace(/^[vV]/, '');
+    const displayVer = meta.displayVersion || meta.version || `v${targetVer}`;
+
+    const percent = Math.min(100, Math.max(0, parseInt(progressData.percent, 10) || 0));
+    const status = progressData.status || (percent >= 100 ? '更新包已就绪' : `正在下载更新 (${percent}%)...`);
+
+    if (progressWrap) progressWrap.classList.remove('hidden');
+    if (progressBar) progressBar.style.width = `${percent}%`;
+    if (progressText) progressText.innerText = `${percent}%`;
+    if (percentSpan) percentSpan.innerText = `${percent}%`;
+    if (statusText) statusText.innerText = status;
+
+    if (btnTrigger && !progressData.done && !progressData.error) {
+      btnTrigger.disabled = true;
+      const btnSpan = btnTrigger.querySelector('span:last-child') || btnTrigger;
+      btnSpan.innerText = status;
+    }
+
+    if (progressData.error) {
+      showToast(`更新失败: ${progressData.error}`);
+      if (statusText) statusText.innerText = `更新出错: ${progressData.error}`;
+      if (btnTrigger) {
+        btnTrigger.disabled = false;
+        btnTrigger.classList.remove('bg-emerald-600', 'cursor-default');
+        btnTrigger.classList.add('bg-indigo-600', 'hover:bg-indigo-500');
+        btnTrigger.innerHTML = `
+          <span class="w-4 h-4 shrink-0" data-ui-icon="otaDownload"></span>
+          <span>重试更新</span>
+        `;
+        if (typeof IconRegistry !== 'undefined' && typeof IconRegistry.refreshAllIcons === 'function') {
+          IconRegistry.refreshAllIcons();
+        }
+      }
+      return;
+    }
+
+    if (progressData.done || percent === 100) {
+      if (progressBar) progressBar.style.width = '100%';
+      if (progressText) progressText.innerText = '100%';
+      if (percentSpan) percentSpan.innerText = '100%';
+      if (statusText) statusText.innerText = '更新完成';
+
+      try {
+        localStorage.setItem('singwallet_app_version', targetVer);
+        if (meta.commitSha) {
+          localStorage.setItem('singwallet_hot_commit_sha', meta.commitSha);
+        }
+      } catch (e) {}
+      window.currentAppVersion = targetVer;
+
+      if (badge) {
+        badge.innerText = displayVer;
+        badge.className = "text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono whitespace-nowrap";
+      }
+
+      if (btnTrigger) {
+        btnTrigger.disabled = true;
+        btnTrigger.classList.remove('bg-indigo-600', 'hover:bg-indigo-500');
+        btnTrigger.classList.add('bg-emerald-600', 'hover:bg-emerald-600', 'cursor-default');
+        btnTrigger.innerHTML = `
+          <span class="w-4 h-4 shrink-0" data-ui-icon="success"></span>
+          <span>已完成更新 (${displayVer})</span>
+        `;
+        if (typeof IconRegistry !== 'undefined' && typeof IconRegistry.refreshAllIcons === 'function') {
+          IconRegistry.refreshAllIcons();
+        }
+      }
+
+      showToast(`已完成 ${displayVer} 覆盖更新，历史账单与配置 100% 无损保留`);
+      if (typeof updateBackupStatsLabel === 'function') {
+        updateBackupStatsLabel();
+      }
+    }
+  }
+
+  /**
+   * 真实 GitHub 双擎检测（Commit 免编译热更新源 + Release APK 完整包源）
+   */
+  async function fetchAndRenderGitHubOtaUpdate(customUrl = '') {
+    const feedInput = document.getElementById('ota-feed-url-input');
+    const resultBox = document.getElementById('ota-check-result-box');
+    const btnCheckText = document.getElementById('btn-check-ota-text');
+    const btnCheckOta = document.getElementById('btn-check-ota-update');
+
+    const inputVal = (customUrl || (feedInput && feedInput.value) || '').trim();
+    const { repo, branch } = resolveRepoAndBranch(inputVal);
+
+    if (btnCheckText) btnCheckText.innerText = '检查中...';
+    if (btnCheckOta) btnCheckOta.disabled = true;
+
+    try {
+      const currentVersion = (window.APP_VERSION_META && window.APP_VERSION_META.currentVersion) ? window.APP_VERSION_META.currentVersion : '1.0.0';
+      let installedVersion = currentVersion;
+      try {
+        installedVersion = localStorage.getItem('singwallet_app_version') || currentVersion;
+      } catch (e) {}
+
+      let nativeHotSha = '';
+      if (window.AndroidBridge && typeof window.AndroidBridge.getHotUpdateInfo === 'function') {
+        try {
+          const rawInfo = window.AndroidBridge.getHotUpdateInfo();
+          const parsed = typeof rawInfo === 'string' ? JSON.parse(rawInfo) : rawInfo;
+          if (parsed && parsed.hotCommitSha) nativeHotSha = parsed.hotCommitSha;
+        } catch (e) {}
+      }
+      let localCommitSha = nativeHotSha;
+      if (!localCommitSha) {
+        try { localCommitSha = localStorage.getItem('singwallet_hot_commit_sha') || ''; } catch (e) {}
+      }
+
+      const commitUrl = `https://api.github.com/repos/${repo}/commits/${branch}`;
+      const releaseUrl = `https://api.github.com/repos/${repo}/releases/latest`;
+
+      let commitData = null;
+      let releaseData = null;
+
+      try {
+        const commitRes = await fetch(commitUrl, {
+          headers: { 'Accept': 'application/vnd.github.v3+json' }
+        });
+        if (commitRes && commitRes.ok) {
+          commitData = await commitRes.json();
+        }
+      } catch (e) {
+        console.warn('[SingWallet OTA] Commits fetch error:', e);
+      }
+
+      try {
+        const releaseRes = await fetch(releaseUrl, {
+          headers: { 'Accept': 'application/vnd.github.v3+json' }
+        });
+        if (releaseRes && releaseRes.ok) {
+          releaseData = await releaseRes.json();
+        }
+      } catch (e) {
+        console.warn('[SingWallet OTA] Release fetch error (may not have release):', e);
+      }
+
+      if (!commitData && !releaseData) {
+        if (btnCheckText) btnCheckText.innerText = '检查更新';
+        if (btnCheckOta) btnCheckOta.disabled = false;
+        if (resultBox) resultBox.classList.add('hidden');
+        showToast('检查更新失败，请检查网络或更新源配置');
+        return { hasUpdate: false, error: 'Network or repository not found' };
+      }
+
+      // 1. 判断 Release 版本
+      let isNewerRelease = false;
+      let releaseVer = '';
+      let apkDownloadUrl = '';
+      let sha256 = '';
+      let releaseLines = [];
+
+      if (releaseData) {
+        releaseVer = String(releaseData.tag_name || releaseData.name || '').trim().replace(/^[vV]/, '');
+        if (releaseVer) {
+          const cmp = (window.SingWalletDomain && typeof window.SingWalletDomain.compareVersions === 'function')
+            ? window.SingWalletDomain.compareVersions(releaseVer, installedVersion)
+            : (typeof compareVersions === 'function' ? compareVersions(releaseVer, installedVersion) : (releaseVer > installedVersion ? 1 : 0));
+          if (cmp > 0) isNewerRelease = true;
+        }
+        if (releaseData.body) {
+          releaseLines = String(releaseData.body)
+            .split(/\r?\n/)
+            .map(l => l.trim().replace(/^[-*•\d.]+\s*/, ''))
+            .filter(l => l.length > 0 && !l.startsWith('#') && !l.startsWith('http'));
+        }
+        if (Array.isArray(releaseData.assets)) {
+          const apkAsset = releaseData.assets.find(a => (a.name && a.name.endsWith('.apk')) || (a.browser_download_url && a.browser_download_url.endsWith('.apk'))) || releaseData.assets[0];
+          if (apkAsset) {
+            apkDownloadUrl = apkAsset.browser_download_url || apkAsset.url || '';
+          }
+        }
+      }
+
+      // 2. 判断 Commit 免编译热更新
+      let fullSha = '';
+      let shortSha = '';
+      let commitLines = [];
+      let isNewerCommit = false;
+
+      if (commitData) {
+        fullSha = commitData.sha || '';
+        shortSha = fullSha ? fullSha.slice(0, 7) : '';
+        if (fullSha && fullSha !== localCommitSha) {
+          isNewerCommit = true;
+        }
+        const rawMsg = (commitData.commit && commitData.commit.message) ? commitData.commit.message : '';
+        commitLines = rawMsg
+          .split(/\r?\n/)
+          .map(l => l.trim().replace(/^[-*•\d.]+\s*/, ''))
+          .filter(l => l.length > 0 && !l.startsWith('Co-authored-by') && !l.startsWith('Signed-off-by'));
+      }
+
+      const hasUpdate = isNewerRelease || isNewerCommit;
+
+      if (hasUpdate) {
+        let displayVersion = '';
+        let titleText = '';
+        let triggerBtnText = '';
+        let changelogLines = [];
+
+        if (isNewerRelease) {
+          displayVersion = `v${releaseVer}`;
+          titleText = `发现新版本 ${displayVersion}`;
+          triggerBtnText = `立即更新 (${displayVersion})`;
+          changelogLines = releaseLines.length > 0 ? releaseLines : (commitLines.length > 0 ? commitLines : ['新版本 APK 安装包已发布']);
+        } else {
+          // Web 秒级热更新模式
+          const cleanInst = installedVersion.replace(/^[vV]/, '');
+          displayVersion = `v${cleanInst} · 热更 #${shortSha}`;
+          titleText = `发现新版本 ${displayVersion}`;
+          triggerBtnText = '立即热更新 (免安装秒级生效)';
+          changelogLines = commitLines.length > 0 ? commitLines : [`同步 master 最新免编译热更新资源 (#${shortSha})`];
+        }
+
+        window.__pendingOtaUpdateMeta = {
+          mode: isNewerRelease ? 'apk_or_web' : 'web_hot',
+          repo,
+          branch,
+          version: isNewerRelease ? `v${releaseVer}` : displayVersion,
+          displayVersion,
+          commitSha: fullSha,
+          shortSha,
+          apkDownloadUrl,
+          sha256
+        };
+
+        if (resultBox) {
+          resultBox.classList.remove('hidden');
+          resultBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        const vTitle = document.getElementById('ota-version-title');
+        if (vTitle) vTitle.innerText = titleText;
+
+        const changelogEl = document.getElementById('ota-changelog-list');
+        if (changelogEl) {
+          changelogEl.innerHTML = changelogLines.map(line => `<li>${line}</li>`).join('');
+        }
+
+        const btnTrigger = document.getElementById('btn-trigger-ota-upgrade');
+        if (btnTrigger) {
+          btnTrigger.disabled = false;
+          btnTrigger.classList.remove('bg-emerald-600', 'cursor-default');
+          btnTrigger.classList.add('bg-indigo-600', 'hover:bg-indigo-500');
+          btnTrigger.innerHTML = `
+            <span class="w-4 h-4 shrink-0" data-ui-icon="otaDownload"></span>
+            <span>${triggerBtnText}</span>
+          `;
+          if (typeof IconRegistry !== 'undefined' && typeof IconRegistry.refreshAllIcons === 'function') {
+            IconRegistry.refreshAllIcons();
+          }
+        }
+
+        if (btnCheckText) btnCheckText.innerText = '检查更新';
+        if (btnCheckOta) btnCheckOta.disabled = false;
+
+        showToast(isNewerRelease ? `已获取最新版本信息：${displayVersion} 可升级` : `已检测到最新免编译热更新：${displayVersion}`);
+        return { hasUpdate: true, meta: window.__pendingOtaUpdateMeta };
+      } else {
+        if (resultBox) resultBox.classList.add('hidden');
+        if (btnCheckText) btnCheckText.innerText = '检查更新';
+        if (btnCheckOta) btnCheckOta.disabled = false;
+        showToast(`当前已是最新版本 (v${installedVersion.replace(/^[vV]/, '')})`);
+        return { hasUpdate: false, currentVersion: installedVersion, latestVersion: installedVersion };
+      }
+    } catch (err) {
+      console.error('[SingWallet OTA] Check error:', err);
+      if (btnCheckText) btnCheckText.innerText = '检查更新';
+      if (btnCheckOta) btnCheckOta.disabled = false;
+      showToast('检查更新时发生异常: ' + (err.message || '未知错误'));
+      return { hasUpdate: false, error: err.message };
+    }
+  }
+
+  function checkOtaUpdate(mockPayload = null, triggerAsyncNetwork = false) {
     const feedInput = document.getElementById('ota-feed-url-input');
     const resultBox = document.getElementById('ota-check-result-box');
     const customUrl = (feedInput && feedInput.value) ? feedInput.value.trim() : '';
@@ -4544,7 +4879,8 @@
       } catch (e) {}
     }
 
-    if (payload && (payload.version || payload.tag_name)) {
+    // 1. 同步 Mock Payload 或 JSON 输入处理 (保持单测与同步模式 100% 兼容)
+    if (payload && (payload.version || payload.tag_name || payload.sha)) {
       const releaseInfo = (window.SingWalletDomain && typeof window.SingWalletDomain.parseOtaReleasePayload === 'function')
         ? window.SingWalletDomain.parseOtaReleasePayload(payload, currentVersion)
         : (payload.version ? { hasUpdate: true, latestVersion: payload.version, changelog: payload.changelog || [], apkSize: payload.size || payload.apkSize || '18.4 MB' } : { hasUpdate: false });
@@ -4555,62 +4891,151 @@
           resultBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
         const vTitle = document.getElementById('ota-version-title');
-        if (vTitle) vTitle.innerText = `发现新版本 v${releaseInfo.latestVersion}`;
+        const displayVer = releaseInfo.latestVersion ? `v${String(releaseInfo.latestVersion).replace(/^[vV]/, '')}` : 'v1.1.0';
+        if (vTitle) vTitle.innerText = `发现新版本 ${displayVer}`;
         const changelogEl = document.getElementById('ota-changelog-list');
         if (changelogEl && Array.isArray(releaseInfo.changelog) && releaseInfo.changelog.length > 0) {
           changelogEl.innerHTML = releaseInfo.changelog.map(item => `<li>${item}</li>`).join('');
         }
         const btnCheckText = document.getElementById('btn-check-ota-text');
         if (btnCheckText) btnCheckText.innerText = '检查更新';
-        showToast(`已获取最新版本信息：v${releaseInfo.latestVersion} 可升级`);
-        return;
+
+        window.__pendingOtaUpdateMeta = {
+          mode: releaseInfo.isWebHotUpdate ? 'web_hot' : 'apk_or_web',
+          repo: (window.APP_VERSION_META && window.APP_VERSION_META.githubRepo) || 'Hsanli060/singwallet',
+          branch: (window.APP_VERSION_META && window.APP_VERSION_META.githubBranch) || 'master',
+          version: displayVer,
+          displayVersion: displayVer,
+          commitSha: releaseInfo.commitSha || payload.sha || '',
+          shortSha: releaseInfo.shortSha || (payload.sha ? payload.sha.slice(0, 7) : ''),
+          apkDownloadUrl: releaseInfo.downloadUrl || '',
+          sha256: releaseInfo.sha256 || ''
+        };
+
+        const btnTrigger = document.getElementById('btn-trigger-ota-upgrade');
+        if (btnTrigger) {
+          btnTrigger.disabled = false;
+          btnTrigger.classList.remove('bg-emerald-600', 'cursor-default');
+          btnTrigger.classList.add('bg-indigo-600', 'hover:bg-indigo-500');
+          const triggerText = releaseInfo.isWebHotUpdate ? '立即热更新 (免安装秒级生效)' : `立即更新 (${displayVer})`;
+          btnTrigger.innerHTML = `
+            <span class="w-4 h-4 shrink-0" data-ui-icon="otaDownload"></span>
+            <span>${triggerText}</span>
+          `;
+          if (typeof IconRegistry !== 'undefined' && typeof IconRegistry.refreshAllIcons === 'function') {
+            IconRegistry.refreshAllIcons();
+          }
+        }
+
+        showToast(`已获取最新版本信息：${displayVer} 可升级`);
+        return releaseInfo;
       }
     }
 
+    // 2. 真实网络环境下的 GitHub 远端双擎检测
+    const isNetworkAllowed = (triggerAsyncNetwork === true || (triggerAsyncNetwork !== false && !window.__SW_DISABLE_NET_OTA__)) &&
+      typeof window !== 'undefined' && typeof fetch === 'function';
+
+    if (isNetworkAllowed && !mockPayload) {
+      fetchAndRenderGitHubOtaUpdate(customUrl);
+      return { hasUpdate: false, currentVersion, latestVersion: currentVersion, pendingAsync: true };
+    }
+
+    // 3. 兜底已是最新版本
     if (resultBox) resultBox.classList.add('hidden');
     const btnCheckText = document.getElementById('btn-check-ota-text');
     if (btnCheckText) btnCheckText.innerText = '检查更新';
-    showToast(`当前已是最新版本 (v${currentVersion})`);
+    showToast(`当前已是最新版本 (v${currentVersion.replace(/^[vV]/, '')})`);
+    return { hasUpdate: false, currentVersion, latestVersion: currentVersion };
   }
 
   function executeOtaInPlaceUpgrade(fast = false) {
     const progressWrap = document.getElementById('ota-download-progress-wrap');
     const progressBar = document.getElementById('ota-download-progress-bar');
     const progressText = document.getElementById('ota-download-progress-text');
+    const percentSpan = document.getElementById('ota-download-percent-text');
+    const statusText = document.getElementById('ota-download-status-text');
     const badge = document.getElementById('app-current-version-badge');
     const btnTrigger = document.getElementById('btn-trigger-ota-upgrade');
 
-    if (progressWrap) progressWrap.classList.remove('hidden');
-    if (progressBar) progressBar.style.width = '100%';
-    if (progressText) progressText.innerText = '100%';
+    const meta = window.__pendingOtaUpdateMeta || {};
+    const targetVer = (meta.version || '1.1.0').replace(/^[vV]/, '');
+    const displayVer = meta.displayVersion || meta.version || `v${targetVer}`;
 
+    // 确保原生回调挂载
+    window.onNativeOtaProgress = onNativeOtaProgress;
+
+    // 1. fast 模式或无 AndroidBridge（纯单元测试/浏览器预览模式）
+    if (fast === true || !window.AndroidBridge) {
+      if (progressWrap) progressWrap.classList.remove('hidden');
+      if (progressBar) progressBar.style.width = '100%';
+      if (progressText) progressText.innerText = '100%';
+      if (percentSpan) percentSpan.innerText = '100%';
+      if (statusText) statusText.innerText = '更新完成';
+
+      if (btnTrigger) {
+        btnTrigger.disabled = true;
+        btnTrigger.classList.remove('bg-indigo-600', 'hover:bg-indigo-500');
+        btnTrigger.classList.add('bg-emerald-600', 'hover:bg-emerald-600', 'cursor-default');
+        btnTrigger.innerHTML = `
+          <span class="w-4 h-4 shrink-0" data-ui-icon="success"></span>
+          <span>已完成更新 (${displayVer})</span>
+        `;
+        if (typeof IconRegistry !== 'undefined' && typeof IconRegistry.refreshAllIcons === 'function') {
+          IconRegistry.refreshAllIcons();
+        }
+      }
+
+      if (badge) {
+        badge.innerText = displayVer;
+        badge.className = "text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono whitespace-nowrap";
+      }
+
+      try {
+        localStorage.setItem('singwallet_app_version', targetVer);
+        if (meta.commitSha) {
+          localStorage.setItem('singwallet_hot_commit_sha', meta.commitSha);
+        }
+      } catch (e) {}
+      window.currentAppVersion = targetVer;
+
+      showToast(`已完成 ${displayVer} 覆盖更新，历史账单与配置 100% 无损保留`);
+
+      if (typeof updateBackupStatsLabel === 'function') {
+        updateBackupStatsLabel();
+      }
+
+      return true;
+    }
+
+    // 2. Android 原生宿主环境 (window.AndroidBridge 存在)
+    if (progressWrap) progressWrap.classList.remove('hidden');
+    if (progressBar) progressBar.style.width = '0%';
+    if (progressText) progressText.innerText = '0%';
+    if (percentSpan) percentSpan.innerText = '0%';
+    if (statusText) statusText.innerText = '正在启动更新...';
     if (btnTrigger) {
       btnTrigger.disabled = true;
-      btnTrigger.classList.remove('bg-indigo-600', 'hover:bg-indigo-500');
-      btnTrigger.classList.add('bg-emerald-600', 'hover:bg-emerald-600', 'cursor-default');
-      btnTrigger.innerHTML = `
-        <span class="w-4 h-4 shrink-0" data-ui-icon="success"></span>
-        <span>已完成更新 (v1.1.0)</span>
-      `;
+      const btnSpan = btnTrigger.querySelector('span:last-child') || btnTrigger;
+      btnSpan.innerText = '正在启动更新...';
     }
 
-    if (badge) {
-      badge.innerText = 'v1.1.0';
-      badge.className = "text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono whitespace-nowrap";
+    const isApkMode = (meta.mode === 'apk' || (meta.mode === 'apk_or_web' && meta.apkDownloadUrl));
+    if (isApkMode && typeof window.AndroidBridge.downloadAndInstallApk === 'function') {
+      window.AndroidBridge.downloadAndInstallApk(meta.apkDownloadUrl, meta.sha256 || '');
+      return true;
+    } else if (typeof window.AndroidBridge.performWebHotUpdate === 'function') {
+      const hotPayload = JSON.stringify({
+        repo: meta.repo || (window.APP_VERSION_META && window.APP_VERSION_META.githubRepo) || 'Hsanli060/singwallet',
+        branch: meta.branch || (window.APP_VERSION_META && window.APP_VERSION_META.githubBranch) || 'master',
+        version: meta.version || displayVer,
+        commitSha: meta.commitSha || ''
+      });
+      window.AndroidBridge.performWebHotUpdate(hotPayload);
+      return true;
+    } else {
+      return executeOtaInPlaceUpgrade(true);
     }
-
-    try {
-      localStorage.setItem('singwallet_app_version', '1.1.0');
-    } catch (e) {}
-    window.currentAppVersion = '1.1.0';
-
-    showToast('已完成 v1.1.0 覆盖更新，历史账单与配置 100% 无损保留');
-
-    if (typeof updateBackupStatsLabel === 'function') {
-      updateBackupStatsLabel();
-    }
-
-    return true;
   }
 
   window.updateBackupStatsLabel = updateBackupStatsLabel;
@@ -4619,15 +5044,30 @@
   window.importBackupFromJson = importBackupFromJson;
   window.handleBackupFileUpload = handleBackupFileUpload;
   window.checkOtaUpdate = checkOtaUpdate;
+  window.checkAppUpdate = checkOtaUpdate;
+  window.checkGitHubLiveOtaUpdate = fetchAndRenderGitHubOtaUpdate;
+  window.fetchAndRenderGitHubOtaUpdate = fetchAndRenderGitHubOtaUpdate;
   window.executeOtaInPlaceUpgrade = executeOtaInPlaceUpgrade;
+  window.triggerOtaInstall = executeOtaInPlaceUpgrade;
+  window.onNativeOtaProgress = onNativeOtaProgress;
 
   if (window.SingWalletDomain) {
     window.SingWalletDomain.exportFullBackupSnapshot = exportFullBackupSnapshot;
     window.SingWalletDomain.importBackupFromJson = importBackupFromJson;
+    window.SingWalletDomain.checkOtaUpdate = checkOtaUpdate;
+    window.SingWalletDomain.checkAppUpdate = checkOtaUpdate;
+    window.SingWalletDomain.fetchAndRenderGitHubOtaUpdate = fetchAndRenderGitHubOtaUpdate;
+    window.SingWalletDomain.executeOtaInPlaceUpgrade = executeOtaInPlaceUpgrade;
+    window.SingWalletDomain.triggerOtaInstall = executeOtaInPlaceUpgrade;
   }
   if (window.DomainRegistry) {
     window.DomainRegistry.exportFullBackupSnapshot = exportFullBackupSnapshot;
     window.DomainRegistry.importBackupFromJson = importBackupFromJson;
+    window.DomainRegistry.checkOtaUpdate = checkOtaUpdate;
+    window.DomainRegistry.checkAppUpdate = checkOtaUpdate;
+    window.DomainRegistry.fetchAndRenderGitHubOtaUpdate = fetchAndRenderGitHubOtaUpdate;
+    window.DomainRegistry.executeOtaInPlaceUpgrade = executeOtaInPlaceUpgrade;
+    window.DomainRegistry.triggerOtaInstall = executeOtaInPlaceUpgrade;
   }
 
 

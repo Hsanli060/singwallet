@@ -837,6 +837,12 @@
     currentVersion: '1.0.0',
     buildNumber: 100,
     dbSchemaVersion: 2,
+    repo: 'Hsanli060/singwallet',
+    branch: 'master',
+    githubRepo: 'Hsanli060/singwallet',
+    githubBranch: 'master',
+    releasesApiUrl: 'https://api.github.com/repos/Hsanli060/singwallet/releases/latest',
+    commitsApiUrl: 'https://api.github.com/repos/Hsanli060/singwallet/commits/master',
     latestMockRelease: {
       version: '1.1.0',
       buildNumber: 110,
@@ -940,6 +946,41 @@
           .map(line => line.trim().replace(/^[-*•\d.]+\s*/, ''))
           .filter(Boolean);
       }
+    }
+    // c) GitHub Commit API 格式 (免编译 Web 秒级热更新)
+    else if (payload.sha || (payload.commit && payload.commit.message)) {
+      const sha = String(payload.sha || '');
+      const shortSha = sha ? sha.slice(0, 7) : '';
+      latestVersion = curVer;
+      downloadUrl = '';
+      apkSize = 'Web 热更新';
+      publishedAt = (payload.commit && payload.commit.author && payload.commit.author.date)
+        ? String(payload.commit.author.date).slice(0, 10)
+        : new Date().toISOString().slice(0, 10);
+
+      if (payload.commit && payload.commit.message) {
+        changelog = String(payload.commit.message)
+          .split(/\r?\n/)
+          .map(line => line.trim().replace(/^[-*•\d.]+\s*/, ''))
+          .filter(line => line.length > 0 && !line.startsWith('Co-authored-by') && !line.startsWith('Signed-off-by'));
+      }
+      if (changelog.length === 0) {
+        changelog = [`免编译热更新 Commit #${shortSha}`];
+      }
+
+      return {
+        hasUpdate: true,
+        isWebHotUpdate: true,
+        commitSha: sha,
+        shortSha: shortSha,
+        currentVersion: curVer,
+        latestVersion: curVer,
+        changelog: changelog,
+        downloadUrl: downloadUrl,
+        apkSize: apkSize,
+        publishedAt: publishedAt,
+        preserveDataGuaranteed: true
+      };
     }
 
     // 兜底回退

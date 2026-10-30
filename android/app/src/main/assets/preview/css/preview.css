@@ -452,7 +452,7 @@
     box-shadow: none !important;
     --tw-ring-offset-shadow: 0 0 #0000 !important;
     --tw-ring-shadow: 0 0 #0000 !important;
-    ring: none !important;
+    outline: none !important;
   }
 
   /* 移动端与原生宿主：系统状态栏自适应占位安全区，留出 44px 舒适物理顶距，杜绝系统时间/电量与标题文字重叠拥挤 */
@@ -741,7 +741,7 @@ body.native-app #mobile-device-shell {
   border-radius: 0 !important;
   border: none !important;
   box-shadow: none !important;
-  ring: none !important;
+  outline: none !important;
 }
 body.native-app #simulator-status-bar {
   display: none !important;
