@@ -246,6 +246,9 @@ async function runAllTestsSuite() {
       if (totalExp) totalExp.innerText = '¥ 0.00';
       if (totalRef) totalRef.innerText = '-¥ 0.00';
       if (totalInc) totalInc.innerText = '¥ 0.00';
+      deletedItems = [];
+      lastDeletedId = null;
+      if (typeof updateTrashBadge === 'function') updateTrashBadge();
       draftQueue = [];
       currentDraftIndex = 0;
       renderDraftQueue();
@@ -2748,12 +2751,713 @@ async function runAllTestsSuite() {
     try { localStorage.removeItem('singwallet_custom_categories'); } catch(e) {}
     switchTab('transactions');
 
+    // ========================================================
+    // Group 46: AI Model Dropdown, Model List Fetching & Multi-Image Upload Verification
+    // ========================================================
+    console.log("=== Group 46: AI Model Dropdown, Fetching & Multi-Image Upload Verification ===");
+
+    // 1. 模型选择下拉列表与选择断言
+    switchTab('rules');
+    const modelMenu = document.getElementById('menu-vlm-model-select');
+    const modelInput = document.getElementById('vlm-model');
+    const modelDropBtn = document.getElementById('btn-vlm-model-dropdown');
+    const modelFetchBtn = document.getElementById('btn-fetch-vlm-models');
+
+    assert(modelMenu !== null, "Group 46: #menu-vlm-model-select 存在");
+    assert(modelInput !== null, "Group 46: #vlm-model 输入框存在");
+    assert(modelDropBtn !== null, "Group 46: #btn-vlm-model-dropdown 下拉展开按钮存在");
+    assert(modelFetchBtn !== null, "Group 46: #btn-fetch-vlm-models 获取模型按钮存在");
+
+    // 测试下拉展开与关闭
+    toggleVlmModelDropdown();
+    assert(modelMenu.classList.contains('open'), "Group 46: toggleVlmModelDropdown 打开菜单");
+    const options = modelMenu.querySelectorAll('.custom-dropdown-option');
+    assert(options.length > 0, "Group 46: 模型下拉菜单已渲染选项列表 (got " + options.length + ")");
+
+    // 测试选择模型
+    selectVlmModelOption('qwen-vl-max');
+    assert(modelInput.value === 'qwen-vl-max', "Group 46: selectVlmModelOption 更新输入框为 qwen-vl-max");
+    assert(vlmConfig.model === 'qwen-vl-max', "Group 46: vlmConfig.model 更新为 qwen-vl-max");
+    assert(!modelMenu.classList.contains('open'), "Group 46: selectVlmModelOption 后自动收起下拉菜单");
+
+    // 2. 获取模型列表功能断言
+    // 无 API Key 测试
+    document.getElementById('vlm-api-key').value = '';
+    await fetchVlmModelsList();
+    const topErr46 = document.getElementById('llm-top-error-toast');
+    assert(topErr46 && !topErr46.classList.contains('hidden'), "Group 46: 空 API Key 获取模型列表弹出错误提示");
+    closeLlmTopError();
+
+    // 体验 Key 模拟测试
+    document.getElementById('vlm-api-key').value = 'sk-vlm-singwallet-demo-live';
+    await fetchVlmModelsList();
+    assert(modelMenu.classList.contains('open'), "Group 46: fetchVlmModelsList 成功后自动展开菜单");
+    const cachedModels = localStorage.getItem('singwallet_vlm_models_cache');
+    assert(cachedModels && cachedModels.includes('qwen-vl'), "Group 46: 模型列表成功缓存至 localStorage");
+    closeVlmModelDropdown();
+
+    // 3. 多图选择与自动关闭“加一笔”弹窗断言
+    const manualUploadInput = document.getElementById('manual-upload-input');
+    assert(manualUploadInput !== null, "Group 46: #manual-upload-input 存在");
+    assert(manualUploadInput.hasAttribute('multiple'), "Group 46: #manual-upload-input 带有 multiple 属性支持多图上传");
+
+    // 本地离线引擎多图测试
+    currentOcrEngine = 'local';
+    draftQueue = [];
+    openManualAddModal();
+    const manModal46 = document.getElementById('manual-add-modal');
+    assert(!manModal46.classList.contains('hidden'), "Group 46: manual-add-modal 已打开");
+
+    const dummyFile1 = new File([new Uint8Array(20)], 'multi_1.png', { type: 'image/png' });
+    const dummyFile2 = new File([new Uint8Array(30)], 'multi_2.png', { type: 'image/png' });
+
+    await handleManualScreenshotUpload({ target: { files: [dummyFile1, dummyFile2] } });
+    assert(document.getElementById('manual-amount').value !== '', "Group 46: 多图本地模式第 1 张填入手动记账表单");
+    assert(draftQueue.length === 1, "Group 46: 多图本地模式第 2 张进入草稿箱 (length=1)");
+    const toastWrapLocal = document.querySelector('.singwallet-toast-wrap');
+    assert(toastWrapLocal && toastWrapLocal.innerText.includes('存入草稿箱'), "Group 46: 本地多图上传弹出 Toast 提示存入草稿箱");
+    assert(manModal46.classList.contains('hidden'), "Group 46: 多图本地识别完成后自动关闭加一笔弹窗");
+
+    // 大模型 VLM 模式多图测试
+    currentOcrEngine = 'llm';
+    draftQueue = [];
+    vlmConfig.apiKey = 'sk-vlm-test-key-2026';
+    openManualAddModal();
+    assert(!manModal46.classList.contains('hidden'), "Group 46: manual-add-modal 再次打开");
+
+    await handleManualScreenshotUpload({ target: { files: [dummyFile1, dummyFile2] } });
+    assert(draftQueue.length === 2, "Group 46: 多图大模型模式两张图片均存入草稿箱");
+    assert(draftQueue.every(d => d.isParsing), "Group 46: 多图大模型模式两张图片均启动后台异步解析");
+    const toastWrapLlm = document.querySelector('.singwallet-toast-wrap');
+    assert(toastWrapLlm && toastWrapLlm.innerText.includes('并行解析'), "Group 46: 大模型多图上传弹出 Toast 提示并行解析");
+    assert(manModal46.classList.contains('hidden'), "Group 46: 大模型多图上传后自动收起加一笔弹窗");
+
+    // 恢复状态
+    currentOcrEngine = 'local';
+    draftQueue = [];
+    switchTab('transactions');
+
+    // ========================================================
+    // Group 47: Transaction Detail Editing, Trash Operations & Deduplication Regression Verification
+    // ========================================================
+    console.log("=== Group 47: Transaction Detail Editing, Trash Operations & Deduplication Regression Verification ===");
+    switchTab('transactions');
+    cleanAllTestData();
+
+    // ----------------------------------------------------
+    // Part 1: 功能 1（账单流水详情可编辑）
+    // ----------------------------------------------------
+    const testTxId47 = "tx-editable-test-47";
+    insertTransactionToList({
+      id: testTxId47,
+      merchant: "星巴克咖啡旗舰店",
+      amount: 38.50,
+      catName: "餐饮美食",
+      channel: "微信",
+      account: "钱包",
+      txDate: "2026-10-26",
+      txTime: "2026-10-26 14:30:00",
+      orderId: "ORDER_ORIG_10001"
+    });
+
+    // 打开详情弹窗
+    viewTransactionDetail("星巴克咖啡旗舰店", "38.50", "餐饮美食", "微信 · 钱包", "2026-10-26 14:30:00", "ORDER_ORIG_10001", testTxId47);
+    const txDetailModal47 = document.getElementById('tx-detail-modal');
+    assert(txDetailModal47 && !txDetailModal47.classList.contains('hidden'), "Group 47: #tx-detail-modal 成功打开");
+
+    const btnEditTx47 = document.getElementById('btn-edit-tx-detail');
+    assert(btnEditTx47 !== null, "Group 47: 右上角 #btn-edit-tx-detail 存在");
+    assert(btnEditTx47.innerText.trim() === '编辑', "Group 47: #btn-edit-tx-detail 初始文本显示 '编辑'");
+
+    // 点击切换为编辑态
+    toggleTxDetailEditMode();
+    assert(btnEditTx47.innerText.trim() === '完成', "Group 47: 点击后按钮切换显示 '完成'");
+    assert(btnEditTx47.className.includes('bg-indigo-600'), "Group 47: '完成' 按钮高亮显示 (包含 bg-indigo-600)");
+
+    // 验证各编辑字段展示并回填初始数据
+    const editAmtWrap47 = document.getElementById('wrap-detail-edit-amount');
+    const editAmtInput47 = document.getElementById('detail-edit-amount');
+    const editMerchantInput47 = document.getElementById('detail-edit-merchant');
+    const editCatWrap47 = document.getElementById('wrap-detail-edit-category');
+    const editCatInput47 = document.getElementById('detail-edit-category');
+    const editChanWrap47 = document.getElementById('wrap-detail-edit-channel-account');
+    const editChanInput47 = document.getElementById('detail-edit-channel');
+    const editAccInput47 = document.getElementById('detail-edit-account');
+    const editTimeInput47 = document.getElementById('detail-edit-time');
+    const editOrderInput47 = document.getElementById('detail-edit-order');
+
+    assert(editAmtWrap47 && !editAmtWrap47.classList.contains('hidden'), "Group 47: 金额编辑容器 #wrap-detail-edit-amount 处于展示状态");
+    assert(editAmtInput47 && editAmtInput47.value === '38.50', "Group 47: #detail-edit-amount 初始回填 38.50");
+    assert(editMerchantInput47 && !editMerchantInput47.classList.contains('hidden'), "Group 47: 商户编辑输入框 #detail-edit-merchant 处于展示状态");
+    assert(editMerchantInput47 && editMerchantInput47.value === '星巴克咖啡旗舰店', "Group 47: #detail-edit-merchant 初始回填原商户名");
+    assert(editCatWrap47 && !editCatWrap47.classList.contains('hidden'), "Group 47: 分类下拉框处于展示状态");
+    assert(editCatInput47 && editCatInput47.value === '餐饮美食', "Group 47: 分类下拉框初始回填 '餐饮美食'");
+    assert(editChanWrap47 && !editChanWrap47.classList.contains('hidden'), "Group 47: 渠道与账户联动下拉处于展示状态");
+    assert(editChanInput47 && editChanInput47.value === '微信', "Group 47: 渠道联动下拉框初始为 '微信'");
+    assert(editAccInput47 && editAccInput47.value === '钱包', "Group 47: 账户联动下拉框初始为 '钱包'");
+    assert(editTimeInput47 && !editTimeInput47.classList.contains('hidden'), "Group 47: 时间编辑输入框 #detail-edit-time 处于展示状态");
+    assert(editTimeInput47 && editTimeInput47.value === '2026-10-26 14:30:00', "Group 47: #detail-edit-time 初始回填原时间");
+    assert(editOrderInput47 && !editOrderInput47.classList.contains('hidden'), "Group 47: 平台单号输入框 #detail-edit-order 处于展示状态");
+    assert(editOrderInput47 && editOrderInput47.value === 'ORDER_ORIG_10001', "Group 47: #detail-edit-order 初始回填原单号");
+
+    // 修改上述字段并保存
+    editAmtInput47.value = '68.20';
+    editMerchantInput47.value = '喜茶超级茶饮坊';
+    selectCustomDropdownOption('detail-edit-category', '日常购物');
+    selectCustomDropdownOption('detail-edit-channel', '支付宝');
+    selectCustomDropdownOption('detail-edit-account', '余额宝');
+    editTimeInput47.value = '2026-10-26 19:15:30';
+    editOrderInput47.value = 'ORDER_EDITED_20002';
+
+    // 点击“完成”保存
+    toggleTxDetailEditMode();
+    assert(btnEditTx47.innerText.trim() === '编辑', "Group 47: 保存后按钮文字恢复为 '编辑'");
+    assert(editAmtWrap47.classList.contains('hidden'), "Group 47: 保存后金额编辑框已收起隐藏");
+    assert(editMerchantInput47.classList.contains('hidden'), "Group 47: 保存后商户输入框已收起隐藏");
+
+    // 验证详情只读视图已更新
+    assert(document.getElementById('detail-amount').innerText.includes('68.20'), "Group 47: 详情只读视图金额更新为 68.20");
+    assert(document.getElementById('detail-merchant').innerText === '喜茶超级茶饮坊', "Group 47: 详情只读视图商户更新为 '喜茶超级茶饮坊'");
+    assert(document.getElementById('detail-cat').innerText.includes('日常购物'), "Group 47: 详情只读视图分类更新包含 '日常购物'");
+    assert(document.getElementById('detail-channel').innerText.includes('支付宝') && document.getElementById('detail-channel').innerText.includes('余额宝'), "Group 47: 详情只读视图渠道与账户更新为 '支付宝 · 余额宝'");
+    assert(document.getElementById('detail-time').innerText === '2026-10-26 19:15:30', "Group 47: 详情只读视图交易时间更新为 2026-10-26 19:15:30");
+    assert(document.getElementById('detail-order').innerText === 'ORDER_EDITED_20002', "Group 47: 详情只读视图单号更新为 ORDER_EDITED_20002");
+
+    // 验证内存 allMonthlyData 同步更新
+    const updatedTxInMem47 = allMonthlyData['2026-10'].txs.find(t => t.id === testTxId47);
+    assert(updatedTxInMem47 !== undefined, "Group 47: allMonthlyData['2026-10'] 存在更新后的账单对象");
+    assert(updatedTxInMem47.amount === 68.2, "Group 47: allMonthlyData 账单金额更新为 68.2");
+    assert(updatedTxInMem47.merchant === '喜茶超级茶饮坊', "Group 47: allMonthlyData 账单商户名更新");
+    assert(updatedTxInMem47.cat === '日常购物' || updatedTxInMem47.category === '日常购物', "Group 47: allMonthlyData 账单分类更新");
+    assert(updatedTxInMem47.channel === '支付宝', "Group 47: allMonthlyData 渠道更新为 支付宝");
+    assert(updatedTxInMem47.account === '余额宝', "Group 47: allMonthlyData 账户更新为 余额宝");
+    assert(updatedTxInMem47.orderId === 'ORDER_EDITED_20002', "Group 47: allMonthlyData 平台单号更新为 ORDER_EDITED_20002");
+
+    // 关闭详情弹窗，验证流水卡片 .tx-item 同步更新
+    closeTxDetailModal();
+    assert(txDetailModal47.classList.contains('hidden'), "Group 47: #tx-detail-modal 关闭成功");
+    const txCardEl47 = document.getElementById(testTxId47);
+    assert(txCardEl47 !== null, "Group 47: 流水列表对应卡片节点存在");
+    assert(txCardEl47.innerText.includes('喜茶超级茶饮坊'), "Group 47: 流水卡片商户名同步展示为 '喜茶超级茶饮坊'");
+    assert(txCardEl47.innerText.includes('68.20'), "Group 47: 流水卡片金额同步展示为 68.20");
+
+    // ----------------------------------------------------
+    // Part 2: Bug 修复（回收站账单不阻断相同单号再次入账）
+    // ----------------------------------------------------
+    // 当前 testTxId47 具有有效单号 ORDER_EDITED_20002，验证查重返回 true
+    assert(isOrderIdDuplicate('ORDER_EDITED_20002') === true, "Group 47 (Bug Fix): 活跃账单单号 ORDER_EDITED_20002 查重返回 true");
+
+    // 将该账单移入回收站
+    deleteTransaction(testTxId47, '喜茶超级茶饮坊', 68.20);
+    assert(updatedTxInMem47.softDeleted === true, "Group 47 (Bug Fix): deleteTransaction 后该账单被标记 softDeleted = true");
+
+    // 核心 Bug 修复断言：移入回收站后，isOrderIdDuplicate 必须返回 false，不阻断相同单号再次入账
+    assert(isOrderIdDuplicate('ORDER_EDITED_20002') === false, "Group 47 (Bug Fix): 账单移入回收站后 isOrderIdDuplicate 返回 false (不阻断相同单号入账)");
+
+    // 模拟再次录入相同单号的新账单
+    const reAddedTxId47 = "tx-readded-order-47";
+    insertTransactionToList({
+      id: reAddedTxId47,
+      merchant: "同单号重入账商户",
+      amount: 50.00,
+      catName: "餐饮美食",
+      channel: "微信",
+      account: "钱包",
+      txDate: "2026-10-26",
+      txTime: "2026-10-26 20:00:00",
+      orderId: "ORDER_EDITED_20002"
+    });
+    assert(document.getElementById(reAddedTxId47) !== null, "Group 47 (Bug Fix): 相同单号的新账单成功入账并加入流水列表");
+    assert(isOrderIdDuplicate('ORDER_EDITED_20002') === true, "Group 47 (Bug Fix): 新账单入账后该单号被活跃账单占用 (返回 true)");
+
+    // 清理新账单
+    document.getElementById(reAddedTxId47)?.remove();
+    allMonthlyData['2026-10'].txs = allMonthlyData['2026-10'].txs.filter(t => t.id !== reAddedTxId47);
+    committedOrderIds.delete('ORDER_EDITED_20002');
+    assert(isOrderIdDuplicate('ORDER_EDITED_20002') === false, "Group 47 (Bug Fix): 清除新账单后临时恢复 false");
+
+    // 从回收站恢复原账单
+    restoreTrash(testTxId47);
+    assert(updatedTxInMem47.softDeleted === false, "Group 47 (Bug Fix): 从回收站恢复后 softDeleted 还原为 false");
+    assert(isOrderIdDuplicate('ORDER_EDITED_20002') === true, "Group 47 (Bug Fix): 从回收站恢复后 isOrderIdDuplicate 重新生效并返回 true");
+
+    // ----------------------------------------------------
+    // Part 3: 功能 2（回收站单条删除确认 + 多选全选批量删除）
+    // ----------------------------------------------------
+    // 再次将 testTxId47 移入回收站，并添加另外两笔账单一同移入回收站
+    deleteTransaction(testTxId47, '喜茶超级茶饮坊', 68.20);
+    const trashTx2_47 = "tx-trash-demo-02";
+    const trashTx3_47 = "tx-trash-demo-03";
+    insertTransactionToList({
+      id: trashTx2_47,
+      merchant: "待彻底删除账单B",
+      amount: 15.00,
+      catName: "餐饮美食",
+      txDate: "2026-10-26",
+      txTime: "2026-10-26 10:00:00"
+    });
+    insertTransactionToList({
+      id: trashTx3_47,
+      merchant: "待彻底删除账单C",
+      amount: 25.00,
+      catName: "餐饮美食",
+      txDate: "2026-10-26",
+      txTime: "2026-10-26 11:00:00"
+    });
+    deleteTransaction(trashTx2_47, '待彻底删除账单B', 15.00);
+    deleteTransaction(trashTx3_47, '待彻底删除账单C', 25.00);
+
+    assert(deletedItems.length === 3, "Group 47 (Trash): 回收站 deletedItems 存在 3 条记录");
+
+    // 打开回收站弹窗
+    openTrashDialog();
+    const trashModal47 = document.getElementById('trash-modal');
+    assert(trashModal47 && !trashModal47.classList.contains('hidden'), "Group 47 (Trash): #trash-modal 打开");
+    const trashBatchBar47 = document.getElementById('trash-batch-bar');
+    assert(trashBatchBar47 && !trashBatchBar47.classList.contains('hidden'), "Group 47 (Trash): #trash-batch-bar 批量操作栏处于显示状态");
+
+    const trashCheckboxes47 = document.querySelectorAll('.trash-item-checkbox');
+    assert(trashCheckboxes47.length === 3, "Group 47 (Trash): 每条回收站记录均具备独立复选框 (共3个)");
+    const trashDelBtns47 = document.getElementById('trash-items').querySelectorAll('button');
+    assert(trashDelBtns47.length >= 3, "Group 47 (Trash): 每条回收站记录均具备独立删除按钮");
+
+    // 1) 单条删除确认流程
+    openTrashDeleteConfirmModal(testTxId47);
+    const trashConfirmModal47 = document.getElementById('trash-delete-confirm-modal');
+    assert(trashConfirmModal47 && !trashConfirmModal47.classList.contains('hidden'), "Group 47 (Trash): 点击单条删除弹出 #trash-delete-confirm-modal");
+    assert(document.getElementById('trash-delete-confirm-msg').innerText.includes('喜茶超级茶饮坊'), "Group 47 (Trash): 单条确认删除弹窗展示账单名称");
+
+    // 测试取消删除
+    closeTrashDeleteConfirmModal();
+    assert(trashConfirmModal47.classList.contains('hidden'), "Group 47 (Trash): 取消彻底删除后弹窗收起");
+    assert(deletedItems.length === 3, "Group 47 (Trash): 取消后 deletedItems 数量仍为 3");
+
+    // 再次打开并确认彻底删除
+    openTrashDeleteConfirmModal(testTxId47);
+    confirmTrashPermanentDelete();
+    assert(trashConfirmModal47.classList.contains('hidden'), "Group 47 (Trash): 确认删除后弹窗关闭");
+    assert(deletedItems.length === 2, "Group 47 (Trash): 确认彻底删除后从 deletedItems 移除 (剩余 2 条)");
+    assert(!deletedItems.some(i => i.id === testTxId47), "Group 47 (Trash): testTxId47 不再存在于 deletedItems 中");
+    assert(!allMonthlyData['2026-10'].txs.some(t => t.id === testTxId47), "Group 47 (Trash): testTxId47 从 allMonthlyData 彻底抹除");
+
+    // 2) 全选与批量删除确认流程
+    const trashSelectAllCb47 = document.getElementById('trash-select-all');
+    assert(trashSelectAllCb47 !== null, "Group 47 (Trash): #trash-select-all 全选复选框存在");
+    trashSelectAllCb47.checked = true;
+    toggleTrashSelectAll(true);
+
+    const remainingTrashCbs47 = Array.from(document.querySelectorAll('.trash-item-checkbox'));
+    assert(remainingTrashCbs47.length === 2, "Group 47 (Trash): 回收站列表当前显示剩余 2 条复选框");
+    assert(remainingTrashCbs47.every(cb => cb.checked), "Group 47 (Trash): 全选后所有子复选框均处于 checked 状态");
+    assert(document.getElementById('trash-selected-count').innerText.includes('2'), "Group 47 (Trash): 已选计数展示 '(已选 2)'");
+
+    // 打开批量删除确认弹窗
+    openTrashBatchDeleteConfirmModal();
+    assert(trashConfirmModal47 && !trashConfirmModal47.classList.contains('hidden'), "Group 47 (Trash): 点击批量删除弹出 #trash-delete-confirm-modal");
+    assert(document.getElementById('trash-delete-confirm-msg').innerText.includes('2 条'), "Group 47 (Trash): 批量确认删除提示彻底删除选中的 2 条账单");
+
+    // 确认批量彻底删除
+    confirmTrashPermanentDelete();
+    assert(trashConfirmModal47.classList.contains('hidden'), "Group 47 (Trash): 批量删除后确认弹窗收起");
+    assert(deletedItems.length === 0, "Group 47 (Trash): deletedItems 彻底清空 (length=0)");
+    assert(document.getElementById('trash-items').innerText.includes('回收站为空'), "Group 47 (Trash): 回收站列表展示 '回收站为空'");
+    assert(trashBatchBar47.classList.contains('hidden'), "Group 47 (Trash): 回收站为空时批量操作栏自动隐藏");
+
+    closeTrashModal();
+    assert(trashModal47.classList.contains('hidden'), "Group 47 (Trash): #trash-modal 关闭");
+
+    // ========================================================
+    // Group 48: Payment Display Standardization, Detail Sticky Bug Fix, Sorting & Dynamic Accounts
+    // ========================================================
+    console.log("=== Group 48: Payment Display Standardization, Detail Sticky Bug Fix, Sorting & Dynamic Accounts ===");
+    switchTab('transactions');
+    cleanAllTestData();
+
+    // ----------------------------------------------------
+    // Test 48.1: Bug 1 — 账单流水界面 "渠道 · 账户" 与完整消费时间显示
+    // ----------------------------------------------------
+    assert(typeof formatTxPaymentDisplay === 'function', "Test 48.1: formatTxPaymentDisplay 函数存在");
+    assert(formatTxPaymentDisplay('微信', '钱包') === '微信 · 钱包', "Test 48.1: formatTxPaymentDisplay('微信', '钱包') === '微信 · 钱包'");
+    assert(formatTxPaymentDisplay('支付宝', '余额宝') === '支付宝 · 余额宝', "Test 48.1: formatTxPaymentDisplay('支付宝', '余额宝') === '支付宝 · 余额宝'");
+    assert(formatTxPaymentDisplay('云闪付', '工商银行[5678]') === '云闪付 · 工商银行[5678]', "Test 48.1: formatTxPaymentDisplay('云闪付', '工商银行[5678]') === '云闪付 · 工商银行[5678]'");
+    assert(formatTxPaymentDisplay('微信', '微信 · 钱包') === '微信 · 钱包', "Test 48.1: formatTxPaymentDisplay('微信', '微信 · 钱包') === '微信 · 钱包' (自动去重前缀)");
+
+    // 验证 insertTransactionToList 插入后卡片标签严格显示 "渠道 · 账户" 且时间包含完整秒数
+    const tx48_1_id = "tx-48-1-display";
+    insertTransactionToList({
+      id: tx48_1_id,
+      merchant: "全家便利店",
+      amount: 18.50,
+      catName: "日常购物",
+      channel: "支付宝",
+      account: "余额宝",
+      txDate: "2026-10-26",
+      txTime: "2026-10-26 14:30:25"
+    });
+    const tx48_1_el = document.getElementById(tx48_1_id);
+    assert(tx48_1_el !== null, "Test 48.1: 插入账单 DOM 节点存在");
+    const tag48_1 = tx48_1_el.querySelector('.tx-source-tag');
+    assert(tag48_1 && tag48_1.innerText.trim() === '支付宝 · 余额宝', "Test 48.1: insertTransactionToList 卡片 .tx-source-tag 严格显示 '支付宝 · 余额宝' (got: " + (tag48_1 ? tag48_1.innerText : 'null') + ")");
+    assert(tx48_1_el.innerText.includes('14:30:25'), "Test 48.1: 账单卡片时间包含完整秒数 14:30:25");
+
+    // 验证 renderMonthTransactions 重新渲染后的卡片标签与完整秒数
+    renderMonthTransactions('2026', '10');
+    const tx48_1_rerender = document.getElementById(tx48_1_id);
+    assert(tx48_1_rerender !== null, "Test 48.1: renderMonthTransactions 重新渲染后节点存在");
+    const tag48_1_rerender = tx48_1_rerender.querySelector('.tx-source-tag');
+    assert(tag48_1_rerender && tag48_1_rerender.innerText.trim() === '支付宝 · 余额宝', "Test 48.1: 重新渲染后 .tx-source-tag 依然为 '支付宝 · 余额宝'");
+    assert(tx48_1_rerender.innerText.includes('14:30:25'), "Test 48.1: 重新渲染后卡片时间依然保留完整秒数");
+
+    cleanAllTestData();
+
+    // ----------------------------------------------------
+    // Test 48.2: Bug 2 — 账单流水详情界面编辑支付类型无粘性
+    // ----------------------------------------------------
+    const txA_id = "tx-stick-a";
+    const txB_id = "tx-stick-b";
+    insertTransactionToList({
+      id: txA_id,
+      merchant: "商户A",
+      amount: 10.00,
+      catName: "餐饮美食",
+      channel: "支付宝",
+      account: "余额宝",
+      txDate: "2026-10-26",
+      txTime: "2026-10-26 10:00:00"
+    });
+    insertTransactionToList({
+      id: txB_id,
+      merchant: "商户B",
+      amount: 20.00,
+      catName: "餐饮美食",
+      channel: "云闪付",
+      account: "招商银行[8899]",
+      txDate: "2026-10-26",
+      txTime: "2026-10-26 11:00:00"
+    });
+
+    // 1) 打开账单 A 详情 -> 编辑 -> 改为 微信 · 钱包 -> 保存
+    viewTransactionDetail("商户A", "10.00", "餐饮美食", "支付宝 · 余额宝", "2026-10-26 10:00:00", "", txA_id);
+    toggleTxDetailEditMode();
+    selectCustomDropdownOption('detail-edit-channel', '微信');
+    selectCustomDropdownOption('detail-edit-account', '钱包');
+    saveTxDetailEdit();
+    assert(document.getElementById('detail-channel').innerText === '微信 · 钱包', "Test 48.2: 账单 A 成功保存为 '微信 · 钱包'");
+    closeTxDetailModal();
+
+    // 2) 紧接着打开账单 B 详情
+    viewTransactionDetail("商户B", "20.00", "餐饮美食", "云闪付 · 招商银行[8899]", "2026-10-26 11:00:00", "", txB_id);
+    assert(document.getElementById('detail-edit-channel').value === '云闪付', "Test 48.2: 打开账单 B 时 #detail-edit-channel 初始为 '云闪付'");
+    assert(document.getElementById('detail-edit-account').value === '招商银行[8899]', "Test 48.2: 打开账单 B 时 #detail-edit-account 初始为 '招商银行[8899]'");
+
+    // 3) 点击编辑 -> 什么都不改，直接点击保存
+    toggleTxDetailEditMode();
+    saveTxDetailEdit();
+
+    // 4) 验证账单 B 保存后依然是 云闪付 · 招商银行[8899]，绝不会变成上次选过的 微信 · 钱包
+    assert(document.getElementById('detail-channel').innerText === '云闪付 · 招商银行[8899]', "Test 48.2: 账单 B 保存后详情展示依然为 '云闪付 · 招商银行[8899]' (无粘性遗留)");
+    const foundTxB_48 = allMonthlyData['2026-10'].txs.find(t => t.id === txB_id);
+    assert(foundTxB_48 && foundTxB_48.channel === '云闪付', "Test 48.2: 账单 B 内存 channel 保持 '云闪付'");
+    assert(foundTxB_48 && foundTxB_48.account === '招商银行[8899]', "Test 48.2: 账单 B 内存 account 保持 '招商银行[8899]'");
+    closeTxDetailModal();
+
+    cleanAllTestData();
+
+    // ----------------------------------------------------
+    // Test 48.3: Bug 3 — 流水明细界面账单严格按最近日期与最近时间从上往下倒序排列
+    // ----------------------------------------------------
+    // 乱序插入多笔不同日期及同一日期不同时间的账单
+    insertTransactionToList({
+      id: "tx-sort-20",
+      merchant: "老账单",
+      amount: 10.00,
+      catName: "日常购物",
+      txDate: "2026-10-20",
+      txTime: "2026-10-20 15:00:00"
+    });
+    insertTransactionToList({
+      id: "tx-sort-26-noon",
+      merchant: "26日中午账单",
+      amount: 20.00,
+      catName: "餐饮美食",
+      txDate: "2026-10-26",
+      txTime: "2026-10-26 12:30:00"
+    });
+    insertTransactionToList({
+      id: "tx-sort-25",
+      merchant: "昨天账单",
+      amount: 30.00,
+      catName: "休闲娱乐",
+      txDate: "2026-10-25",
+      txTime: "2026-10-25 10:00:00"
+    });
+    insertTransactionToList({
+      id: "tx-sort-26-evening",
+      merchant: "26日傍晚账单",
+      amount: 40.00,
+      catName: "餐饮美食",
+      txDate: "2026-10-26",
+      txTime: "2026-10-26 18:45:30"
+    });
+    insertTransactionToList({
+      id: "tx-sort-26-morning",
+      merchant: "26日早晨账单",
+      amount: 50.00,
+      catName: "生活缴费",
+      txDate: "2026-10-26",
+      txTime: "2026-10-26 09:15:00"
+    });
+
+    // 验证插入及 renderMonthTransactions 后的排列顺序
+    renderMonthTransactions('2026', '10');
+    const dayGroups48 = Array.from(document.querySelectorAll('#transactions-list .day-group'));
+    assert(dayGroups48.length === 3, "Test 48.3: 渲染出 3 个日期分组 (2026-10-26, 2026-10-25, 2026-10-20)");
+    const groupDates48 = dayGroups48.map(g => g.getAttribute('data-group-date') || g.getAttribute('data-date'));
+    assert(groupDates48[0] === '2026-10-26', "Test 48.3: 第 1 个分组为最近日期 2026-10-26 (got: " + groupDates48[0] + ")");
+    assert(groupDates48[1] === '2026-10-25', "Test 48.3: 第 2 个分组为次近日期 2026-10-25 (got: " + groupDates48[1] + ")");
+    assert(groupDates48[2] === '2026-10-20', "Test 48.3: 第 3 个分组为最远日期 2026-10-20 (got: " + groupDates48[2] + ")");
+
+    // 验证 2026-10-26 分组内的账单按时间严格降序 (18:45:30 -> 12:30:00 -> 09:15:00)
+    const oct26Group48 = dayGroups48[0];
+    const oct26Items48 = Array.from(oct26Group48.querySelectorAll('.tx-item'));
+    assert(oct26Items48.length === 3, "Test 48.3: 2026-10-26 分组内包含 3 笔账单");
+    const oct26Times48 = oct26Items48.map(el => el.getAttribute('data-time') || '');
+    assert(oct26Times48[0].includes('18:45:30'), "Test 48.3: 第 1 笔账单为最新时间 18:45:30 (got: " + oct26Times48[0] + ")");
+    assert(oct26Times48[1].includes('12:30:00'), "Test 48.3: 第 2 笔账单为中间时间 12:30:00 (got: " + oct26Times48[1] + ")");
+    assert(oct26Times48[2].includes('09:15:00'), "Test 48.3: 第 3 笔账单为最早时间 09:15:00 (got: " + oct26Times48[2] + ")");
+
+    cleanAllTestData();
+
+    // ----------------------------------------------------
+    // Test 48.4: 动态银行卡与去硬编码验证
+    // ----------------------------------------------------
+    const defaultAccountsSSOT = window.CHANNEL_DEFAULT_ACCOUNT || (typeof CHANNEL_DEFAULT_ACCOUNT !== 'undefined' ? CHANNEL_DEFAULT_ACCOUNT : null);
+    assert(defaultAccountsSSOT !== null, "Test 48.4: CHANNEL_DEFAULT_ACCOUNT 存在");
+    assert(defaultAccountsSSOT['云闪付'] === '银行卡', "Test 48.4: CHANNEL_DEFAULT_ACCOUNT['云闪付'] === '银行卡' (不再硬编码工商银行)");
+
+    // 调用 syncAccountToAllDropdowns 注入任意新银行卡
+    syncAccountToAllDropdowns('云闪付', '中国银行[3344]');
+
+    // 验证 #menu-select-account (即 edit-account 下拉)
+    const selectAccMenu48 = document.getElementById('menu-select-account');
+    assert(selectAccMenu48 !== null, "Test 48.4: #menu-select-account 存在");
+    const hasInSelectAcc = Array.from(selectAccMenu48.querySelectorAll('.custom-dropdown-option')).some(opt => opt.getAttribute('data-value') === '中国银行[3344]');
+    assert(hasInSelectAcc, "Test 48.4: #menu-select-account (edit-account) 动态包含 '中国银行[3344]' 选项");
+
+    // 验证 #menu-manual-pay-sub / #menu-manual-account (即 manual-account 下拉)
+    const manualAccMenu48 = document.getElementById('menu-manual-pay-sub') || document.getElementById('menu-manual-account');
+    assert(manualAccMenu48 !== null, "Test 48.4: manual account 下拉菜单存在");
+    const hasInManualAcc = Array.from(manualAccMenu48.querySelectorAll('.custom-dropdown-option')).some(opt => {
+      const v = opt.getAttribute('data-value') || '';
+      return v === '中国银行[3344]' || v.includes('中国银行[3344]');
+    });
+    assert(hasInManualAcc, "Test 48.4: manual-account 下拉菜单动态包含 '中国银行[3344]' 选项");
+
+    // 验证 #menu-detail-edit-account
+    const detailAccMenu48 = document.getElementById('menu-detail-edit-account');
+    assert(detailAccMenu48 !== null, "Test 48.4: #menu-detail-edit-account 存在");
+    const hasInDetailAcc = Array.from(detailAccMenu48.querySelectorAll('.custom-dropdown-option')).some(opt => opt.getAttribute('data-value') === '中国银行[3344]');
+    assert(hasInDetailAcc, "Test 48.4: #menu-detail-edit-account 动态包含 '中国银行[3344]' 选项");
+
+    // ========================================================
+    // Group 49: Dynamic Content & De-hardcoding Across All Modals Regression Verification
+    // ========================================================
+    console.log("=== Group 49: Dynamic Content & De-hardcoding Across All Modals Regression Verification ===");
+    switchTab('transactions');
+    cleanAllTestData();
+
+    // ----------------------------------------------------
+    // Test 49.1: 筛选弹窗（#filter-modal）动态内容与匹配验证
+    // ----------------------------------------------------
+    // 1) 插入一笔微信支付账单和一笔自定义银行卡账单
+    insertTransactionToList({
+      id: "tx-49-wechat",
+      merchant: "微信便利店",
+      amount: 15.00,
+      catName: "餐饮美食",
+      channel: "微信",
+      account: "钱包",
+      txDate: "2026-10-26",
+      txTime: "2026-10-26 12:00:00"
+    });
+    insertTransactionToList({
+      id: "tx-49-abc",
+      merchant: "农业银行专卖店",
+      amount: 88.00,
+      catName: "日常购物",
+      channel: "云闪付",
+      account: "农业银行[9988]",
+      txDate: "2026-10-26",
+      txTime: "2026-10-26 13:00:00"
+    });
+
+    // 2) 新增自定义分类 "户外运动"
+    const catInput49 = document.getElementById('custom-category-input');
+    if (catInput49) catInput49.value = '户外运动';
+    addCustomCategory();
+
+    // 3) 打开筛选抽屉，验证分类与账户动态生成
+    openFilterModal();
+    const filterModal49 = document.getElementById('filter-modal');
+    assert(filterModal49 && !filterModal49.classList.contains('hidden'), "Test 49.1: 筛选弹窗 #filter-modal 打开");
+
+    const filterCatTags49 = Array.from(document.querySelectorAll('#filter-modal-cats .modal-cat-tag'));
+    assert(filterCatTags49.some(t => t.innerText.includes('工资收入')), "Test 49.1: #filter-modal-cats 动态包含 '工资收入'");
+    assert(filterCatTags49.some(t => t.innerText.includes('户外运动')), "Test 49.1: #filter-modal-cats 动态包含新增分类 '户外运动'");
+
+    const filterAccBtns49 = Array.from(document.querySelectorAll('#filter-modal-accounts .modal-acc-btn'));
+    assert(filterAccBtns49.some(b => b.innerText.includes('农业银行[9988]')), "Test 49.1: #filter-modal-accounts 动态提取出自定义银行卡 '农业银行[9988]'");
+
+    // 4) 按 "微信支付" 筛选匹配
+    const wechatBtn49 = filterAccBtns49.find(b => b.innerText.includes('微信支付'));
+    assert(wechatBtn49 !== undefined, "Test 49.1: 存在 '微信支付' 筛选项按钮");
+    selectModalAccount(wechatBtn49, '微信支付');
+    applyFilterModal();
+    const visibleWechat49 = Array.from(document.querySelectorAll('#transactions-list .tx-item')).filter(el => el.style.display !== 'none');
+    assert(visibleWechat49.length === 1 && visibleWechat49[0].id === 'tx-49-wechat', "Test 49.1: 按 '微信支付' 筛选正确匹配微信流水");
+
+    // 5) 按动态银行卡 "农业银行[9988]" 筛选匹配
+    openFilterModal();
+    const abcBtn49 = Array.from(document.querySelectorAll('#filter-modal-accounts .modal-acc-btn')).find(b => b.innerText.includes('农业银行[9988]'));
+    assert(abcBtn49 !== undefined, "Test 49.1: 存在 '农业银行[9988]' 筛选项按钮");
+    selectModalAccount(abcBtn49, '农业银行[9988]');
+    applyFilterModal();
+    const visibleAbc49 = Array.from(document.querySelectorAll('#transactions-list .tx-item')).filter(el => el.style.display !== 'none');
+    assert(visibleAbc49.length === 1 && visibleAbc49[0].id === 'tx-49-abc', "Test 49.1: 按动态银行卡 '农业银行[9988]' 筛选正确匹配流水");
+
+    resetFilter();
+    closeFilterModal();
+
+    // ----------------------------------------------------
+    // Test 49.2: 分类管理与分类选择弹窗（#category-modal & #category-delete-confirm-modal）
+    // ----------------------------------------------------
+    const catModalGrid49 = document.getElementById('category-modal-grid');
+    assert(catModalGrid49 !== null, "Test 49.2: #category-modal-grid 存在");
+    assert(catModalGrid49.innerText.includes('户外运动'), "Test 49.2: #category-modal-grid 图标网格动态同步包含 '户外运动'");
+
+    const detailCatMenu49 = document.getElementById('menu-detail-edit-category');
+    assert(detailCatMenu49 !== null, "Test 49.2: #menu-detail-edit-category 存在");
+    const hasDetailCat49 = Array.from(detailCatMenu49.querySelectorAll('.custom-dropdown-option')).some(opt => opt.getAttribute('data-value') === '户外运动');
+    assert(hasDetailCat49, "Test 49.2: #menu-detail-edit-category 详情编辑分类下拉框动态同步包含 '户外运动'");
+
+    // 点击删除自定义分类，验证确认标题
+    openCategoryDeleteConfirmModal('户外运动');
+    const delCatModal49 = document.getElementById('category-delete-confirm-modal');
+    assert(delCatModal49 && !delCatModal49.classList.contains('hidden'), "Test 49.2: #category-delete-confirm-modal 打开");
+    const delTitle49 = document.getElementById('del-cat-confirm-title');
+    assert(delTitle49 && delTitle49.innerText.includes('确认删除「户外运动」'), "Test 49.2: #del-cat-confirm-title 动态显示 '确认删除「户外运动」' (got: " + (delTitle49 ? delTitle49.innerText : 'null') + ")");
+    closeCategoryDeleteConfirmModal();
+
+    // ----------------------------------------------------
+    // Test 49.3: 账单流水详情弹窗（#tx-detail-modal）动态内容与缺省回退
+    // ----------------------------------------------------
+    insertTransactionToList({
+      id: "tx-49-income-sample",
+      merchant: "科技公司薪酬发放",
+      amount: 15000.00,
+      catName: "工资收入",
+      channel: "微信",
+      account: "钱包",
+      txDate: "2026-10-26",
+      txTime: "2026-10-26 09:30:00"
+    });
+
+    viewTransactionDetail("科技公司薪酬发放", "15000.00", "工资收入", "微信 · 钱包", "2026-10-26 09:30:00", "", "tx-49-income-sample");
+    const amtLabel49 = document.getElementById('detail-amount-label');
+    assert(amtLabel49 && amtLabel49.innerText.trim() === '收款金额 (分精确)', "Test 49.3: 工资收入账单 #detail-amount-label 动态变为 '收款金额 (分精确)'");
+    const detailAmt49 = document.getElementById('detail-amount');
+    assert(detailAmt49 && detailAmt49.innerText.includes('+¥'), "Test 49.3: 工资收入金额前缀为 '+¥'");
+    assert(detailAmt49.classList.contains('text-emerald-400'), "Test 49.3: 工资收入金额高亮为绿色 (text-emerald-400)");
+
+    // 进入编辑态验证前缀符号
+    toggleTxDetailEditMode();
+    const editSign49 = document.getElementById('detail-edit-amount-sign');
+    assert(editSign49 && editSign49.innerText.trim() === '+¥', "Test 49.3: 编辑态金额前缀 #detail-edit-amount-sign 动态显示 '+¥'");
+    closeTxDetailModal();
+
+    // 云闪付缺省账户回退验证 (非硬编码工商银行[5678])
+    viewTransactionDetail("闪付商户", "30.00", "日常购物", "云闪付", "2026-10-26 14:00:00", "", null);
+    const detailChan49 = document.getElementById('detail-channel');
+    assert(detailChan49 && detailChan49.innerText.includes('银行卡') && !detailChan49.innerText.includes('工商银行[5678]'), "Test 49.3: 云闪付缺省账户回退为 '银行卡' 而非硬编码 '工商银行[5678]' (got: " + (detailChan49 ? detailChan49.innerText : 'null') + ")");
+    closeTxDetailModal();
+
+    cleanAllTestData();
+
+    // ----------------------------------------------------
+    // Test 49.4: 回收站弹窗（#trash-modal）数量标题与正负号
+    // ----------------------------------------------------
+    insertTransactionToList({
+      id: "tx-49-del-exp",
+      merchant: "测试待删支出",
+      amount: 45.00,
+      catName: "餐饮美食",
+      txDate: "2026-10-26",
+      txTime: "2026-10-26 10:00:00"
+    });
+    insertTransactionToList({
+      id: "tx-49-del-inc",
+      merchant: "测试待删收入",
+      amount: 600.00,
+      catName: "工资收入",
+      txDate: "2026-10-26",
+      txTime: "2026-10-26 11:00:00"
+    });
+
+    deleteTransaction("tx-49-del-exp", "测试待删支出", 45.00);
+    deleteTransaction("tx-49-del-inc", "测试待删收入", 600.00);
+
+    openTrashDialog();
+    const trashTitle49 = document.getElementById('trash-modal-title-text');
+    assert(trashTitle49 && trashTitle49.innerText === `回收站 (${deletedItems.length})`, "Test 49.4: #trash-modal-title-text 动态显示 '回收站 (2)' (got: " + (trashTitle49 ? trashTitle49.innerText : 'null') + ")");
+    const trashItemsHtml49 = document.getElementById('trash-items').innerText;
+    assert(trashItemsHtml49.includes('-¥45.00'), "Test 49.4: 支出账单在回收站动态显示 '-¥45.00'");
+    assert(trashItemsHtml49.includes('+¥600.00'), "Test 49.4: 收入账单在回收站动态显示 '+¥600.00'");
+    closeTrashModal();
+
+    cleanAllTestData();
+
+    // ----------------------------------------------------
+    // Test 49.5: 月份选择弹窗（#month-modal）与防重弹窗（#dedup-modal）
+    // ----------------------------------------------------
+    // 1) getMonthlyData 动态初始化任意月份
+    const dynamicMonthData = getMonthlyData(2028, '07');
+    assert(dynamicMonthData !== null && Array.isArray(dynamicMonthData.txs), "Test 49.5: getMonthlyData(2028, '07') 支持任意年份月份动态初始化");
+    assert(dynamicMonthData.net === '0.00' && dynamicMonthData.count === '0 笔', "Test 49.5: 动态初始化的月份数据结构完备");
+    assert(allMonthlyData['2028-07'] !== undefined, "Test 49.5: allMonthlyData 成功挂载动态月份 '2028-07'");
+
+    // 2) 防重弹窗动态信息填充
+    insertTransactionToList({
+      id: "tx-49-dedup-target",
+      merchant: "盒马鲜生超级旗舰店",
+      amount: 188.60,
+      catName: "日常购物",
+      channel: "微信",
+      account: "钱包",
+      txDate: "2026-10-26",
+      txTime: "2026-10-26 16:20:00",
+      orderId: "ORDER_DEDUP_TEST_9999"
+    });
+
+    showDedupTopToast("ORDER_DEDUP_TEST_9999");
+    const dedupMer49 = document.getElementById('dedup-modal-merchant');
+    const dedupAmt49 = document.getElementById('dedup-modal-amount');
+    const dedupTime49 = document.getElementById('dedup-modal-time');
+    assert(dedupMer49 && dedupMer49.innerText === '盒马鲜生超级旗舰店', "Test 49.5: 防重弹窗商户动态填充 '盒马鲜生超级旗舰店'");
+    assert(dedupAmt49 && dedupAmt49.innerText.includes('188.60'), "Test 49.5: 防重弹窗金额动态填充 '188.60'");
+    assert(dedupTime49 && dedupTime49.innerText.includes('2026-10-26 16:20:00'), "Test 49.5: 防重弹窗时间动态填充 '2026-10-26 16:20:00'");
+    closeDedupTopToast();
+
+    // 还原自定义分类
+    if (window.DomainRegistry && typeof window.DomainRegistry.resetCategories === 'function') {
+      window.DomainRegistry.resetCategories();
+      syncAllCategoryUIs();
+    }
 
     // 4. 测试收尾：清理全部测试数据，确保 App 还原为 100% 干净状态
     cleanAllTestData();
-    assert(document.querySelectorAll('#transactions-list .tx-item').length === 0, "Group 37 Post-Cleanup: Transactions restored to 0");
-    assert(draftQueue.length === 0, "Group 37 Post-Cleanup: draftQueue restored to 0");
-    assert(document.getElementById('monthly-net-expense').innerText.includes('0.00'), "Group 37 Post-Cleanup: Net expense restored to 0.00");
+    assert(document.querySelectorAll('#transactions-list .tx-item').length === 0, "Group 47 Post-Cleanup: Transactions restored to 0");
+    assert(draftQueue.length === 0, "Group 47 Post-Cleanup: draftQueue restored to 0");
+    assert(document.getElementById('monthly-net-expense').innerText.includes('0.00'), "Group 47 Post-Cleanup: Net expense restored to 0.00");
 
 
         const failed = window.__TEST_RESULTS__.filter(r => !r.pass);

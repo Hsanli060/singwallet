@@ -589,7 +589,16 @@
             <!-- Model 模型型号 -->
             <div>
               <label class="block text-slate-400 mb-1 text-[11px] font-medium">Model</label>
-              <input id="vlm-model" type="text" oninput="saveLlmConfigFromInputs(false)" class="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 font-mono text-[11px] outline-none focus:ring-2 focus:ring-indigo-500 transition-all">
+              <div class="relative custom-dropdown-container">
+                <div class="flex items-center gap-1.5">
+                  <input id="vlm-model" type="text" value="" placeholder="例如: gpt-4o / gemini-2.5-flash" oninput="saveLlmConfigFromInputs(false)" class="flex-1 min-w-0 bg-slate-900/90 border border-slate-700/80 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs text-slate-200 font-mono focus:outline-none">
+                  <button type="button" id="btn-vlm-model-dropdown" onclick="toggleVlmModelDropdown(event)" title="选择模型" class="w-9 h-[34px] shrink-0 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 hover:border-indigo-500/60 flex items-center justify-center text-slate-300 hover:text-white transition tap-highlight">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                  </button>
+                  <button type="button" id="btn-fetch-vlm-models" onclick="fetchVlmModelsList()" class="px-2.5 h-[34px] shrink-0 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-300 text-[11px] font-semibold transition tap-highlight whitespace-nowrap">获取模型列表</button>
+                </div>
+                <div id="menu-vlm-model-select" class="custom-dropdown-menu rounded-2xl backdrop-blur-xl max-h-48 overflow-y-auto"></div>
+              </div>
             </div>
 
             <!-- 连通性测试结果状态条 -->
@@ -797,7 +806,7 @@
             <span class="w-3.5 h-3.5 inline-block text-slate-400 shrink-0" id="guard-shield-svg-icon"></span>
             <span>三联锁防污染守护</span>
           </div>
-          <p class="leading-relaxed text-slate-400">同时满足「置信度达标 + 微信/支付宝单号验真 + 24h无重复」时免确认入账；任意疑重或低确信自动留存草稿箱。</p>
+          <p class="leading-relaxed text-slate-400">同时满足「置信度达标 + 微信/支付宝单号验真 + 单号全局无重复」时免确认入账；任意疑重或低确信自动留存草稿箱。</p>
         </div>
 
         <button onclick="closeConfidenceModal()" class="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow tap-highlight transition-all">
@@ -871,6 +880,7 @@
               <span onclick="toggleModalCat(this, '生活缴费')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1"><span class="w-4 h-4 inline-flex items-center justify-center shrink-0" data-cat-icon="生活缴费"></span><span>生活缴费</span></span>
               <span onclick="toggleModalCat(this, '医疗健康')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1"><span class="w-4 h-4 inline-flex items-center justify-center shrink-0" data-cat-icon="医疗健康"></span><span>医疗健康</span></span>
               <span onclick="toggleModalCat(this, '其他支出')" class="modal-cat-tag px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1"><span class="w-4 h-4 inline-flex items-center justify-center shrink-0" data-cat-icon="其他支出"></span><span>其他支出</span></span>
+              <span onclick="toggleModalCat(this, '工资收入')" class="modal-cat-tag bg-slate-800/80 border border-slate-700/80 text-slate-300 px-3 py-1.5 rounded-xl text-xs cursor-pointer">工资收入</span>
             </div>
           </div>
 
@@ -971,7 +981,7 @@
 
         <!-- 图1: 这里是添加图片 (顶部图片上传与展示卡片) -->
         <div class="rounded-2xl border border-dashed border-slate-700/80 hover:border-indigo-500/60 bg-slate-800/30 hover:bg-slate-800/50 transition-all p-2 text-center cursor-pointer tap-highlight group" onclick="if(window.isLlmProcessing) return; document.getElementById('manual-upload-input').click()">
-          <input type="file" id="manual-upload-input" accept="image/*" class="hidden" onchange="handleManualScreenshotUpload(event)">
+          <input type="file" id="manual-upload-input" accept="image/*" multiple class="hidden" onchange="handleManualScreenshotUpload(event)">
           
           <!-- 未选择图片占位提示 -->
           <div id="manual-image-empty-placeholder" class="py-1.5 flex flex-col items-center justify-center space-y-1">
@@ -1204,27 +1214,99 @@
     <!-- ================= 全局兼容容器: llm-config-modal (配置已全面迁移至规则账户视图 #vlm-config-card) ================= -->
     <div id="llm-config-modal" class="hidden" style="display: none;" aria-hidden="true"></div>
 
-    <!-- ================= 全局弹窗 5: 账目详情查看 ================= -->
+    <!-- ================= 全局弹窗 5: 账目详情查看与编辑 ================= -->
     <div id="tx-detail-modal" class="hidden absolute inset-0 bg-black/75 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
       <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 max-w-xs w-full shadow-2xl space-y-3 animate-fadeIn">
         <div class="flex items-center justify-between pb-2 border-b border-slate-800">
           <h3 class="font-bold text-sm text-white">账目流水详情</h3>
-          <button onclick="closeTxDetailModal()" class="text-xs text-slate-400">关闭</button>
+          <button type="button" id="btn-edit-tx-detail" onclick="toggleTxDetailEditMode()" class="px-2.5 py-1 text-xs font-semibold rounded-xl border border-slate-700 bg-slate-800 text-slate-300 hover:text-white transition tap-highlight">编辑</button>
         </div>
         <div class="space-y-2 text-xs">
           <div class="text-center py-2">
-            <span class="text-xs text-slate-400">实付金额 (分精确)</span>
+            <span id="detail-amount-label" class="text-xs text-slate-400">实付金额 (分精确)</span>
             <h2 id="detail-amount" class="text-3xl font-black text-white mt-0.5">-¥ 0.00</h2>
+            <div id="wrap-detail-edit-amount" class="hidden mt-1">
+              <div class="flex items-center justify-center space-x-1">
+                <span id="detail-edit-amount-sign" class="text-lg font-bold text-slate-400">-¥</span>
+                <input id="detail-edit-amount" type="number" step="0.01" class="w-36 text-center text-2xl font-black text-white bg-slate-800/90 border border-slate-700 focus:border-indigo-500 rounded-xl px-2 py-1 outline-none">
+              </div>
+            </div>
           </div>
           <div class="space-y-2 p-3 rounded-2xl bg-slate-800/80 border border-slate-700">
-            <div class="flex justify-between"><span class="text-slate-400">商户名称</span><span id="detail-merchant" class="font-semibold text-white">--</span></div>
-            <div class="flex justify-between"><span class="text-slate-400">分类归属</span><span id="detail-cat" class="font-semibold text-slate-200">餐饮美食</span></div>
-            <div class="flex justify-between"><span class="text-slate-400">支付类型</span><span id="detail-channel" class="font-semibold text-slate-200">微信 · 钱包</span></div>
-            <div class="flex justify-between"><span class="text-slate-400">交易时间</span><span id="detail-time" class="font-semibold text-slate-200">--</span></div>
-            <div class="flex justify-between"><span class="text-slate-400">平台单号</span><span id="detail-order" class="font-mono text-[11px] text-slate-300">--</span></div>
+            <!-- 商户名称 -->
+            <div class="flex justify-between items-center min-h-[28px]">
+              <span class="text-slate-400 shrink-0">商户名称</span>
+              <span id="detail-merchant" class="font-semibold text-white truncate max-w-[170px] text-right">--</span>
+              <input id="detail-edit-merchant" type="text" class="hidden w-40 text-right px-2 py-1 bg-slate-900 border border-slate-700 focus:border-indigo-500 rounded-lg text-xs text-white outline-none">
+            </div>
+            <!-- 分类归属 -->
+            <div class="flex justify-between items-center min-h-[28px]">
+              <span class="text-slate-400 shrink-0">分类归属</span>
+              <span id="detail-cat" class="font-semibold text-slate-200">餐饮美食</span>
+              <div id="wrap-detail-edit-category" class="hidden relative inline-block">
+                <div class="custom-dropdown-container inline-dropdown" id="dropdown-wrap-detail-edit-category" data-id="detail-edit-category">
+                  <input type="hidden" id="detail-edit-category" value="餐饮美食">
+                  <button type="button" class="custom-dropdown-trigger px-2.5 py-1 text-xs font-medium rounded-xl flex items-center justify-between" onclick="toggleCustomDropdown('detail-edit-category', event)">
+                    <span class="custom-dropdown-label truncate" id="label-detail-edit-category">餐饮美食</span>
+                    <svg class="w-3.5 h-3.5 dropdown-chevron ml-1 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                  </button>
+                  <div class="custom-dropdown-menu rounded-2xl backdrop-blur-xl menu-right shadow-2xl" id="menu-detail-edit-category" style="min-width: 130px; max-height: 180px;"></div>
+                </div>
+              </div>
+            </div>
+            <!-- 支付类型 (渠道 + 账户) -->
+            <div class="flex justify-between items-center min-h-[28px]">
+              <span class="text-slate-400 shrink-0">支付类型</span>
+              <span id="detail-channel" class="font-semibold text-slate-200">微信 · 钱包</span>
+              <div id="wrap-detail-edit-channel-account" class="hidden flex items-center space-x-1.5 justify-end">
+                <div class="custom-dropdown-container inline-dropdown" id="dropdown-wrap-detail-edit-channel" data-id="detail-edit-channel">
+                  <input type="hidden" id="detail-edit-channel" value="微信">
+                  <button type="button" class="custom-dropdown-trigger px-2 py-1 text-xs font-medium rounded-xl flex items-center justify-between" onclick="toggleCustomDropdown('detail-edit-channel', event)">
+                    <span class="custom-dropdown-label truncate" id="label-detail-edit-channel">微信</span>
+                    <svg class="w-3 h-3 dropdown-chevron ml-0.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                  </button>
+                  <div class="custom-dropdown-menu rounded-2xl backdrop-blur-xl shadow-2xl" id="menu-detail-edit-channel" style="min-width: 80px;">
+                    <div class="custom-dropdown-option rounded-xl selected" tabindex="0" data-value="微信" onclick="selectCustomDropdownOption('detail-edit-channel', '微信', event)"><span class="truncate">微信</span><span class="opt-check">✓</span></div>
+                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="支付宝" onclick="selectCustomDropdownOption('detail-edit-channel', '支付宝', event)"><span class="truncate">支付宝</span><span class="opt-check">✓</span></div>
+                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="云闪付" onclick="selectCustomDropdownOption('detail-edit-channel', '云闪付', event)"><span class="truncate">云闪付</span><span class="opt-check">✓</span></div>
+                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-value="现金" onclick="selectCustomDropdownOption('detail-edit-channel', '现金', event)"><span class="truncate">现金</span><span class="opt-check">✓</span></div>
+                  </div>
+                </div>
+                <div class="custom-dropdown-container inline-dropdown" id="dropdown-wrap-detail-edit-account" data-id="detail-edit-account">
+                  <input type="hidden" id="detail-edit-account" value="钱包">
+                  <button type="button" class="custom-dropdown-trigger px-2 py-1 text-xs font-medium rounded-xl flex items-center justify-between" onclick="toggleCustomDropdown('detail-edit-account', event)">
+                    <span class="custom-dropdown-label truncate" id="label-detail-edit-account">钱包</span>
+                    <svg class="w-3 h-3 dropdown-chevron ml-0.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                  </button>
+                  <div class="custom-dropdown-menu rounded-2xl backdrop-blur-xl menu-right shadow-2xl" id="menu-detail-edit-account" style="min-width: 120px; max-height: 180px;">
+                    <div class="custom-dropdown-option rounded-xl selected" tabindex="0" data-channel="微信" data-value="钱包" onclick="selectCustomDropdownOption('detail-edit-account', '钱包', event)"><span class="truncate">钱包</span><span class="opt-check">✓</span></div>
+                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-channel="微信" data-value="零钱通" onclick="selectCustomDropdownOption('detail-edit-account', '零钱通', event)"><span class="truncate">零钱通</span><span class="opt-check">✓</span></div>
+                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-channel="微信" data-value="招商银行(8848)" onclick="selectCustomDropdownOption('detail-edit-account', '招商银行(8848)', event)"><span class="truncate">招商银行(8848)</span><span class="opt-check">✓</span></div>
+                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-channel="支付宝" data-value="余额" onclick="selectCustomDropdownOption('detail-edit-account', '余额', event)" style="display: none;"><span class="truncate">余额</span><span class="opt-check">✓</span></div>
+                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-channel="支付宝" data-value="余额宝" onclick="selectCustomDropdownOption('detail-edit-account', '余额宝', event)" style="display: none;"><span class="truncate">余额宝</span><span class="opt-check">✓</span></div>
+                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-channel="支付宝" data-value="花呗" onclick="selectCustomDropdownOption('detail-edit-account', '花呗', event)" style="display: none;"><span class="truncate">花呗</span><span class="opt-check">✓</span></div>
+                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-channel="支付宝" data-value="建设银行(1234)" onclick="selectCustomDropdownOption('detail-edit-account', '建设银行(1234)', event)" style="display: none;"><span class="truncate">建设银行(1234)</span><span class="opt-check">✓</span></div>
+                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-channel="云闪付" data-value="工商银行(5678)" onclick="selectCustomDropdownOption('detail-edit-account', '工商银行(5678)', event)" style="display: none;"><span class="truncate">工商银行(5678)</span><span class="opt-check">✓</span></div>
+                    <div class="custom-dropdown-option rounded-xl" tabindex="0" data-channel="现金" data-value="现金钱包" onclick="selectCustomDropdownOption('detail-edit-account', '现金钱包', event)" style="display: none;"><span class="truncate">现金钱包</span><span class="opt-check">✓</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- 交易时间 -->
+            <div class="flex justify-between items-center min-h-[28px]">
+              <span class="text-slate-400 shrink-0">交易时间</span>
+              <span id="detail-time" class="font-semibold text-slate-200">--</span>
+              <input id="detail-edit-time" type="text" placeholder="YYYY-MM-DD HH:mm:ss" class="hidden w-44 text-right px-2 py-1 bg-slate-900 border border-slate-700 focus:border-indigo-500 rounded-lg text-xs font-mono text-white outline-none">
+            </div>
+            <!-- 平台单号 -->
+            <div class="flex justify-between items-center min-h-[28px]">
+              <span class="text-slate-400 shrink-0">平台单号</span>
+              <span id="detail-order" class="font-mono text-[11px] text-slate-300 truncate max-w-[170px] text-right">--</span>
+              <input id="detail-edit-order" type="text" placeholder="选填，无单号留空" class="hidden w-44 text-right px-2 py-1 bg-slate-900 border border-slate-700 focus:border-indigo-500 rounded-lg text-[11px] font-mono text-white outline-none">
+            </div>
           </div>
         </div>
-        <button onclick="closeTxDetailModal()" class="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold">
+        <button onclick="closeTxDetailModal()" class="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition">
           关闭详情
         </button>
       </div>
@@ -1302,7 +1384,7 @@
         <div class="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center p-2.5 mx-auto border border-amber-500/30" id="dedup-warn-icon"></div>
         <div class="text-center">
           <h3 class="font-bold text-base text-white">疑似重复交易预警</h3>
-          <p class="text-xs text-slate-400 mt-1.5">检测到 24 小时内存在相同商户与相同金额的流水记录：</p>
+          <p id="dedup-modal-desc" class="text-xs text-slate-400 mt-1.5">检测到已存在相同单号或相同商户金额的流水记录：</p>
           <div class="mt-2 p-2.5 bg-slate-800 rounded-xl text-left text-xs font-mono space-y-0.5 border border-slate-700">
             <div>商户: <span id="dedup-modal-merchant">--</span></div>
             <div>金额: <span id="dedup-modal-amount">--</span></div>
@@ -1324,8 +1406,17 @@
     <div id="trash-modal" class="hidden absolute inset-0 bg-black/75 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
       <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 max-w-xs w-full shadow-2xl space-y-3">
         <div class="flex items-center justify-between pb-2 border-b border-slate-800">
-          <h3 class="font-bold text-sm text-white">回收站 (保留 30 天)</h3>
+          <h3 class="font-bold text-sm text-white"><span id="trash-modal-title-text">回收站</span></h3>
           <button onclick="closeTrashModal()" class="text-xs text-slate-400">关闭</button>
+        </div>
+        <!-- 批量操作栏 -->
+        <div id="trash-batch-bar" class="hidden flex items-center justify-between py-1 px-1 border-b border-slate-800/80">
+          <label class="inline-flex items-center space-x-1.5 cursor-pointer select-none text-xs text-slate-300">
+            <input type="checkbox" id="trash-select-all" onchange="toggleTrashSelectAll(this.checked)" class="rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-0">
+            <span>全选</span>
+            <span id="trash-selected-count" class="text-[11px] text-slate-400"></span>
+          </label>
+          <button type="button" id="btn-trash-batch-delete" onclick="openTrashBatchDeleteConfirmModal()" class="text-[11px] px-2.5 py-1 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 transition font-medium">删除选中</button>
         </div>
         <div id="trash-items" class="space-y-2 max-h-48 overflow-y-auto text-xs text-slate-300">
           <p class="text-center py-4 text-slate-500">回收站为空</p>
@@ -1353,6 +1444,29 @@
             取消
           </button>
           <button id="btn-confirm-tx-delete" onclick="confirmTxSwipeDelete()" class="py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white text-xs font-bold shadow-lg shadow-rose-900/30 tap-highlight transition-colors">
+            确认删除
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Trash Permanent Delete Confirmation Modal -->
+    <div id="trash-delete-confirm-modal" class="hidden absolute inset-0 bg-black/75 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-fadeIn">
+      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 max-w-xs w-full shadow-2xl space-y-3.5 text-center">
+        <div class="w-12 h-12 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center mx-auto mb-1">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        </div>
+        <div>
+          <h3 class="font-bold text-base text-white tracking-tight">彻底删除账单</h3>
+          <p id="trash-delete-confirm-msg" class="text-xs text-slate-300 leading-relaxed mt-1.5 px-1">
+            确定要从回收站彻底删除该账单吗？删除后不可恢复。
+          </p>
+        </div>
+        <div class="grid grid-cols-2 gap-2.5 pt-1">
+          <button id="btn-cancel-trash-delete" onclick="closeTrashDeleteConfirmModal()" class="py-2.5 rounded-xl border border-slate-700 text-xs font-semibold text-slate-300 hover:bg-slate-800 active:bg-slate-700/80 tap-highlight transition-colors">
+            取消
+          </button>
+          <button id="btn-confirm-trash-delete" onclick="confirmTrashPermanentDelete()" class="py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white text-xs font-bold shadow-lg shadow-rose-900/30 tap-highlight transition-colors">
             确认删除
           </button>
         </div>
@@ -1394,7 +1508,8 @@
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
         </div>
         <div>
-          <h3 class="font-bold text-base text-white tracking-tight">确认删除分类</h3>
+          <h3 id="del-cat-confirm-title" class="font-bold text-base text-white tracking-tight">确认删除分类</h3>
+          <p id="category-delete-confirm-desc" class="text-xs text-slate-400 mt-2 leading-relaxed">确定要删除该分类吗？删除后不可恢复。</p>
         </div>
         <div class="grid grid-cols-2 gap-2.5 pt-1">
           <button type="button" id="btn-cancel-cat-delete" onclick="closeCategoryDeleteConfirmModal()" class="py-2.5 rounded-xl border border-slate-700 text-xs font-semibold text-slate-300 hover:bg-slate-800 active:bg-slate-700/80 tap-highlight transition-colors">

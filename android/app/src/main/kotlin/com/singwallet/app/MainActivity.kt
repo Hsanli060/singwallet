@@ -1,6 +1,7 @@
 package com.singwallet.app
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ContentValues
@@ -153,8 +154,31 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (filePathCallback != null) {
-            val results = WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
-            filePathCallback?.onReceiveValue(results)
+            val uris = mutableListOf<Uri>()
+            val data = result.data
+            if (result.resultCode == Activity.RESULT_OK && data != null) {
+                val clipData = data.clipData
+                if (clipData != null) {
+                    for (i in 0 until clipData.itemCount) {
+                        clipData.getItemAt(i)?.uri?.let { uri ->
+                            if (!uris.contains(uri)) {
+                                uris.add(uri)
+                            }
+                        }
+                    }
+                }
+                data.data?.let { uri ->
+                    if (!uris.contains(uri)) {
+                        uris.add(uri)
+                    }
+                }
+            }
+            val finalResults = if (uris.isNotEmpty()) {
+                uris.toTypedArray()
+            } else {
+                WebChromeClient.FileChooserParams.parseResult(result.resultCode, data)
+            }
+            filePathCallback?.onReceiveValue(finalResults)
             filePathCallback = null
         }
     }
@@ -588,15 +612,55 @@ class MainActivity : ComponentActivity() {
             ): Boolean {
                 this@MainActivity.filePathCallback?.onReceiveValue(null)
                 this@MainActivity.filePathCallback = filePathCallback
-                try {
-                    val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                        type = "image/*"
+
+                val isMultiple = fileChooserParams?.mode == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE ||
+                    fileChooserParams?.acceptTypes?.any { it.contains("image") } == true
+                val acceptTypes = fileChooserParams?.acceptTypes?.filter { it.isNotBlank() } ?: emptyList()
+                val isImagePick = acceptTypes.isEmpty() || acceptTypes.any { it.contains("image", ignoreCase = true) }
+
+                fun createGetContentIntent(): Intent {
+                    return Intent(Intent.ACTION_GET_CONTENT).apply {
+                        if (isImagePick) {
+                            type = "image/*"
+                            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                        } else {
+                            type = acceptTypes.firstOrNull() ?: "*/*"
+                            if (isMultiple) {
+                                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                            }
+                        }
                         addCategory(Intent.CATEGORY_OPENABLE)
                     }
-                    fileChooserLauncher.launch(intent)
-                    return true
+                }
+
+                try {
+                    if (isImagePick && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        try {
+                            val maxImages = try {
+                                MediaStore.getPickImagesMaxLimit().coerceAtMost(50)
+                            } catch (_: Throwable) {
+                                20
+                            }
+                            val intent = Intent(MediaStore.ACTION_PICK_IMAGES).apply {
+                                type = "image/*"
+                                putExtra(MediaStore.EXTRA_PICK_IMAGES_MAX, maxImages)
+                            }
+                            fileChooserLauncher.launch(intent)
+                            return true
+                        } catch (tiramisuEx: Throwable) {
+                            Log.w(TAG, "MediaStore.ACTION_PICK_IMAGES launch failed, fallback to ACTION_GET_CONTENT: ${tiramisuEx.message}")
+                            val fallbackIntent = createGetContentIntent()
+                            fileChooserLauncher.launch(fallbackIntent)
+                            return true
+                        }
+                    } else {
+                        val intent = createGetContentIntent()
+                        fileChooserLauncher.launch(intent)
+                        return true
+                    }
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to launch file chooser: ${e.message}", e)
+                    this@MainActivity.filePathCallback?.onReceiveValue(null)
                     this@MainActivity.filePathCallback = null
                     return false
                 }

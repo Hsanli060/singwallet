@@ -252,6 +252,7 @@
 #dedup-modal,
 #trash-modal,
 #tx-delete-confirm-modal,
+#trash-delete-confirm-modal,
 #category-edit-modal,
 #category-delete-confirm-modal {
   z-index: 50 !important;
@@ -716,6 +717,7 @@
   #dedup-modal,
   #trash-modal,
   #tx-delete-confirm-modal,
+  #trash-delete-confirm-modal,
   #category-edit-modal,
   #category-delete-confirm-modal {
     position: fixed !important;

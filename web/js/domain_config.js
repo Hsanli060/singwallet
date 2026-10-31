@@ -167,7 +167,7 @@
       id: 'unionpay',
       name: '云闪付',
       aliases: ['云闪付', '银联', 'unionpay'],
-      defaultAccounts: ['工商银行(5678)']
+      defaultAccounts: ['银行卡', '工商银行(5678)']
     }
   ];
 
@@ -175,7 +175,7 @@
   const CHANNEL_DEFAULT_ACCOUNT = {
     '微信': '钱包',
     '支付宝': '余额',
-    '云闪付': '工商银行(5678)'
+    '云闪付': '银行卡'
   };
 
   // 渠道专属内置账户定义与归一化
@@ -503,12 +503,12 @@
     }
 
     // 3. 提取卡号与括号类型
-    // 支持方括号 [5678], [尾号5678]；圆括号 (5678), （5678）, (尾号5678), （尾号5678）；或无括号 尾号5678 等
+    // 支持方括号 [5678], [尾号5678], 【5678】；圆括号 (5678), （5678）, (尾号5678), （尾号5678）；或无括号 尾号5678 等
     let isSquare = false;
     let cardDigits = '';
     let bankPart = str;
 
-    const squareMatch = str.match(/\[(?:尾号)?(\d{3,8})\]/);
+    const squareMatch = str.match(/[\[【](?:尾号)?(\d{3,8})[\]】]/);
     const roundMatch = str.match(/[（(](?:尾号)?(\d{3,8})[）)]/);
     const tailMatch = str.match(/(?:尾号|卡号|\s)(\d{3,8})/);
     const rawDigitsMatch = str.match(/(\d{4})/);
@@ -516,7 +516,7 @@
     if (squareMatch) {
       isSquare = true;
       cardDigits = squareMatch[1];
-      bankPart = str.replace(/\[(?:尾号)?\d{3,8}\]/, '');
+      bankPart = str.replace(/[\[【](?:尾号)?\d{3,8}[\]】]/, '');
     } else if (roundMatch) {
       isSquare = false;
       cardDigits = roundMatch[1];
@@ -569,8 +569,16 @@
       if (!channelCandidate) {
         channelCandidate = payment.channel || payment.channel_key || '';
       }
+      const pBank = payment.bank_name || '';
+      const pDigits = payment.card_last_4 || '';
       if (!accountCandidate) {
-        accountCandidate = payment.sub_type || payment.account || payment.display_name || '';
+        if (pBank && pDigits) {
+          accountCandidate = `${pBank}(${pDigits})`;
+        } else {
+          accountCandidate = payment.sub_type || payment.account || payment.display_name || '';
+        }
+      } else if (accountCandidate === '银行卡' && pBank && pDigits) {
+        accountCandidate = `${pBank}(${pDigits})`;
       }
     }
 
@@ -600,14 +608,14 @@
       account = '';
     }
 
-    // 若无账户，回退至该渠道的 SSOT 默认账户
+    // 若无账户，回退至该渠道的 SSOT 默认账户（云闪付通用默认 '银行卡'）
     if (!account) {
-      account = CHANNEL_DEFAULT_ACCOUNT[channel] || '钱包';
+      account = CHANNEL_DEFAULT_ACCOUNT[channel] || (channel === '云闪付' ? '银行卡' : '钱包');
       return { channel, account };
     }
 
-    // 若是银行卡（含 银行|卡|\[\d+\]|\(\d+\)|（\d+）|尾号\d+）
-    const isBankCard = /(?:银行|卡|\[\d+\]|[（(]\d+[）)]|尾号\d+)/.test(account);
+    // 若是银行卡（含 银行|卡|\[\d+\]|[（(]\d+[）)]|【\d+】|尾号\d+）
+    const isBankCard = /(?:银行|卡|\[\d+\]|[（(]\d+[）)]|【\d+】|尾号\d+)/.test(account);
     if (isBankCard) {
       return {
         channel: channel,
@@ -632,7 +640,7 @@
       }
     } else if (channel === '云闪付') {
       if (wechatBuiltin.includes(account) || alipayBuiltin.includes(account)) {
-        account = '工商银行(5678)';
+        account = '银行卡';
       }
     }
 
@@ -641,10 +649,35 @@
 
   /**
    * 支付方式结构化解析函数 (升级支持动态银行卡与 SSOT 归一化)
-   * @param {string} accStr
+   * @param {string|Object} accStr
    * @returns {{ channel: string, channel_key: string, sub_type: string, bank_name: string|null, card_last_4: string|null, display_name: string }}
    */
   function parsePaymentMethodString(accStr) {
+    if (accStr && typeof accStr === 'object') {
+      const channelCandidate = accStr.channel || accStr.channel_key || '';
+      const accountCandidate = accStr.sub_type || accStr.account || accStr.display_name || '';
+      const resolved = resolveChannelAndAccount(channelCandidate, accountCandidate, accStr);
+      let bank_name = accStr.bank_name || null;
+      let card_last_4 = accStr.card_last_4 || null;
+      if (!bank_name || !card_last_4) {
+        const bankMatch = resolved.account.match(/^(.*?)[（(\[【](?:尾号)?(\d{3,8})[）)\]】]$/);
+        if (bankMatch) {
+          bank_name = bankMatch[1];
+          card_last_4 = bankMatch[2];
+        } else if (/(?:银行|卡)/.test(resolved.account)) {
+          bank_name = resolved.account;
+        }
+      }
+      return {
+        channel: resolved.channel,
+        channel_key: resolved.channel === '微信' ? 'wechat' : (resolved.channel === '支付宝' ? 'alipay' : 'unionpay'),
+        sub_type: resolved.account,
+        bank_name: bank_name,
+        card_last_4: card_last_4,
+        display_name: `${resolved.channel} · ${resolved.account}`
+      };
+    }
+
     const clean = String(accStr || '').trim();
     let rawChannel = '';
     let rawAccount = clean;
@@ -673,7 +706,7 @@
     let card_last_4 = null;
 
     // 从规范化后的 account 中提取 bank_name 与 card_last_4
-    const bankMatch = account.match(/^(.*?)[（(\[](?:尾号)?(\d{3,8})[）)\]]$/);
+    const bankMatch = account.match(/^(.*?)[（(\[【](?:尾号)?(\d{3,8})[）)\]】]$/);
     if (bankMatch) {
       bank_name = bankMatch[1];
       card_last_4 = bankMatch[2];
@@ -739,9 +772,11 @@
       if ((target === '招商银行(8848)' || target === '招商银行储蓄卡' || target === '招商银行储蓄卡(1234)') && (optVal === '招商银行(8848)' || optVal === '招商银行储蓄卡(1234)')) return true;
       if (target === '建设银行(1234)' && optVal === '建设银行(1234)') return true;
       if (target === '工商银行(5678)' && optVal === '工商银行(5678)') return true;
+      if ((target === '银行卡' || target === '工商银行(5678)') && (optVal === '工商银行(5678)' || optVal === '银行卡')) return true;
       if (String(target).includes('·')) {
         const sub = String(target).split('·')[1].trim();
         if (optVal === sub || optVal.includes(sub) || sub.includes(optVal)) return true;
+        if ((optVal === '工商银行(5678)' || optVal === '银行卡') && (sub === '工商银行(5678)' || sub === '银行卡')) return true;
       }
 
       // 动态银行卡及方括号/圆括号容错匹配
@@ -749,11 +784,11 @@
       const cleanTarget = stripBankCardDecorations(target);
       if (cleanOpt && cleanTarget && cleanOpt === cleanTarget) return true;
 
-      const optDigits = (String(optVal).match(/\d{4}/) || [])[0];
-      const targetDigits = (String(target).match(/\d{4}/) || [])[0];
+      const optDigits = (String(optVal).match(/\d{3,8}/) || [])[0];
+      const targetDigits = (String(target).match(/\d{3,8}/) || [])[0];
       if (optDigits && targetDigits && optDigits === targetDigits) {
-        const optBank = cleanOpt.replace(/\(\d+\)/, '');
-        const targetBank = cleanTarget.replace(/\(\d+\)/, '');
+        const optBank = cleanOpt.replace(/[（(]\d+[）)]/, '');
+        const targetBank = cleanTarget.replace(/[（(]\d+[）)]/, '');
         if (optBank && targetBank && (optBank.includes(targetBank) || targetBank.includes(optBank))) {
           return true;
         }
@@ -769,18 +804,20 @@
       if ((target === '微信支付' || target === '微信钱包' || target === '微信') && optVal === '微信 · 钱包') return true;
       if ((target === '招商银行卡' || target === '招行卡') && optVal === '微信 · 招商银行(8848)') return true;
       if ((target === '支付宝' || target === '支付宝余额') && optVal === '支付宝 · 余额') return true;
-      if (target === '云闪付' && optVal === '云闪付 · 工商银行(5678)') return true;
+      if ((target === '云闪付' || target === '银联') && (optVal === '云闪付 · 工商银行(5678)' || optVal === '云闪付 · 银行卡')) return true;
+      if ((target === '云闪付 · 银行卡' || target === '银行卡') && (optVal === '云闪付 · 工商银行(5678)' || optVal === '云闪付 · 银行卡')) return true;
+      if ((target === '云闪付 · 工商银行(5678)' || target === '工商银行(5678)') && (optVal === '云闪付 · 银行卡' || optVal === '云闪付 · 工商银行(5678)')) return true;
 
       // 动态银行卡及方括号/圆括号容错匹配
       const cleanOpt = stripBankCardDecorations(optVal);
       const cleanTarget = stripBankCardDecorations(target);
       if (cleanOpt && cleanTarget && cleanOpt === cleanTarget) return true;
 
-      const optDigits = (String(optVal).match(/\d{4}/) || [])[0];
-      const targetDigits = (String(target).match(/\d{4}/) || [])[0];
+      const optDigits = (String(optVal).match(/\d{3,8}/) || [])[0];
+      const targetDigits = (String(target).match(/\d{3,8}/) || [])[0];
       if (optDigits && targetDigits && optDigits === targetDigits) {
-        const optBank = cleanOpt.replace(/\(\d+\)/, '');
-        const targetBank = cleanTarget.replace(/\(\d+\)/, '');
+        const optBank = cleanOpt.replace(/[（(]\d+[）)]/, '');
+        const targetBank = cleanTarget.replace(/[（(]\d+[）)]/, '');
         if (optBank && targetBank && (optBank.includes(targetBank) || targetBank.includes(optBank))) {
           return true;
         }
