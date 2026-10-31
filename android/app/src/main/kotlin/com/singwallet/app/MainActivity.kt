@@ -278,9 +278,9 @@ class MainActivity : ComponentActivity() {
 
     fun getAppVersion(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.0.7"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.0.8"
         } catch (_: Exception) {
-            "1.0.7"
+            "1.0.8"
         }
     }
 
@@ -502,7 +502,7 @@ class MainActivity : ComponentActivity() {
 
         // 注入 SingWallet 专属 UserAgent
         val defaultUa = settings.userAgentString
-        settings.userAgentString = "$defaultUa SingWalletAndroid/1.0.7 Mobile"
+        settings.userAgentString = "$defaultUa SingWalletAndroid/1.0.8 Mobile"
 
         wv.addJavascriptInterface(AndroidBridge(this), "AndroidBridge")
 
