@@ -46,7 +46,6 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
-import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
@@ -98,8 +97,6 @@ class MainActivity : ComponentActivity() {
             "js/ocr_vlm_engine.js",
             "js/app_controller.js"
         )
-
-        private val WEB_MUTABLE_FILES = HOT_MUTABLE_FILES
 
         @Volatile
         private var instance: MainActivity? = null
@@ -625,8 +622,7 @@ class MainActivity : ComponentActivity() {
         ingestionExecutor.execute {
             synchronized(scanLock) {
                 val candidateDirs = listOf(
-                    File(filesDir, "pending_lightning_captures"),
-                    File(filesDir, "lightning_captures")
+                    File(filesDir, "pending_lightning_captures")
                 )
                 for (dir in candidateDirs) {
                     try {
@@ -689,13 +685,6 @@ class MainActivity : ComponentActivity() {
         val script = """
             if (typeof window.onNativeScreenshotCaptured === 'function') {
                 window.onNativeScreenshotCaptured('$escapedDataUrl', '$escapedFileName', $isQuickTile);
-            } else if (typeof window.handleShortcutCapturedItem === 'function') {
-                window.handleShortcutCapturedItem({
-                    dataUrl: '$escapedDataUrl',
-                    source: '$source',
-                    fileName: '$escapedFileName',
-                    uri: ''
-                });
             }
         """.trimIndent()
         Log.i(TAG, "Dispatching lightning capture to WebView: fileName=$fileName, isQuickTile=$isQuickTile, len=${dataUrl.length}")
@@ -738,25 +727,6 @@ class MainActivity : ComponentActivity() {
         } else if (isFromCreate) {
             // 冷启动且未指定 dev_url 时，默认加载热更或内置离线页面
             webView?.loadUrl(resolveEntryUrl(intent))
-        }
-
-        // 2. 处理下拉控制中心「闪电记账」磁贴 Intent
-        handleQuickRecordIntent(intent)
-    }
-
-    private fun handleQuickRecordIntent(intent: Intent?) {
-        if (intent == null) return
-        val action = intent.action
-        val isQuickRecordTrigger = action == QuickRecordTileService.ACTION_TRIGGER_QUICK_RECORD ||
-                                   intent.getBooleanExtra("quick_record_tile", false)
-        if (isQuickRecordTrigger) {
-            Log.i(TAG, "Received Quick Settings Tile Trigger")
-            scanPendingLightningCaptures()
-            if (isPageLoaded) {
-                triggerQuickRecordInWeb()
-            } else {
-                pendingTileTrigger = true
-            }
         }
     }
 
@@ -838,24 +808,6 @@ class MainActivity : ComponentActivity() {
         }
 
         @JavascriptInterface
-        fun deleteScreenshot(uriString: String) {
-            // 相册监听已彻底移除，闪电记账在应用私有目录流转并自动清理，此处保留空实现兼容旧调用
-            Log.d(TAG, "deleteScreenshot ignored (no-op in private lightning capture mode): $uriString")
-        }
-
-        @JavascriptInterface
-        fun checkWatcherStatus(): String {
-            val isA11yRunning = SingWalletAccessibilityService.getInstance() != null ||
-                                SingWalletAccessibilityService.isServiceRunning() ||
-                                SingWalletAccessibilityService.checkAccessibilityEnabled(activity)
-            return JSONObject().apply {
-                put("enabled", isA11yRunning)
-                put("accessibilityEnabled", isA11yRunning)
-                put("mode", "lightning-tile")
-            }.toString()
-        }
-
-        @JavascriptInterface
         fun saveBackupFile(jsonContent: String, fileName: String): Boolean {
             val safeFileName = fileName.ifBlank { "singwallet_backup_${System.currentTimeMillis()}.json" }
             return try {
@@ -911,13 +863,6 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun isNativeApp(): Boolean {
             return true
-        }
-
-        @JavascriptInterface
-        fun triggerQuickRecord() {
-            activity.runOnUiThread {
-                activity.triggerQuickRecordInWeb()
-            }
         }
 
         @JavascriptInterface

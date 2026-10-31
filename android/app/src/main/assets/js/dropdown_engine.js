@@ -6,18 +6,191 @@
 (function (window) {
   'use strict';
 
+  // ================= 内部渠道与账户规范化辅助函数 =================
+  function _normChan(ch) {
+    if (window.DomainRegistry && typeof window.DomainRegistry.normalizeChannelName === 'function') {
+      return window.DomainRegistry.normalizeChannelName(ch);
+    }
+    if (typeof window.normalizeChannelName === 'function') {
+      return window.normalizeChannelName(ch);
+    }
+    const str = String(ch || '').trim();
+    if (!str) return '微信';
+    if (/支付宝|alipay/i.test(str)) return '支付宝';
+    if (/云闪付|银联|unionpay/i.test(str)) return '云闪付';
+    if (/微信|wechat|wx/i.test(str)) return '微信';
+    if (/现金/i.test(str)) return '现金';
+    return str || '微信';
+  }
+
+  function _normBankAcc(acc, ch) {
+    if (window.DomainRegistry && typeof window.DomainRegistry.normalizeBankCardAccount === 'function') {
+      return window.DomainRegistry.normalizeBankCardAccount(acc, ch);
+    }
+    if (typeof window.normalizeBankCardAccount === 'function') {
+      return window.normalizeBankCardAccount(acc, ch);
+    }
+    let s = String(acc || '').trim();
+    if (!s) return '';
+    if (s.includes(' · ')) {
+      s = s.split(' · ')[1].trim();
+    } else if (s.includes('·')) {
+      s = s.split('·')[1].trim();
+    }
+    // 保留原始方括号 [5678] 或圆括号 (5678)，不要把 [5678] 强转为 (5678)
+    const bracketMatch = s.match(/^(.*?)(\[|\()(\d{4})(\]|\))$/);
+    if (bracketMatch) {
+      const bank = bracketMatch[1].trim();
+      const left = bracketMatch[2];
+      const digits = bracketMatch[3];
+      const right = bracketMatch[4];
+      return `${bank}${left}${digits}${right}`;
+    }
+    const digitsMatch = s.match(/^(.*?)(\d{4})$/);
+    if (digitsMatch) {
+      const bank = digitsMatch[1].trim();
+      return `${bank}(${digitsMatch[2]})`;
+    }
+    return s;
+  }
+
+  function _resolveChanAcc(rawChan, rawAcc, payment) {
+    if (window.DomainRegistry && typeof window.DomainRegistry.resolveChannelAndAccount === 'function') {
+      return window.DomainRegistry.resolveChannelAndAccount(rawChan, rawAcc, payment);
+    }
+    if (typeof window.resolveChannelAndAccount === 'function') {
+      return window.resolveChannelAndAccount(rawChan, rawAcc, payment);
+    }
+    let channel = _normChan(rawChan || (payment && payment.channel) || '');
+    let account = _normBankAcc(rawAcc || (payment && payment.account) || '', channel);
+
+    if (channel === '支付宝' && account === '钱包') {
+      account = '余额';
+    }
+    if (channel === '微信' && account === '余额') {
+      account = '钱包';
+    }
+    if (!account) {
+      if (channel === '微信') account = '钱包';
+      else if (channel === '支付宝') account = '余额';
+      else if (channel === '云闪付') account = '工商银行(5678)';
+      else account = '钱包';
+    }
+    return { channel, account };
+  }
+
   /**
-   * 动态计算菜单展开朝向（如果屏幕下方空间小于 210px，且下方有底部导航栏阻挡，自动向上展开）
+   * 确保指定账户在下拉框选项中存在，若不存在则动态创建并注入
+   */
+  function ensureAccountOptionInDropdown(selectId, channel, accountValue) {
+    if (!selectId || !accountValue) return null;
+    const pureId = selectId.replace(/^menu-/, '').replace(/^dropdown-wrap-/, '');
+    const normChan = _normChan(channel);
+    const normAcc = _normBankAcc(accountValue, normChan);
+    if (!normAcc) return null;
+
+    const menu = document.getElementById('menu-' + pureId);
+    if (!menu) return null;
+
+    // 1. 如果当前渠道下已有同名或等价选项，直接复用
+    const existing = Array.from(menu.querySelectorAll('.custom-dropdown-option')).find(opt => {
+      const c = opt.getAttribute('data-channel');
+      const v = opt.getAttribute('data-value');
+      return (!c || c === normChan) && (v === normAcc || (window.isOptionMatch && window.isOptionMatch(pureId, v, normAcc)));
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    // 2. 如果该账户是微信/支付宝内置专属钱包类账户 (钱包/零钱/零钱通/余额/余额宝/花呗)，绝不跨渠道重复创建
+    const isBuiltinExclusive = ['钱包', '零钱', '零钱通', '余额', '余额宝', '花呗', '现金'].includes(normAcc);
+    if (isBuiltinExclusive) {
+      const anyExisting = Array.from(menu.querySelectorAll('.custom-dropdown-option')).find(opt => {
+        const v = opt.getAttribute('data-value');
+        return v === normAcc || (window.isOptionMatch && window.isOptionMatch(pureId, v, normAcc));
+      });
+      if (anyExisting) return anyExisting;
+    }
+
+    const optDiv = document.createElement('div');
+    optDiv.className = 'custom-dropdown-option rounded-xl';
+    optDiv.tabIndex = 0;
+    optDiv.setAttribute('data-channel', normChan);
+    optDiv.setAttribute('data-value', normAcc);
+    optDiv.setAttribute('onclick', `selectCustomDropdownOption('${pureId}', '${normAcc}', event)`);
+    optDiv.setAttribute('onkeydown', `if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('${pureId}', '${normAcc}', event);event.preventDefault();}`);
+
+    optDiv.innerHTML = `<span class="truncate">${normAcc}</span><span class="opt-check">✓</span>`;
+    menu.appendChild(optDiv);
+    return optDiv;
+  }
+
+  /**
+   * 实时根据选定渠道过滤账户下拉列表选项的可见性
+   */
+  function filterAccountDropdownOptions(id) {
+    const pureId = (id || '').replace(/^menu-/, '').replace(/^dropdown-wrap-/, '');
+    if (pureId !== 'select-account' && pureId !== 'manual-pay-sub') return;
+
+    const channelInputId = pureId === 'select-account' ? 'select-channel' : 'manual-pay-channel';
+    const channelInput = document.getElementById(channelInputId);
+    const currentChannel = _normChan(channelInput ? channelInput.value : '');
+
+    const menu = document.getElementById('menu-' + pureId);
+    if (!menu) return;
+
+    const options = menu.querySelectorAll('.custom-dropdown-option');
+    options.forEach(opt => {
+      const optChannel = opt.getAttribute('data-channel');
+      if (!optChannel || optChannel === currentChannel) {
+        opt.style.display = '';
+      } else {
+        opt.style.display = 'none';
+      }
+    });
+  }
+
+  /**
+   * 动态计算菜单展开朝向（结合底部导航栏与屏幕容器计算边界，动态控制最大高度与向上展开）
    */
   function adjustDropdownPosition(wrap, menu) {
     if (!wrap || !menu) return;
     try {
       const rect = wrap.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom - 52;
-      if (spaceBelow < 210) {
+      let bottomBoundary = window.innerHeight;
+      const navBar = document.getElementById('bottom-nav-bar');
+      if (navBar) {
+        const navRect = navBar.getBoundingClientRect();
+        if (navRect.top > 0 && navRect.top < bottomBoundary) {
+          bottomBoundary = navRect.top;
+        }
+      }
+      const screenContainer = document.getElementById('screen-container');
+      if (screenContainer) {
+        const scRect = screenContainer.getBoundingClientRect();
+        if (scRect.bottom > 0 && scRect.bottom < bottomBoundary) {
+          bottomBoundary = scRect.bottom;
+        }
+      }
+
+      let topBoundary = 0;
+      if (screenContainer) {
+        const scRect = screenContainer.getBoundingClientRect();
+        if (scRect.top > 0) {
+          topBoundary = scRect.top;
+        }
+      }
+
+      const spaceBelow = bottomBoundary - rect.bottom - 12;
+      const spaceAbove = rect.top - topBoundary - 12;
+
+      if (spaceBelow < 220 && spaceAbove > spaceBelow) {
         menu.classList.add('menu-dropup');
+        menu.style.maxHeight = Math.min(260, Math.max(120, Math.floor(spaceAbove - 8))) + 'px';
       } else {
         menu.classList.remove('menu-dropup');
+        menu.style.maxHeight = Math.min(220, Math.max(100, Math.floor(spaceBelow - 8))) + 'px';
       }
     } catch (e) {}
   }
@@ -31,6 +204,7 @@
     const trigger = wrap ? wrap.querySelector('.custom-dropdown-trigger') : null;
     if (!menu) return;
 
+    filterAccountDropdownOptions(id);
     closeAllCustomDropdowns();
     adjustDropdownPosition(wrap, menu);
     menu.classList.add('open');
@@ -50,6 +224,7 @@
     const trigger = wrap ? wrap.querySelector('.custom-dropdown-trigger') : null;
     if (!menu) return;
 
+    filterAccountDropdownOptions(id);
     const isOpen = menu.classList.contains('open');
     closeAllCustomDropdowns();
 
@@ -185,17 +360,52 @@
     const wrap = document.getElementById('dropdown-wrap-' + id);
     if (!menu) return;
 
+    let currentChannel = '';
+    if (id === 'select-account' || id === 'manual-pay-sub') {
+      const chanInputId = id === 'select-account' ? 'select-channel' : 'manual-pay-channel';
+      const chanInput = document.getElementById(chanInputId);
+      currentChannel = _normChan(chanInput ? chanInput.value : '');
+      if (value) {
+        ensureAccountOptionInDropdown(id, currentChannel, value);
+      }
+      filterAccountDropdownOptions(id);
+    }
+
     const options = menu.querySelectorAll('.custom-dropdown-option');
     let found = false;
     let displayLabel = value;
     let matchedCatIcon = null;
 
+    let bestMatchOpt = null;
+    const matchFn = window.isOptionMatch || (window.DomainRegistry && window.DomainRegistry.isOptionMatch);
+
+    // 优先选中与当前渠道完全匹配的选项
     options.forEach(opt => {
       const optVal = opt.getAttribute('data-value');
-      const matchFn = window.isOptionMatch || (window.DomainRegistry && window.DomainRegistry.isOptionMatch);
+      const optChan = opt.getAttribute('data-channel');
       const isMatched = matchFn ? matchFn(id, optVal, value) : (optVal === String(value));
 
       if (isMatched) {
+        if (currentChannel && optChan === currentChannel) {
+          bestMatchOpt = opt;
+        } else if (!bestMatchOpt && (!optChan || !currentChannel)) {
+          bestMatchOpt = opt;
+        }
+      }
+    });
+
+    if (!bestMatchOpt) {
+      options.forEach(opt => {
+        const optVal = opt.getAttribute('data-value');
+        const isMatched = matchFn ? matchFn(id, optVal, value) : (optVal === String(value));
+        if (isMatched && !bestMatchOpt) {
+          bestMatchOpt = opt;
+        }
+      });
+    }
+
+    options.forEach(opt => {
+      if (opt === bestMatchOpt) {
         opt.classList.add('selected');
         const span = opt.querySelector('.truncate') || opt.querySelector('span');
         if (span) {
@@ -275,6 +485,9 @@
       // 初始化显示标签
       syncCustomDropdownFromValue(id, input.value);
     });
+
+    filterAccountDropdownOptions('select-account');
+    filterAccountDropdownOptions('manual-pay-sub');
 
     // 绑定全局点击外部及 Escape 关闭事件 (单例绑定)
     if (!window.__dropdownListenersAttached) {
@@ -371,25 +584,33 @@
 
   // ================= 支付渠道联动辅助函数 =================
   function onDraftChannelChange(channel) {
+    const normChan = _normChan(channel);
+    filterAccountDropdownOptions('select-account');
     const accMenu = document.getElementById('menu-select-account');
     if (!accMenu) return;
-    const options = accMenu.querySelectorAll('.custom-dropdown-option');
-    let firstMatch = null;
-    options.forEach(opt => {
-      const optChannel = opt.getAttribute('data-channel');
-      if (!optChannel || optChannel === channel) {
-        opt.style.display = '';
-        if (!firstMatch) firstMatch = opt.getAttribute('data-value');
-      } else {
-        opt.style.display = 'none';
-      }
-    });
+
+    const visibleOptions = Array.from(accMenu.querySelectorAll('.custom-dropdown-option')).filter(opt => opt.style.display !== 'none');
     const curAccInput = document.getElementById('select-account');
     const curAcc = curAccInput ? curAccInput.value : '';
-    const curOpt = accMenu.querySelector(`[data-value="${curAcc}"]`);
-    if (!curOpt || curOpt.getAttribute('data-channel') !== channel) {
-      if (firstMatch) {
-        selectCustomDropdownOption('select-account', firstMatch);
+
+    const isCurrentValid = visibleOptions.some(opt => {
+      const v = opt.getAttribute('data-value');
+      return v === curAcc || (window.isOptionMatch && window.isOptionMatch('select-account', v, curAcc));
+    });
+
+    if (!isCurrentValid) {
+      let defaultAcc = '';
+      if (normChan === '微信') {
+        defaultAcc = '钱包';
+      } else if (normChan === '支付宝') {
+        defaultAcc = '余额';
+      } else if (normChan === '云闪付') {
+        defaultAcc = '工商银行(5678)';
+      }
+      const hasDefault = visibleOptions.find(opt => opt.getAttribute('data-value') === defaultAcc);
+      const targetAcc = hasDefault ? defaultAcc : (visibleOptions[0] ? visibleOptions[0].getAttribute('data-value') : defaultAcc);
+      if (targetAcc) {
+        selectCustomDropdownOption('select-account', targetAcc);
       }
     }
   }
@@ -449,6 +670,8 @@
   window.selectCustomDropdownOption = selectCustomDropdownOption;
   window.syncCustomDropdownFromValue = syncCustomDropdownFromValue;
   window.initAllCustomDropdowns = initAllCustomDropdowns;
+  window.filterAccountDropdownOptions = filterAccountDropdownOptions;
+  window.ensureAccountOptionInDropdown = ensureAccountOptionInDropdown;
 
   window.getTodayDateString = getTodayDateString;
   window.formatCurrentDateTime = formatCurrentDateTime;
@@ -463,5 +686,16 @@
   window.onManualChannelChange = onManualChannelChange;
   window.onManualSubChange = onManualSubChange;
   window.updateManualAccountCombined = updateManualAccountCombined;
+
+  // 仅在全局尚未提供时挂载内部安全兜底函数，严禁覆盖 domain_config.js 提供的实现
+  if (typeof window.normalizeBankCardAccount !== 'function') {
+    window.normalizeBankCardAccount = _normBankAcc;
+  }
+  if (typeof window.normalizeChannelName !== 'function') {
+    window.normalizeChannelName = _normChan;
+  }
+  if (typeof window.resolveChannelAndAccount !== 'function') {
+    window.resolveChannelAndAccount = _resolveChanAcc;
+  }
 
 })(typeof window !== 'undefined' ? window : this);

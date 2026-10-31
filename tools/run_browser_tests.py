@@ -2026,37 +2026,11 @@ async function runAllTestsSuite() {
     // ========================================================
     console.log("=== Group 39: Shortcut Capture, Draft Dropdown Ordering & Plump Controls ===");
 
-    // 1. 验证快捷指令无感抓屏模块卡片 (#shortcut-capture-card) 与背部轻敲指引
+    // 1. 验证闪电记账模块卡片 (#shortcut-capture-card)
     const scCard = document.getElementById('shortcut-capture-card');
     assert(scCard !== null, "Group 39: #shortcut-capture-card exists in rules view");
-    const scUrl = document.getElementById('shortcut-api-url');
-    assert(scUrl !== null && scUrl.innerText.includes('/api/shortcut/adb-capture'), "Group 39: #shortcut-api-url displays correct adb capture URL");
-    const scDelayedBtn = document.getElementById('btn-trigger-delayed-capture');
-    if (scDelayedBtn) assert(scDelayedBtn !== null, "Group 39: #btn-trigger-delayed-capture exists");
-    assert(typeof window.triggerDelayedPhoneCapture === 'function', "Group 39: window.triggerDelayedPhoneCapture function is defined");
-    assert(typeof window.copyShortcutApiUrl === 'function', "Group 39: window.copyShortcutApiUrl function is defined");
-    assert(typeof window.startShortcutPolling === 'function', "Group 39: window.startShortcutPolling function is defined");
 
-    // 1.1 背部轻敲记账弹窗指引与监听开关
-    const btGuideBtn = document.getElementById('btn-open-backtap-guide');
-    if (btGuideBtn) assert(btGuideBtn !== null, "Group 39: #btn-open-backtap-guide 存在");
-    const btGuideModal = document.getElementById('backtap-guide-modal');
-    assert(btGuideModal !== null, "Group 39: #backtap-guide-modal 存在");
-    openBackTapGuideModal();
-    assert(!btGuideModal.classList.contains('hidden'), "Group 39: openBackTapGuideModal 正常弹出指引");
-    closeBackTapGuideModal();
-    assert(btGuideModal.classList.contains('hidden'), "Group 39: closeBackTapGuideModal 正常关闭指引");
-
-    const btToggle = document.getElementById('backtap-watch-toggle');
-    assert(btToggle !== null, "Group 39: #backtap-watch-toggle 存在");
-    const btStatusLabel = document.getElementById('backtap-status-label');
-    assert(btStatusLabel !== null, "Group 39: #backtap-status-label 存在");
-    toggleBackTapWatcher(false);
-    assert(btStatusLabel.innerText.includes('监听已暂停'), "Group 39: toggleBackTapWatcher(false) 状态更新为 监听已暂停");
-    toggleBackTapWatcher(true);
-    assert(btStatusLabel.innerText.includes('截屏监听中'), "Group 39: toggleBackTapWatcher(true) 状态恢复为 截屏监听中");
-
-    // 1.1.1 闪电记账无障碍后台抓屏服务状态与一键跳转开启引导断言
+    // 1.1 闪电记账无障碍后台抓屏服务状态与一键跳转开启引导断言
     const a11yBadge = document.getElementById('a11y-service-status-badge');
     assert(a11yBadge !== null, "Group 39: #a11y-service-status-badge exists");
     const a11yBtn = document.getElementById('btn-toggle-a11y-service');
@@ -2102,15 +2076,10 @@ async function runAllTestsSuite() {
     // ========================================================
     console.log("=== Group 40: Background Capture Zero Loss & Offline Resilience ===");
 
-    // 1. 验证 pollShortcutQueueOnce 在 file: 协议下静默拦截，杜绝网络异常与 WebView 错误日志
-    assert(typeof window.pollShortcutQueueOnce === 'function', "Group 40: window.pollShortcutQueueOnce exists");
-    pollShortcutQueueOnce();
-    assert(typeof pollShortcutQueueOnce === 'function', "Group 40: pollShortcutQueueOnce executed safely without throwing");
-
-    // 2. 验证 handleShortcutCapturedItem 增强：日志记录、附加上下文标记、全站零硬编码 Emoji
+    // 1. 验证 handleShortcutCapturedItem 增强：日志记录、附加上下文标记、全站零硬编码 Emoji
     assert(typeof window.handleShortcutCapturedItem === 'function', "Group 40: window.handleShortcutCapturedItem exists");
 
-    // 3. 场景 A：未配置大模型 API Key 时，后台闪电抓屏零丢失保障验证
+    // 2. 场景 A：未配置大模型 API Key 时，后台闪电抓屏零丢失保障验证
     const vlmKeyInput40 = document.getElementById('vlm-api-key');
     if (vlmKeyInput40) vlmKeyInput40.value = '';
     if (window.vlmConfig) window.vlmConfig.apiKey = '';
@@ -2334,7 +2303,6 @@ async function runAllTestsSuite() {
     assert(allMonthlyData['2026-11'].exp === '0.30', "Group 41 (Bug 6): IEEE 754 float precision 0.1 + 0.2 === '0.30'");
 
     // --- 新规范：背部轻敲截屏监听已弃用，不自动轮询相册，保留双触发入口 ---
-    assert(typeof window.initLocalShortcutWatcher === 'function' && window.initLocalShortcutWatcher() === false, "Group 41 (Capture Spec): initLocalShortcutWatcher is disabled (returns false, no auto album polling)");
     assert(typeof window.onNativeScreenshotCaptured === 'function' && typeof window.triggerQuickTileCapture === 'function', "Group 41 (Capture Spec): Lightning tile capture entrypoints are exposed");
 
     // ========================================================
@@ -2496,6 +2464,229 @@ async function runAllTestsSuite() {
       window.fetch = originalFetch;
       delete window.AndroidBridge;
     }
+
+    // ========================================================
+    // Group 43: 渠道-账户互斥与首次点击下拉过滤专项回归 (Bug 1 专项测试)
+    // ========================================================
+    console.log("=== Group 43: Channel-Account Mutex & Dropdown Filter Regression ===");
+    switchTab('drafts');
+    
+    // 1. 测试当草稿渠道为「支付宝」且原始账户误传为「钱包」时，loadDraftData 自动修正为「余额」
+    const alipayBugDraft = {
+      id: 'draft-bug-alipay-mutex',
+      merchant: '测试商户-支付宝互斥校验',
+      amount: 68.80,
+      amountInCents: 6880,
+      channel: '支付宝',
+      account: '钱包', // 原始账户误传为 钱包
+      category: '日常购物',
+      categoryName: '日常购物',
+      confidence: 96,
+      rule: '测试规则-支付宝互斥',
+      orderId: '202610310001',
+      orderTime: '2026-10-31 10:00:00',
+      time: '2026-10-31 10:00:00',
+      payment: { channel: '支付宝', sub_type: '钱包', display_name: '支付宝 · 钱包' }
+    };
+
+    draftQueue = [alipayBugDraft];
+    currentDraftIndex = 0;
+    renderDraftQueue();
+    loadDraftData(alipayBugDraft);
+
+    const selChanEl = document.getElementById('select-channel');
+    const labelChanEl = document.getElementById('label-select-channel');
+    const selAccEl = document.getElementById('select-account');
+    const labelAccEl = document.getElementById('label-select-account');
+
+    assert(selChanEl && selChanEl.value === '支付宝', "Group 43: Draft channel correctly set to 支付宝");
+    assert(labelChanEl && labelChanEl.textContent.trim() === '支付宝', "Group 43: Channel label shows 支付宝");
+    assert(selAccEl && selAccEl.value === '余额', "Group 43: Erroneous account '钱包' under '支付宝' automatically corrected to '余额'");
+    assert(labelAccEl && labelAccEl.textContent.trim() === '余额', "Group 43: Account label updated to '余额'");
+
+    // 2. 测试首次点击打开 #menu-select-account 时仅显示支付宝下的选项
+    // 微信专有选项（钱包、零钱通、招商银行(8848)）display 必须为 'none'
+    // 支付宝选项（余额、余额宝、建设银行(1234)）display 必须不为 'none'
+    toggleCustomDropdown('select-account');
+    const accMenuEl = document.getElementById('menu-select-account');
+    assert(accMenuEl && accMenuEl.classList.contains('open'), "Group 43: #menu-select-account is open on first click");
+
+    const optWallet = accMenuEl.querySelector('[data-channel="微信"][data-value="钱包"]');
+    const optChange = accMenuEl.querySelector('[data-channel="微信"][data-value="零钱通"]');
+    const optCmb = accMenuEl.querySelector('[data-channel="微信"][data-value="招商银行(8848)"]');
+    const optBalance = accMenuEl.querySelector('[data-channel="支付宝"][data-value="余额"]');
+    const optYeb = accMenuEl.querySelector('[data-channel="支付宝"][data-value="余额宝"]');
+    const optCcb = accMenuEl.querySelector('[data-channel="支付宝"][data-value="建设银行(1234)"]');
+
+    assert(optWallet && optWallet.style.display === 'none', "Group 43: WeChat '钱包' option display is 'none' when channel is Alipay");
+    assert(optChange && optChange.style.display === 'none', "Group 43: WeChat '零钱通' option display is 'none' when channel is Alipay");
+    assert(optCmb && optCmb.style.display === 'none', "Group 43: WeChat '招商银行(8848)' option display is 'none' when channel is Alipay");
+
+    assert(optBalance && optBalance.style.display !== 'none', "Group 43: Alipay '余额' option display is not none");
+    assert(optBalance && optBalance.classList.contains('selected'), "Group 43: Alipay '余额' option has 'selected' class");
+    assert(optYeb && optYeb.style.display !== 'none', "Group 43: Alipay '余额宝' option display is not none");
+    assert(optCcb && optCcb.style.display !== 'none', "Group 43: Alipay '建设银行(1234)' option display is not none");
+
+    closeAllCustomDropdowns();
+
+    // 3. 对称性逆向验证：测试当草稿为「微信」且原始账户误传为「余额」时，自动修正为「钱包」，且仅显示微信选项
+    const wechatBugDraft = {
+      id: 'draft-bug-wechat-mutex',
+      merchant: '测试商户-微信互斥校验',
+      amount: 32.50,
+      amountInCents: 3250,
+      channel: '微信',
+      account: '余额', // 原始账户误传为 余额
+      category: '餐饮美食',
+      categoryName: '餐饮美食',
+      confidence: 97,
+      rule: '测试规则-微信互斥',
+      orderId: '202610310002',
+      orderTime: '2026-10-31 10:05:00',
+      time: '2026-10-31 10:05:00',
+      payment: { channel: '微信', sub_type: '余额', display_name: '微信 · 余额' }
+    };
+    loadDraftData(wechatBugDraft);
+    assert(selChanEl.value === '微信', "Group 43: Draft channel correctly set to 微信");
+    assert(selAccEl.value === '钱包', "Group 43: Erroneous account '余额' under '微信' automatically corrected to '钱包'");
+    assert(labelAccEl.textContent.trim() === '钱包', "Group 43: Account label updated to '钱包'");
+
+    toggleCustomDropdown('select-account');
+    assert(optWallet && optWallet.style.display !== 'none', "Group 43: WeChat '钱包' option is visible when channel is WeChat");
+    assert(optWallet && optWallet.classList.contains('selected'), "Group 43: WeChat '钱包' option has 'selected' class");
+    assert(optBalance && optBalance.style.display === 'none', "Group 43: Alipay '余额' option display is 'none' when channel is WeChat");
+    assert(optYeb && optYeb.style.display === 'none', "Group 43: Alipay '余额宝' option display is 'none' when channel is WeChat");
+    closeAllCustomDropdowns();
+
+    // ========================================================
+    // Group 44: 动态银行卡识别规范化与动态下拉注入专项回归 (Bug 2 专项测试)
+    // ========================================================
+    console.log("=== Group 44: Dynamic Bank Card Normalization & Dynamic Injection Regression ===");
+    
+    // 1. 规范化纯函数断言验证
+    const normBankAccFn = window.normalizeBankCardAccount || (window.DomainRegistry && window.DomainRegistry.normalizeBankCardAccount);
+    assert(typeof normBankAccFn === 'function', "Group 44: normalizeBankCardAccount function is defined and callable");
+    assert(normBankAccFn("工商银行银联储蓄卡[5678]") === "工商银行[5678]", "Group 44: normalizeBankCardAccount('工商银行银联储蓄卡[5678]') === '工商银行[5678]'");
+    assert(normBankAccFn("中国工商银行储蓄卡(9988)") === "工商银行(9988)", "Group 44: normalizeBankCardAccount('中国工商银行储蓄卡(9988)') === '工商银行(9988)'");
+    assert(normBankAccFn("中国农业银行借记卡(1122)") === "农业银行(1122)", "Group 44: normalizeBankCardAccount('中国农业银行借记卡(1122)') === '农业银行(1122)'");
+    assert(normBankAccFn("招商银行信用卡[3344]") === "招商银行[3344]", "Group 44: normalizeBankCardAccount('招商银行信用卡[3344]') === '招商银行[3344]'");
+    assert(normBankAccFn("中国邮政储蓄银行储蓄卡(5566)") === "邮储银行(5566)", "Group 44: normalizeBankCardAccount('中国邮政储蓄银行储蓄卡(5566)') === '邮储银行(5566)'");
+
+    // 2. 动态银行卡草稿加载与下拉选项自动创建并选中
+    const dynamicCardDraft = {
+      id: 'draft-dynamic-card-injection',
+      merchant: '测试商户-动态银行卡注入',
+      amount: 158.00,
+      amountInCents: 15800,
+      channel: '支付宝',
+      account: '工商银行银联储蓄卡[5678]',
+      category: '日常购物',
+      categoryName: '日常购物',
+      confidence: 99,
+      orderId: '202610310003',
+      orderTime: '2026-10-31 10:10:00',
+      time: '2026-10-31 10:10:00',
+      payment: { channel: '支付宝', sub_type: '工商银行银联储蓄卡[5678]', display_name: '支付宝 · 工商银行银联储蓄卡[5678]' }
+    };
+
+    loadDraftData(dynamicCardDraft);
+    assert(selChanEl.value === '支付宝', "Group 44: Dynamic card draft channel is 支付宝");
+    assert(selAccEl.value === '工商银行[5678]', "Group 44: Dynamic card draft account normalized to '工商银行[5678]'");
+    assert(labelAccEl.textContent.trim() === '工商银行[5678]', "Group 44: Account label synced to '工商银行[5678]'");
+
+    // 检查 #menu-select-account 中动态创建的选项
+    const dynamicCardOpt = accMenuEl.querySelector('[data-value="工商银行[5678]"]');
+    assert(dynamicCardOpt !== null, "Group 44: Option '工商银行[5678]' was dynamically created and injected into #menu-select-account");
+    assert(dynamicCardOpt && dynamicCardOpt.getAttribute('data-channel') === '支付宝', "Group 44: Dynamically created option has data-channel='支付宝'");
+    assert(dynamicCardOpt && dynamicCardOpt.classList.contains('selected'), "Group 44: Dynamically created option has 'selected' class");
+    assert(dynamicCardOpt && dynamicCardOpt.style.display !== 'none', "Group 44: Dynamically created option is visible (display !== 'none')");
+
+    // 3. 验证 ocr_vlm_engine.js 的 Prompt 包含 'account' 及银行卡剔除修饰词的约束说明
+    const vlmPromptText = (typeof window.buildVlmPromptText === 'function')
+      ? window.buildVlmPromptText()
+      : '';
+
+    assert(vlmPromptText !== '', "Group 44: VLM Prompt text generated successfully");
+    assert(vlmPromptText.includes('"account": "支出账户"'), "Group 44: VLM Prompt contains JSON property 'account': '支出账户'");
+    assert(vlmPromptText.includes('剔除“中国”、“银联”、“储蓄卡”、“借记卡”、“信用卡”等卡种修饰词'), "Group 44: VLM Prompt contains card modifier stripping instructions");
+    assert(vlmPromptText.includes('如“工商银行银联储蓄卡[5678]”输出为“工商银行[5678]”'), "Group 44: VLM Prompt contains square bracket card normalization example");
+    assert(vlmPromptText.includes('“中国工商银行储蓄卡(5678)”输出为“工商银行(5678)”'), "Group 44: VLM Prompt contains round bracket card normalization example");
+
+    // 4. 验证结构化 Schema 包含 account 字段
+    const structuredSchema = window.BILL_STRUCTURED_SCHEMA || (window.DomainRegistry && window.DomainRegistry.getConfig().schema);
+    assert(structuredSchema &&
+           structuredSchema.json_schema &&
+           structuredSchema.json_schema.schema &&
+           structuredSchema.json_schema.schema.properties &&
+           structuredSchema.json_schema.schema.properties.account !== undefined,
+           "Group 44: VLM structured output JSON schema contains 'account' property definition");
+
+    // 5. 验证 formatVlmResult 对大模型提取结果的账户规范化输出
+    const mockRawResult = {
+      merchant: "测试商户",
+      amount: 28.5,
+      category: "日常购物",
+      time: "2026-10-31 12:00:00",
+      channel: "支付宝",
+      account: "中国工商银行银联储蓄卡[5678]",
+      orderId: "202610310001"
+    };
+    const formattedVlmResult = window.formatVlmResult(mockRawResult);
+    assert(formattedVlmResult && formattedVlmResult.account === '工商银行[5678]', "Group 44: formatVlmResult normalizes extracted bank card to '工商银行[5678]'");
+    assert(formattedVlmResult && formattedVlmResult.channel === '支付宝', "Group 44: formatVlmResult preserves channel 支付宝");
+    assert(formattedVlmResult && formattedVlmResult.amount === 28.5, "Group 44: formatVlmResult extracts amount 28.5");
+
+    // ========================================================
+    // Group 45: 分类下拉防底部导航栏遮挡专项回归 (Bug 3 专项测试)
+    // ========================================================
+    console.log("=== Group 45: Category Dropdown Anti-Occlusion Regression ===");
+    switchTab('drafts');
+    resetDemoDrafts();
+    loadDraftData(draftQueue[0]);
+
+    // 1. 添加多个自定义分类标签以撑大下拉菜单选项数量
+    const testCustomCats = ['数码潮玩', '宠物生活', '健身运动', '文化阅读', '投资理财', '美妆个护'];
+    for (const cat of testCustomCats) {
+      window.DomainRegistry.addCategory(cat);
+    }
+    if (typeof window.syncAllCategoryUIs === 'function') {
+      window.syncAllCategoryUIs();
+    }
+
+    // 2. 打开 #menu-select-draft-category
+    toggleCustomDropdown('select-draft-category');
+    const draftCatMenu = document.getElementById('menu-select-draft-category');
+    const navBar = document.getElementById('bottom-nav-bar');
+    const catWrapEl = document.getElementById('dropdown-wrap-select-draft-category');
+
+    assert(draftCatMenu && draftCatMenu.classList.contains('open'), "Group 45: #menu-select-draft-category is open");
+    const catMenuRect = draftCatMenu.getBoundingClientRect();
+    const bottomNavRect = navBar.getBoundingClientRect();
+    const catWrapRect = catWrapEl.getBoundingClientRect();
+
+    // 3. 核心断言：验证 menu.getBoundingClientRect().bottom <= navBar.getBoundingClientRect().top（或具备 menu-dropup 向上展开），绝不被 #bottom-nav-bar 遮挡
+    const hasDropupClass = draftCatMenu.classList.contains('menu-dropup');
+    const isAboveNavBar = catMenuRect.bottom <= bottomNavRect.top + 1.0;
+    const isAntiOccluded = hasDropupClass || isAboveNavBar;
+
+    assert(isAntiOccluded, "Group 45: Draft category menu is protected from occlusion (has dropup or bottom <= navBar.top)");
+    assert(hasDropupClass, "Group 45: Draft category menu has 'menu-dropup' class applied when bottom space is restricted");
+    assert(catMenuRect.top < catWrapRect.top, "Group 45: Dropup menu extends upwards above trigger wrapper");
+
+    closeAllCustomDropdowns();
+    assert(!draftCatMenu.classList.contains('open'), "Group 45: Category menu closed cleanly");
+
+    // 4. 清理还原自定义分类
+    if (typeof window.resetCategories === 'function') {
+      window.resetCategories();
+    } else if (window.DomainRegistry && typeof window.DomainRegistry.resetCategories === 'function') {
+      window.DomainRegistry.resetCategories();
+    }
+    if (typeof window.syncAllCategoryUIs === 'function') {
+      window.syncAllCategoryUIs();
+    }
+    try { localStorage.removeItem('singwallet_custom_categories'); } catch(e) {}
+    switchTab('transactions');
 
 
     // 4. 测试收尾：清理全部测试数据，确保 App 还原为 100% 干净状态

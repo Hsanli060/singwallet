@@ -37,7 +37,6 @@ class QuickRecordTileService : TileService() {
 
     companion object {
         private const val TAG = "QuickRecordTile"
-        const val ACTION_TRIGGER_QUICK_RECORD = "com.singwallet.app.action.QUICK_RECORD_CAPTURE"
         private const val PANEL_COLLAPSE_DELAY_MS = 340L
         private const val TARGET_MAX_WIDTH = 1080
     }

@@ -150,8 +150,8 @@
   width: auto;
   display: inline-flex;
 }
-.custom-dropdown-container.z-active {
-  z-index: 60 !important;
+.custom-dropdown-container.z-active, .custom-dropdown-container.dropdown-open, .dropdown-open {
+  z-index: 200 !important;
 }
 
 .custom-dropdown-trigger {
@@ -194,6 +194,8 @@
   min-width: 140px;
   max-height: 220px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   background: #0f172a !important;
   -webkit-backdrop-filter: blur(24px);
   backdrop-filter: blur(24px);
@@ -201,7 +203,7 @@
   border-radius: 1rem; /* rounded-2xl (16px) */
   padding: 6px;
   box-shadow: 0 20px 35px -8px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.1), 0 0 16px rgba(99, 102, 241, 0.18);
-  z-index: 70;
+  z-index: 9999;
   opacity: 0;
   transform: translateY(-6px) scale(0.97);
   pointer-events: none;
@@ -251,8 +253,7 @@
 #trash-modal,
 #tx-delete-confirm-modal,
 #category-edit-modal,
-#category-delete-confirm-modal,
-#backtap-guide-modal {
+#category-delete-confirm-modal {
   z-index: 50 !important;
 }
 
@@ -716,8 +717,7 @@
   #trash-modal,
   #tx-delete-confirm-modal,
   #category-edit-modal,
-  #category-delete-confirm-modal,
-  #backtap-guide-modal {
+  #category-delete-confirm-modal {
     position: fixed !important;
     inset: 0 !important;
     z-index: 100 !important;

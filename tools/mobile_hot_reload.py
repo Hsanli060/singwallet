@@ -10,7 +10,7 @@ SingWallet Mobile Live Hot Reload Server (零外部依赖真机 UI 极速热重�
    - JS / HTML 变动时：触发页面整页热重载。
 3. 动态内存注入热重载客户端脚本，100% 杜绝污染磁盘源码。
 4. 竞态安全：先启动 HTTP 监听并自检确认 100% 就绪后，再触发 ADB reverse 与 App 唤醒，杜绝小米 14 ERR_CONNECTION_REFUSED！
-5. 零噪音：内置 /api/shortcut/poll 空队列与 /favicon.ico 204 支持，静默轮询日志。
+5. 零噪音：内置 /favicon.ico 204 支持，静默日志。
 6. 支持 `--offline` 一键安全切回内置离线版。
 """
 
@@ -24,6 +24,9 @@ import mimetypes
 import threading
 import subprocess
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+import ssl
+import urllib.request
+import urllib.error
 from urllib.parse import urlparse
 
 # 确保标准输出与错误流在 Windows 终端下使用 UTF-8
@@ -205,7 +208,7 @@ def create_hot_reload_handler(web_dir):
             # 静默高频轮询与图标请求日志，保持控制台清爽高可读性
             if len(args) > 0 and isinstance(args[0], str):
                 req_line = args[0]
-                if any(k in req_line for k in ('/__hot_reload_tick', '/api/shortcut/poll', '/favicon.ico')):
+                if any(k in req_line for k in ('/__hot_reload_tick', '/favicon.ico')):
                     return
             super().log_message(format, *args)
 
@@ -218,6 +221,81 @@ def create_hot_reload_handler(web_dir):
             self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
             self.send_header('Access-Control-Allow-Headers', '*')
             super().end_headers()
+
+        def do_POST(self):
+            parsed = urlparse(self.path)
+            path = parsed.path
+            if path == '/api/proxy' or path.startswith('/api/proxy?'):
+                self.handle_proxy()
+            else:
+                super().do_POST()
+
+        def handle_proxy(self):
+            content_len = int(self.headers.get('Content-Length', 0))
+            raw_body = self.rfile.read(content_len) if content_len > 0 else b'{}'
+            try:
+                payload = json.loads(raw_body.decode('utf-8'))
+            except Exception as e:
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': {'message': f'Invalid proxy payload: {e}'}}).encode('utf-8'))
+                return
+
+            target_url = payload.get('url', '')
+            target_method = payload.get('method', 'GET').upper()
+            target_headers = payload.get('headers', {})
+            target_body = payload.get('body', None)
+
+            if not target_url:
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(b'{"error": {"message": "Missing target url"}}')
+                return
+
+            body_bytes = None
+            if target_body is not None:
+                if isinstance(target_body, (dict, list)):
+                    body_bytes = json.dumps(target_body).encode('utf-8')
+                elif isinstance(target_body, str):
+                    body_bytes = target_body.encode('utf-8')
+                elif isinstance(target_body, bytes):
+                    body_bytes = target_body
+
+            req = urllib.request.Request(target_url, data=body_bytes, method=target_method)
+            for k, v in target_headers.items():
+                if k.lower() not in ['host', 'content-length', 'accept-encoding']:
+                    req.add_header(k, str(v))
+
+            ssl_ctx = ssl.create_default_context()
+            ssl_ctx.check_hostname = False
+            ssl_ctx.verify_mode = ssl.CERT_NONE
+
+            try:
+                with urllib.request.urlopen(req, context=ssl_ctx, timeout=30) as upstream_resp:
+                    status_code = upstream_resp.status
+                    resp_data = upstream_resp.read()
+                    content_type = upstream_resp.headers.get('Content-Type', 'application/json')
+
+                    self.send_response(status_code)
+                    self.send_header('Content-Type', content_type)
+                    self.end_headers()
+                    self.wfile.write(resp_data)
+            except urllib.error.HTTPError as http_err:
+                status_code = http_err.code
+                err_data = http_err.read()
+                content_type = http_err.headers.get('Content-Type', 'application/json')
+
+                self.send_response(status_code)
+                self.send_header('Content-Type', content_type)
+                self.end_headers()
+                self.wfile.write(err_data)
+            except Exception as conn_err:
+                self.send_response(502)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': {'message': f'Upstream connection failed: {conn_err}'}}).encode('utf-8'))
 
         def do_OPTIONS(self):
             self.send_response(204)
@@ -242,23 +320,13 @@ def create_hot_reload_handler(web_dir):
                 self.wfile.write(payload)
                 return
 
-            # 2. 快捷指令/后台抓屏队列轮询兼容接口 (返回期望的空队列，消除 404 噪音)
-            if path == '/api/shortcut/poll':
-                payload = json.dumps({'items': []}).encode('utf-8')
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json; charset=utf-8')
-                self.send_header('Content-Length', str(len(payload)))
-                self.end_headers()
-                self.wfile.write(payload)
-                return
-
-            # 3. 网站图标请求 (避免浏览器/WebView 报 404 噪音)
+            # 2. 网站图标请求 (避免浏览器/WebView 报 404 噪音)
             if path == '/favicon.ico':
                 self.send_response(204)
                 self.end_headers()
                 return
 
-            # 4. 主页面请求：动态在内存中注入热重载脚本（100% 杜绝污染磁盘源文件）
+            # 3. 主页面请求：动态在内存中注入热重载脚本（100% 杜绝污染磁盘源文件）
             if path in ('/', '/index.html', '/singwallet_preview.html'):
                 html_path = os.path.join(web_dir, 'index.html')
                 if os.path.isfile(html_path):
@@ -284,11 +352,11 @@ def create_hot_reload_handler(web_dir):
                         self.send_error(500, f'Error reading html: {e}')
                         return
 
-            # 5. 向下兼容历史 /preview/ 路径请求 (如 /preview/css/ -> /css/, /preview/js/ -> /js/)
+            # 4. 向下兼容历史 /preview/ 路径请求 (如 /preview/css/ -> /css/, /preview/js/ -> /js/)
             if parsed.path.startswith('/preview/'):
                 self.path = self.path.replace('/preview/', '/', 1)
 
-            # 6. 常规静态资源由父类处理
+            # 5. 常规静态资源由父类处理
             return super().do_GET()
 
     return HotReloadHTTPHandler

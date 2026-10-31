@@ -171,6 +171,19 @@
     }
   ];
 
+  // 渠道默认账户映射 (SSOT)
+  const CHANNEL_DEFAULT_ACCOUNT = {
+    '微信': '钱包',
+    '支付宝': '余额',
+    '云闪付': '工商银行(5678)'
+  };
+
+  // 渠道专属内置账户定义与归一化
+  const CHANNEL_EXCLUSIVE_ACCOUNTS = {
+    '微信': ['钱包', '零钱', '零钱通'],
+    '支付宝': ['余额', '余额宝', '花呗', '蚂蚁花呗']
+  };
+
   // 大模型 (VLM) 协议支持与元数据
   const VLM_PROVIDERS = [
     {
@@ -229,9 +242,10 @@
           },
           time: { type: "string" },
           orderId: { type: "string" },
-          channel: { type: "string" }
+          channel: { type: "string" },
+          account: { type: "string" }
         },
-        required: ["merchant", "amount", "category", "time", "channel"],
+        required: ["merchant", "amount", "category", "time", "channel", "account"],
         additionalProperties: false
       }
     }
@@ -452,45 +466,229 @@
   }
 
   /**
-   * 支付方式结构化解析函数 (100% 保持历史解析逻辑)
+   * 规范化支付渠道名称 (SSOT)
+   * @param {string} rawChannel 原始渠道名
+   * @returns {string} '微信' | '支付宝' | '云闪付'
    */
-  function parsePaymentMethodString(accStr) {
-    const clean = (accStr || '').trim();
-    if (clean.includes('·')) {
-      const parts = clean.split('·').map(s => s.trim());
-      const channel = parts[0];
-      const sub = parts[1];
-      const bankMatch = sub.match(/^(.*?)\((\d{4})\)$/);
-      if (bankMatch) {
-        return {
-          channel: channel,
-          channel_key: channel === '微信' ? 'wechat' : (channel === '支付宝' ? 'alipay' : 'unionpay'),
-          sub_type: '银行卡',
-          bank_name: bankMatch[1],
-          card_last_4: bankMatch[2],
-          display_name: clean
-        };
+  function normalizeChannelName(rawChannel) {
+    const str = String(rawChannel || '').trim().toLowerCase();
+    if (/微信|wx|wechat/.test(str)) return '微信';
+    if (/支付宝|alipay/.test(str)) return '支付宝';
+    if (/云闪付|unionpay/.test(str)) return '云闪付';
+    if (str.includes('银联') && !/(?:银行|储蓄卡|信用卡|借记卡|尾号|\d)/.test(str)) return '云闪付';
+    return '微信';
+  }
+
+  /**
+   * 规范化银行卡及内置账户名称
+   * @param {string} rawAccount 原始账户字符串
+   * @param {string} [channel] 渠道名称
+   * @returns {string} 规范化后的账户字符串
+   */
+  function normalizeBankCardAccount(rawAccount, channel) {
+    let str = String(rawAccount || '').trim();
+    if (!str) return '';
+
+    // 1. 支持剥离 · 前面的渠道前缀
+    if (str.includes('·')) {
+      str = str.split('·')[1].trim();
+    }
+
+    // 2. 内置账户处理
+    if (str === '零钱' || str === '微信钱包' || str === '现金钱包') return '钱包';
+    if (str === '蚂蚁花呗') return '花呗';
+    if (str === '支付宝余额') return '余额';
+    if (['钱包', '零钱通', '余额', '余额宝', '花呗'].includes(str)) {
+      return str;
+    }
+
+    // 3. 提取卡号与括号类型
+    // 支持方括号 [5678], [尾号5678]；圆括号 (5678), （5678）, (尾号5678), （尾号5678）；或无括号 尾号5678 等
+    let isSquare = false;
+    let cardDigits = '';
+    let bankPart = str;
+
+    const squareMatch = str.match(/\[(?:尾号)?(\d{3,8})\]/);
+    const roundMatch = str.match(/[（(](?:尾号)?(\d{3,8})[）)]/);
+    const tailMatch = str.match(/(?:尾号|卡号|\s)(\d{3,8})/);
+    const rawDigitsMatch = str.match(/(\d{4})/);
+
+    if (squareMatch) {
+      isSquare = true;
+      cardDigits = squareMatch[1];
+      bankPart = str.replace(/\[(?:尾号)?\d{3,8}\]/, '');
+    } else if (roundMatch) {
+      isSquare = false;
+      cardDigits = roundMatch[1];
+      bankPart = str.replace(/[（(](?:尾号)?\d{3,8}[）)]/, '');
+    } else if (tailMatch) {
+      isSquare = false;
+      cardDigits = tailMatch[1];
+      bankPart = str.replace(/(?:尾号|卡号|\s)\d{3,8}/, '');
+    } else if (rawDigitsMatch) {
+      isSquare = false;
+      cardDigits = rawDigitsMatch[1];
+      bankPart = str.replace(/\d{4}/, '');
+    }
+
+    // 4. 清洗银行主体名称
+    bankPart = bankPart.trim();
+    // 中国邮政储蓄银行 -> 邮储银行
+    bankPart = bankPart.replace(/^中国邮政储蓄银行/, '邮储银行').replace(/^邮政储蓄银行/, '邮储银行');
+    // 去除冗余“中国”前缀（严格保留“中国银行”不变）
+    bankPart = bankPart.replace(/^中国(工商银行|建设银行|农业银行|民生银行|光大银行|交通银行|招商银行|广发银行|平安银行|兴业银行|浦发银行|中信银行|华夏银行|北京银行|上海银行)/, '$1');
+    // 去除中间冗余卡种修饰词：(银联|储蓄卡|借记卡|信用卡|银行卡|贷记卡|白金卡|金卡|普卡)
+    bankPart = bankPart.replace(/(?:银联|储蓄卡|借记卡|信用卡|银行卡|贷记卡|白金卡|金卡|普卡)/g, '').trim();
+    // 清理残留的非文字符号（保留中文、英文字母）
+    bankPart = bankPart.replace(/^[·\-_/\s()（）\[\]【】]+|[·\-_/\s()（）\[\]【】]+$/g, '').trim();
+
+    // 5. 组合输出
+    if (cardDigits) {
+      if (isSquare) {
+        return `${bankPart}[${cardDigits}]`;
       } else {
-        return {
-          channel: channel,
-          channel_key: channel === '微信' ? 'wechat' : (channel === '支付宝' ? 'alipay' : 'unionpay'),
-          sub_type: sub,
-          bank_name: null,
-          card_last_4: null,
-          display_name: clean
-        };
+        return `${bankPart}(${cardDigits})`;
       }
     }
-    if (clean.includes('微信')) {
-      return { channel: '微信', channel_key: 'wechat', sub_type: '钱包', bank_name: null, card_last_4: null, display_name: '微信 · 钱包' };
+
+    return bankPart || str;
+  }
+
+  /**
+   * 渠道与扣款账户 SSOT 解析与互斥纠正
+   * @param {string} rawChannel 原始渠道
+   * @param {string} rawAccount 原始账户
+   * @param {Object} [payment] 关联的支付对象 (可选)
+   * @returns {{ channel: string, account: string }}
+   */
+  function resolveChannelAndAccount(rawChannel, rawAccount, payment) {
+    let channelCandidate = rawChannel;
+    let accountCandidate = rawAccount;
+
+    if (payment && typeof payment === 'object') {
+      if (!channelCandidate) {
+        channelCandidate = payment.channel || payment.channel_key || '';
+      }
+      if (!accountCandidate) {
+        accountCandidate = payment.sub_type || payment.account || payment.display_name || '';
+      }
     }
-    if (clean.includes('支付宝')) {
-      return { channel: '支付宝', channel_key: 'alipay', sub_type: '余额', bank_name: null, card_last_4: null, display_name: '支付宝 · 余额' };
+
+    // 若 accountCandidate 中包含 '·'，分离出渠道与子账户
+    if (accountCandidate && String(accountCandidate).includes('·')) {
+      const parts = String(accountCandidate).split('·').map(s => s.trim());
+      if (!channelCandidate) {
+        channelCandidate = parts[0];
+      }
+      accountCandidate = parts[1];
     }
-    if (clean.includes('云闪付')) {
-      return { channel: '云闪付', channel_key: 'unionpay', sub_type: '银行卡', bank_name: '工商银行', card_last_4: '5678', display_name: '云闪付 · 工商银行(5678)' };
+
+    // 若 channelCandidate 为空，但 accountCandidate 仅为渠道别名
+    if (!channelCandidate && accountCandidate) {
+      const trimmed = String(accountCandidate).trim();
+      if (['微信', '微信支付', 'wx', 'wechat', '支付宝', 'alipay', '云闪付', '银联', 'unionpay'].includes(trimmed)) {
+        channelCandidate = trimmed;
+        accountCandidate = '';
+      }
     }
-    return { channel: '微信', channel_key: 'wechat', sub_type: '钱包', bank_name: null, card_last_4: null, display_name: '微信 · 钱包' };
+
+    const channel = normalizeChannelName(channelCandidate || accountCandidate);
+    let account = String(accountCandidate || '').trim();
+
+    // 若 account 提取后依然等于渠道名称或其别名，清空以触发默认账户
+    if (['微信', '微信支付', 'wx', 'wechat', '支付宝', 'alipay', '云闪付', '银联', 'unionpay'].includes(account)) {
+      account = '';
+    }
+
+    // 若无账户，回退至该渠道的 SSOT 默认账户
+    if (!account) {
+      account = CHANNEL_DEFAULT_ACCOUNT[channel] || '钱包';
+      return { channel, account };
+    }
+
+    // 若是银行卡（含 银行|卡|\[\d+\]|\(\d+\)|（\d+）|尾号\d+）
+    const isBankCard = /(?:银行|卡|\[\d+\]|[（(]\d+[）)]|尾号\d+)/.test(account);
+    if (isBankCard) {
+      return {
+        channel: channel,
+        account: normalizeBankCardAccount(account, channel)
+      };
+    }
+
+    // 内置账户预处理归一化
+    account = normalizeBankCardAccount(account, channel);
+
+    // 渠道专属内置账户互斥纠正
+    const wechatBuiltin = CHANNEL_EXCLUSIVE_ACCOUNTS['微信'] || ['钱包', '零钱', '零钱通'];
+    const alipayBuiltin = CHANNEL_EXCLUSIVE_ACCOUNTS['支付宝'] || ['余额', '余额宝', '花呗', '蚂蚁花呗'];
+
+    if (channel === '支付宝') {
+      if (wechatBuiltin.includes(account)) {
+        account = '余额';
+      }
+    } else if (channel === '微信') {
+      if (alipayBuiltin.includes(account)) {
+        account = '钱包';
+      }
+    } else if (channel === '云闪付') {
+      if (wechatBuiltin.includes(account) || alipayBuiltin.includes(account)) {
+        account = '工商银行(5678)';
+      }
+    }
+
+    return { channel, account };
+  }
+
+  /**
+   * 支付方式结构化解析函数 (升级支持动态银行卡与 SSOT 归一化)
+   * @param {string} accStr
+   * @returns {{ channel: string, channel_key: string, sub_type: string, bank_name: string|null, card_last_4: string|null, display_name: string }}
+   */
+  function parsePaymentMethodString(accStr) {
+    const clean = String(accStr || '').trim();
+    let rawChannel = '';
+    let rawAccount = clean;
+
+    if (clean.includes('·')) {
+      const parts = clean.split('·').map(s => s.trim());
+      rawChannel = parts[0];
+      rawAccount = parts[1];
+    } else if (clean === '云闪付' || clean === '银联' || clean === 'unionpay') {
+      rawChannel = '云闪付';
+      rawAccount = '';
+    } else if (clean === '支付宝' || clean === 'alipay') {
+      rawChannel = '支付宝';
+      rawAccount = '';
+    } else if (clean === '微信' || clean === '微信支付' || clean === 'wx') {
+      rawChannel = '微信';
+      rawAccount = '';
+    }
+
+    const resolved = resolveChannelAndAccount(rawChannel, rawAccount);
+    const channel = resolved.channel;
+    const account = resolved.account;
+    const channel_key = channel === '微信' ? 'wechat' : (channel === '支付宝' ? 'alipay' : 'unionpay');
+
+    let bank_name = null;
+    let card_last_4 = null;
+
+    // 从规范化后的 account 中提取 bank_name 与 card_last_4
+    const bankMatch = account.match(/^(.*?)[（(\[](?:尾号)?(\d{3,8})[）)\]]$/);
+    if (bankMatch) {
+      bank_name = bankMatch[1];
+      card_last_4 = bankMatch[2];
+    } else if (/(?:银行|卡)/.test(account)) {
+      bank_name = account;
+    }
+
+    return {
+      channel: channel,
+      channel_key: channel_key,
+      sub_type: account,
+      bank_name: bank_name,
+      card_last_4: card_last_4,
+      display_name: `${channel} · ${account}`
+    };
   }
 
   /**
@@ -513,6 +711,18 @@
 
     if (optVal === String(target)) return true;
 
+    function stripBankCardDecorations(val) {
+      if (!val) return '';
+      let s = String(val).trim();
+      if (s.includes('·')) s = s.split('·')[1].trim();
+      s = s.replace(/^中国(工商银行|建设银行|农业银行|民生银行|光大银行|交通银行|招商银行)/, '$1');
+      s = s.replace(/^中国邮政储蓄银行|^邮政储蓄银行/, '邮储银行');
+      s = s.replace(/(?:银联|储蓄卡|借记卡|信用卡|银行卡|贷记卡|白金卡|金卡|普卡|尾号)/g, '');
+      s = s.replace(/[\[【（]/g, '(').replace(/[\]】）]/g, ')');
+      s = s.replace(/\s+/g, '');
+      return s;
+    }
+
     if (!id || id === 'select-channel') {
       if ((target === '微信' || target === '微信支付' || target === 'wx') && (optVal === '微信' || optVal === '微信支付')) return true;
       if ((target === '支付宝' || target === 'alipay') && optVal === '支付宝') return true;
@@ -525,12 +735,28 @@
       if ((target === '余额' || target === '支付宝余额') && optVal === '余额') return true;
       if (target === '零钱通' && optVal === '零钱通') return true;
       if (target === '余额宝' && optVal === '余额宝') return true;
+      if (target === '花呗' && (optVal === '花呗' || optVal === '蚂蚁花呗')) return true;
       if ((target === '招商银行(8848)' || target === '招商银行储蓄卡' || target === '招商银行储蓄卡(1234)') && (optVal === '招商银行(8848)' || optVal === '招商银行储蓄卡(1234)')) return true;
       if (target === '建设银行(1234)' && optVal === '建设银行(1234)') return true;
       if (target === '工商银行(5678)' && optVal === '工商银行(5678)') return true;
       if (String(target).includes('·')) {
         const sub = String(target).split('·')[1].trim();
         if (optVal === sub || optVal.includes(sub) || sub.includes(optVal)) return true;
+      }
+
+      // 动态银行卡及方括号/圆括号容错匹配
+      const cleanOpt = stripBankCardDecorations(optVal);
+      const cleanTarget = stripBankCardDecorations(target);
+      if (cleanOpt && cleanTarget && cleanOpt === cleanTarget) return true;
+
+      const optDigits = (String(optVal).match(/\d{4}/) || [])[0];
+      const targetDigits = (String(target).match(/\d{4}/) || [])[0];
+      if (optDigits && targetDigits && optDigits === targetDigits) {
+        const optBank = cleanOpt.replace(/\(\d+\)/, '');
+        const targetBank = cleanTarget.replace(/\(\d+\)/, '');
+        if (optBank && targetBank && (optBank.includes(targetBank) || targetBank.includes(optBank))) {
+          return true;
+        }
       }
     }
 
@@ -544,6 +770,21 @@
       if ((target === '招商银行卡' || target === '招行卡') && optVal === '微信 · 招商银行(8848)') return true;
       if ((target === '支付宝' || target === '支付宝余额') && optVal === '支付宝 · 余额') return true;
       if (target === '云闪付' && optVal === '云闪付 · 工商银行(5678)') return true;
+
+      // 动态银行卡及方括号/圆括号容错匹配
+      const cleanOpt = stripBankCardDecorations(optVal);
+      const cleanTarget = stripBankCardDecorations(target);
+      if (cleanOpt && cleanTarget && cleanOpt === cleanTarget) return true;
+
+      const optDigits = (String(optVal).match(/\d{4}/) || [])[0];
+      const targetDigits = (String(target).match(/\d{4}/) || [])[0];
+      if (optDigits && targetDigits && optDigits === targetDigits) {
+        const optBank = cleanOpt.replace(/\(\d+\)/, '');
+        const targetBank = cleanTarget.replace(/\(\d+\)/, '');
+        if (optBank && targetBank && (optBank.includes(targetBank) || targetBank.includes(optBank))) {
+          return true;
+        }
+      }
     }
 
     if (!id || id === 'rule-match-type') {
@@ -1105,6 +1346,11 @@
     subToParentMap: subToParentCategoryMap,
     defaultIcons: defaultCategoryIconMap,
     channels: PAYMENT_CHANNELS,
+    CHANNEL_DEFAULT_ACCOUNT: CHANNEL_DEFAULT_ACCOUNT,
+    CHANNEL_EXCLUSIVE_ACCOUNTS: CHANNEL_EXCLUSIVE_ACCOUNTS,
+    normalizeChannelName: normalizeChannelName,
+    normalizeBankCardAccount: normalizeBankCardAccount,
+    resolveChannelAndAccount: resolveChannelAndAccount,
     providers: VLM_PROVIDERS,
     defaultBooks: DEFAULT_BOOKS,
     defaultProjects: DEFAULT_PROJECTS,
@@ -1138,6 +1384,11 @@
     renameCategory: renameCategory,
     resetCategories: resetCategories,
     getChannels: () => PAYMENT_CHANNELS,
+    CHANNEL_DEFAULT_ACCOUNT: CHANNEL_DEFAULT_ACCOUNT,
+    CHANNEL_EXCLUSIVE_ACCOUNTS: CHANNEL_EXCLUSIVE_ACCOUNTS,
+    normalizeChannelName: normalizeChannelName,
+    normalizeBankCardAccount: normalizeBankCardAccount,
+    resolveChannelAndAccount: resolveChannelAndAccount,
     getProviders: () => VLM_PROVIDERS,
     getProviderConfig: (providerId) => VLM_PROVIDERS.find(p => p.id === providerId) || null,
     getDefaultEndpoint: getDefaultEndpointForProvider,
@@ -1171,6 +1422,11 @@
   window.renameCategory = renameCategory;
   window.resetCategories = resetCategories;
   window.parsePaymentMethodString = parsePaymentMethodString;
+  window.CHANNEL_DEFAULT_ACCOUNT = CHANNEL_DEFAULT_ACCOUNT;
+  window.CHANNEL_EXCLUSIVE_ACCOUNTS = CHANNEL_EXCLUSIVE_ACCOUNTS;
+  window.normalizeChannelName = normalizeChannelName;
+  window.normalizeBankCardAccount = normalizeBankCardAccount;
+  window.resolveChannelAndAccount = resolveChannelAndAccount;
   window.isOptionMatch = isOptionMatch;
   window.getDefaultEndpointForProvider = getDefaultEndpointForProvider;
   window.getDefaultModelForProvider = getDefaultModelForProvider;

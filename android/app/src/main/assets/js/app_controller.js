@@ -622,14 +622,31 @@
     if (inOrder) inOrder.value = draft.orderId || '';
     if (inTime) inTime.value = draft.orderTime || draft.time || '';
 
-    const channelVal = draft.payment ? draft.payment.channel : (draft.channel || '微信');
-    const accountVal = draft.payment ? (draft.payment.sub_type === '银行卡' ? `${draft.payment.bank_name}(${draft.payment.card_last_4})` : draft.payment.sub_type) : (draft.account || '钱包');
+    const rawChan = draft.payment ? draft.payment.channel : (draft.channel || '微信');
+    const rawAcc = draft.payment ? (draft.payment.sub_type === '银行卡' ? `${draft.payment.bank_name}(${draft.payment.card_last_4})` : draft.payment.sub_type) : (draft.account || '钱包');
+
+    const resolveFn = window.resolveChannelAndAccount || (window.DomainRegistry && window.DomainRegistry.resolveChannelAndAccount);
+    const normBankFn = window.normalizeBankCardAccount || (window.DomainRegistry && window.DomainRegistry.normalizeBankCardAccount);
+    
+    let resolved = typeof resolveFn === 'function' ? resolveFn(rawChan, rawAcc, draft.payment) : { channel: rawChan, account: rawAcc };
+    const channelVal = resolved.channel || '微信';
+    let accountVal = resolved.account || '钱包';
+    if (typeof normBankFn === 'function') {
+      accountVal = normBankFn(accountVal, channelVal);
+    }
+
+    if (typeof ensureAccountOptionInDropdown === 'function') {
+      ensureAccountOptionInDropdown('select-account', channelVal, accountVal);
+    }
 
     if (selChan) selChan.value = channelVal;
     if (typeof onDraftChannelChange === 'function') {
       onDraftChannelChange(channelVal);
     }
     if (selAcc) selAcc.value = accountVal;
+    if (typeof syncCustomDropdownFromValue === 'function') {
+      syncCustomDropdownFromValue('select-account', accountVal);
+    }
 
     // Suggested Category View
     const sugIcon = document.getElementById('suggested-icon');
@@ -731,10 +748,40 @@
         draft.orderId = result.orderId || '';
         draft.time = result.orderTime || result.time || ((typeof window.formatCurrentDateTime === 'function') ? window.formatCurrentDateTime() : '');
         draft.payment = result.payment;
-        draft.channel = (result.payment && result.payment.channel) || '微信';
-        draft.account = (result.payment && result.payment.sub_type) || '钱包';
+
+        const rawRetryChan = (result.payment && result.payment.channel) || '微信';
+        const rawRetryAcc = (result.payment && result.payment.sub_type === '银行卡' && result.payment.bank_name)
+          ? `${result.payment.bank_name}(${result.payment.card_last_4 || ''})`
+          : ((result.payment && result.payment.sub_type) || '钱包');
+
+        const retryResolveFn = window.resolveChannelAndAccount || (window.DomainRegistry && window.DomainRegistry.resolveChannelAndAccount);
+        const retryNormBankFn = window.normalizeBankCardAccount || (window.DomainRegistry && window.DomainRegistry.normalizeBankCardAccount);
+        let resolvedRetry = typeof retryResolveFn === 'function' ? retryResolveFn(rawRetryChan, rawRetryAcc, result.payment) : { channel: rawRetryChan, account: rawRetryAcc };
+        const retryChannelVal = resolvedRetry.channel || '微信';
+        let retryAccountVal = resolvedRetry.account || '钱包';
+        if (typeof retryNormBankFn === 'function') {
+          retryAccountVal = retryNormBankFn(retryAccountVal, retryChannelVal);
+        }
+
+        draft.channel = retryChannelVal;
+        draft.account = retryAccountVal;
         draft.tag = `置信度 ${draft.confidence}%`;
         draft.rule = result.rule || 'VLM 视觉智能识别';
+
+        if (typeof ensureAccountOptionInDropdown === 'function') {
+          ensureAccountOptionInDropdown('select-account', retryChannelVal, retryAccountVal);
+        }
+
+        const selChan = document.getElementById('select-channel');
+        const selAcc = document.getElementById('select-account');
+        if (selChan) selChan.value = retryChannelVal;
+        if (typeof onDraftChannelChange === 'function') {
+          onDraftChannelChange(retryChannelVal);
+        }
+        if (selAcc) selAcc.value = retryAccountVal;
+        if (typeof syncCustomDropdownFromValue === 'function') {
+          syncCustomDropdownFromValue('select-account', retryAccountVal);
+        }
 
         saveStoredDrafts();
         renderDraftQueue();
@@ -5174,8 +5221,16 @@
       initSwipeToDelete();
     }
 
-    // 10. Start shortcut capture background polling
-    startShortcutPolling();
+    // 10. Bind Escape key to close open modals
+    if (!window.__escapeModalListenerBound && typeof document !== 'undefined') {
+      window.__escapeModalListenerBound = true;
+      document.addEventListener('keydown', (evt) => {
+        if (evt.key === 'Escape') {
+          if (typeof closeEditCategoryModal === 'function') closeEditCategoryModal();
+          if (typeof closeCategoryDeleteConfirmModal === 'function') closeCategoryDeleteConfirmModal();
+        }
+      });
+    }
 
     // 11. Support URL parameters for direct automation / state preview
     try {
@@ -5193,10 +5248,7 @@
     } catch (e) {}
   }
 
-  /* ================= 背部轻敲与快捷指令后台无感抓屏识别引擎 ================= */
-  let shortcutPollingStarted = false;
-  let shortcutListenersBound = false;
-  let isPollingShortcutQueue = false;
+  /* ================= 状态栏闪电记账后台抓屏与识别引擎 ================= */
 
   function dataURLtoFile(dataurl, filename) {
     try {
@@ -5218,29 +5270,23 @@
   async function handleShortcutCapturedItem(item) {
     if (!item || !item.dataUrl) return;
     console.info('[SingWalletShortcut] Received capture:', item.source, 'dataUrlLen=', item.dataUrl.length);
-    const isBackTap = item.source === 'backtap-screenshot';
-    const isLightning = item.source === 'lightning-tile';
     try {
-      const filePrefix = isLightning ? '闪电抓屏_' : (isBackTap ? '背部轻敲截屏_' : '快捷指令抓屏_');
+      const filePrefix = '闪电抓屏_';
       const file = dataURLtoFile(item.dataUrl, filePrefix + Date.now() + '.png');
       if (typeof window.handleManualScreenshotUpload === 'function') {
         const fakeEvent = {
           target: { files: [file], value: '' },
           isBackgroundCapture: true,
-          captureSource: item.source,
+          captureSource: item.source || 'lightning-tile',
           sourceDataUrl: item.dataUrl
         };
         await window.handleManualScreenshotUpload(fakeEvent);
         if (typeof showToast === 'function') {
-          if (isLightning) {
-            showToast('闪电记账已捕获账单画面，正在后台调用大模型解析...');
-          } else if (isBackTap) {
-            showToast('检测到背部轻敲截屏，正在后台调用大模型识别...');
-          }
+          showToast('闪电记账已捕获账单画面，正在后台调用大模型解析...');
         }
       } else {
         const localFallback = (typeof parseBillWithLocalEngine === 'function') ? parseBillWithLocalEngine(file) : {
-          merchant: isLightning ? '闪电抓屏商户' : '快捷抓屏商户',
+          merchant: '闪电抓屏商户',
           amount: 25.8,
           channel: '微信',
           account: '钱包',
@@ -5253,7 +5299,7 @@
           ...localFallback,
           confidence: 99,
           imageData: item.dataUrl,
-          tag: isLightning ? '闪电抓屏智能识别' : (isBackTap ? '背部轻敲智能识别' : '快捷指令智能识别')
+          tag: '闪电抓屏智能识别'
         };
         if (!window.draftQueue) window.draftQueue = [];
         const hadExistingDrafts = window.draftQueue.length > 0;
@@ -5268,153 +5314,12 @@
         if (typeof renderDraftQueue === 'function') renderDraftQueue({ skipFormReload: hadExistingDrafts });
         if (typeof updateDraftBadge === 'function') updateDraftBadge();
         if (typeof showToast === 'function') {
-          showToast(isLightning ? '闪电记账已捕获账单，已存入草稿箱' : (isBackTap ? '检测到背部轻敲截屏，正在后台调用大模型识别...' : '已自动识别快捷抓屏账单并存入草稿箱'));
+          showToast('闪电记账已捕获账单，已存入草稿箱');
         }
-      }
-
-      // 若宿主为 Android 原生容器且携带 uri，解析完成后自动清理相册临时截屏，杜绝相册垃圾堆积
-      if (item.uri && window.AndroidBridge && typeof window.AndroidBridge.deleteScreenshot === 'function') {
-        setTimeout(() => {
-          try {
-            window.AndroidBridge.deleteScreenshot(item.uri);
-          } catch (e) {
-            console.warn('Auto-clean screenshot error:', e);
-          }
-        }, 1500);
       }
     } catch (err) {
       console.warn('handleShortcutCapturedItem error:', err);
     }
-  }
-
-  async function pollShortcutQueueOnce() {
-    if (typeof window !== 'undefined' && window.location && window.location.protocol === 'file:') {
-      return;
-    }
-    if (isPollingShortcutQueue) return;
-    if (typeof fetch !== 'function') return;
-    isPollingShortcutQueue = true;
-    try {
-      const resp = await fetch('/api/shortcut/poll');
-      if (!resp || !resp.ok) return;
-      const data = await resp.json();
-      if (data && Array.isArray(data.items) && data.items.length > 0) {
-        for (const item of data.items) {
-          await handleShortcutCapturedItem(item);
-        }
-      }
-    } catch (e) {
-      // Silent catch for local offline / file:// / network
-    } finally {
-      isPollingShortcutQueue = false;
-    }
-  }
-
-  function startShortcutPolling() {
-    if (!shortcutListenersBound && typeof document !== 'undefined' && typeof window !== 'undefined') {
-      shortcutListenersBound = true;
-      document.addEventListener('keydown', (evt) => {
-        if (evt.key === 'Escape') {
-          closeEditCategoryModal();
-          closeCategoryDeleteConfirmModal();
-          closeBackTapGuideModal();
-        }
-      });
-    }
-    // 新规范：背部轻敲截屏监听已弃用，不自动后台轮询相册/本地目录，
-    // 仅保留【点击闪电记账】与【App内加一笔按钮】两个触发入口。
-    shortcutPollingStarted = false;
-  }
-
-  function openBackTapGuideModal() {
-    const modal = document.getElementById('backtap-guide-modal');
-    if (modal) modal.classList.remove('hidden');
-  }
-
-  function closeBackTapGuideModal() {
-    const modal = document.getElementById('backtap-guide-modal');
-    if (modal) modal.classList.add('hidden');
-  }
-
-  function toggleBackTapWatcher(checkbox) {
-    const toggleEl = (checkbox && typeof checkbox === 'object' && 'checked' in checkbox)
-      ? checkbox
-      : document.getElementById('backtap-watch-toggle');
-    const enabled = (typeof checkbox === 'boolean')
-      ? checkbox
-      : Boolean(toggleEl && toggleEl.checked);
-    if (toggleEl && toggleEl.checked !== enabled) {
-      toggleEl.checked = enabled;
-    }
-    const statusLabel = document.getElementById('backtap-status-label');
-    if (statusLabel) {
-      statusLabel.innerText = enabled ? '截屏监听中' : '监听已暂停';
-      statusLabel.className = enabled
-        ? 'text-[11px] text-emerald-400 font-medium'
-        : 'text-[11px] text-slate-400 font-medium';
-    }
-    try {
-      if (typeof fetch === 'function') {
-        fetch('/api/shortcut/watcher-status', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enabled: enabled })
-        }).catch(() => {});
-      }
-    } catch (e) {}
-    if (typeof showToast === 'function') {
-      showToast(enabled ? '已开启背部轻敲截屏自动监听' : '已暂停背部轻敲截屏监听');
-    }
-    return enabled;
-  }
-
-  window.triggerDelayedPhoneCapture = async function (delaySec = 3) {
-    try {
-      if (typeof showToast === 'function') {
-        showToast(delaySec > 0 ? `已触发定时抓屏：${delaySec}秒后截屏，请立即切至支付完成页` : '已触发立即截屏识别');
-      }
-      const resp = await fetch(`/api/shortcut/adb-capture?delay=${delaySec}`);
-      const resData = await resp.json();
-      if (resData && resData.status === 'success') {
-        if (typeof showToast === 'function') {
-          showToast('抓屏成功，已排入后台识别队列');
-        }
-      }
-    } catch (e) {
-      if (typeof showToast === 'function') {
-        showToast('抓屏触发请求已发送');
-      }
-    }
-  };
-
-  window.copyShortcutApiUrl = function () {
-    const origin = (window.location && window.location.origin && window.location.origin !== 'null' && window.location.protocol.startsWith('http'))
-      ? window.location.origin
-      : 'http://127.0.0.1:8080';
-    const apiUrl = `${origin}/api/shortcut/adb-capture?delay=3`;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(apiUrl).then(() => {
-        if (typeof showToast === 'function') showToast('已复制快捷指令接口地址到剪贴板');
-      }).catch(() => {
-        fallbackCopyText(apiUrl);
-      });
-    } else {
-      fallbackCopyText(apiUrl);
-    }
-  };
-
-  function fallbackCopyText(text) {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    try {
-      document.execCommand('copy');
-      if (typeof showToast === 'function') showToast('已复制快捷指令接口地址到剪贴板');
-    } catch (e) {
-      if (typeof showToast === 'function') showToast('复制失败，请手动长按复制');
-    }
-    document.body.removeChild(ta);
   }
 
   let mockA11yEnabled = true;
@@ -5484,11 +5389,6 @@
     });
   }
 
-  window.pollShortcutQueueOnce = pollShortcutQueueOnce;
-  window.startShortcutPolling = startShortcutPolling;
-  window.openBackTapGuideModal = openBackTapGuideModal;
-  window.closeBackTapGuideModal = closeBackTapGuideModal;
-  window.toggleBackTapWatcher = toggleBackTapWatcher;
   window.checkA11yServiceStatus = checkA11yServiceStatus;
   window.handleA11yServiceAuth = handleA11yServiceAuth;
   window.handleShortcutCapturedItem = handleShortcutCapturedItem;
@@ -5497,7 +5397,7 @@
   window.handleAndroidBackPress = function() {
     const modalIds = [
       'category-modal', 'edit-category-modal', 'category-delete-confirm-modal',
-      'backtap-guide-modal', 'tx-detail-modal', 'manual-add-modal', 'filter-modal',
+      'tx-detail-modal', 'manual-add-modal', 'filter-modal',
       'trash-modal', 'dedup-modal', 'order-security-modal', 'confidence-modal',
       'month-modal', 'tx-delete-confirm-modal'
     ];
@@ -5530,10 +5430,6 @@
   window.triggerQuickTileCapture = async function(mockDataUrl = null) {
     if (mockDataUrl) {
       return await window.onNativeScreenshotCaptured(mockDataUrl, '闪电抓屏_' + Date.now() + '.png', true);
-    }
-    if (window.AndroidBridge && typeof window.AndroidBridge.requestQuickTileCapture === 'function') {
-      window.AndroidBridge.requestQuickTileCapture();
-      return true;
     }
     if (typeof window.onTileQuickRecordTriggered === 'function') {
       window.onTileQuickRecordTriggered();

@@ -622,7 +622,7 @@
   }
 
   /**
-   * 跨源透传 Fetch 辅助函数 (当浏览器跨域拦截 Failed to fetch 时自动回退至本地 /api/proxy；Android 原生 WebView 或 file: 协议下直接抛出原始网络错误)
+   * 跨源透传 Fetch 辅助函数 (当浏览器跨域拦截 Failed to fetch 时自动回退至本地 /api/proxy；file: 协议下直接抛出原始网络错误)
    */
   async function fetchWithCorsFallback(url, options = {}) {
     try {
@@ -630,7 +630,7 @@
       return res;
     } catch (err) {
       if (err.name === 'AbortError') throw err;
-      if (typeof window !== 'undefined' && (window.AndroidBridge || (window.location && window.location.protocol === 'file:'))) {
+      if (typeof window !== 'undefined' && window.location && window.location.protocol === 'file:') {
         throw err;
       }
       try {
@@ -915,11 +915,36 @@
       : (window.CORE_PARENT_CATEGORIES || ['日常购物']);
     const defaultCat = currentCats.includes('日常购物') ? '日常购物' : (currentCats[0] || '日常购物');
     const category = typeof resolver === 'function' ? resolver(parsed.category || '', merchant) : (parsed.category || defaultCat);
-    const rawChannel = (parsed.channel || parsed.payment_channel || '微信').trim();
-    const orderId = (parsed.orderId || ('VLM_' + Date.now())).trim();
-    const time = parsed.time || parsed.orderTime || (typeof formatCurrentDateTime === 'function' ? formatCurrentDateTime() : '2026-10-26 12:00:00');
+    const rawChannel = ((parsed && (parsed.channel || parsed.payment_channel)) || '微信').trim();
+    const rawAccount = ((parsed && (parsed.account || parsed.payment_account || parsed.pay_account || parsed.sub_type || parsed.card)) || '').trim();
+    const orderId = ((parsed && parsed.orderId) || ('VLM_' + Date.now())).trim();
+    const time = (parsed && (parsed.time || parsed.orderTime)) || (typeof formatCurrentDateTime === 'function' ? formatCurrentDateTime() : '2026-10-26 12:00:00');
+    const resolveFn = window.resolveChannelAndAccount || (window.DomainRegistry && window.DomainRegistry.resolveChannelAndAccount);
     const parseFn = window.parsePaymentMethodString || (window.DomainRegistry && window.DomainRegistry.parsePaymentMethod);
-    const paymentObj = parseFn ? parseFn(rawChannel.includes('·') ? rawChannel : `${rawChannel} · 钱包`) : { channel: '微信', sub_type: '钱包', display_name: rawChannel };
+
+    let paymentObj;
+    if (typeof resolveFn === 'function') {
+      const resolved = resolveFn(rawChannel, rawAccount);
+      paymentObj = typeof parseFn === 'function' ? parseFn(`${resolved.channel} · ${resolved.account}`) : {
+        channel: resolved.channel,
+        channel_key: resolved.channel === '微信' ? 'wechat' : (resolved.channel === '支付宝' ? 'alipay' : 'unionpay'),
+        sub_type: resolved.account,
+        display_name: `${resolved.channel} · ${resolved.account}`
+      };
+      paymentObj.sub_type = resolved.account;
+    } else if (typeof parseFn === 'function') {
+      const combinedStr = rawChannel.includes('·') ? rawChannel : (rawAccount ? `${rawChannel} · ${rawAccount}` : rawChannel);
+      paymentObj = parseFn(combinedStr);
+    } else {
+      const ch = rawChannel || '微信';
+      const acc = rawAccount || (ch === '支付宝' ? '余额' : (ch === '云闪付' ? '工商银行(5678)' : '钱包'));
+      paymentObj = {
+        channel: ch,
+        channel_key: ch === '微信' ? 'wechat' : (ch === '支付宝' ? 'alipay' : 'unionpay'),
+        sub_type: acc,
+        display_name: `${ch} · ${acc}`
+      };
+    }
 
     return {
       amount: amt,
@@ -1062,6 +1087,14 @@
     }
   }
 
+  function buildVlmPromptText(currentCats) {
+    const cats = currentCats || ((window.DomainRegistry && typeof window.DomainRegistry.getParentCategories === 'function')
+      ? window.DomainRegistry.getParentCategories()
+      : (window.CORE_PARENT_CATEGORIES || ['餐饮美食', '交通出行', '日常购物', '休闲娱乐', '生活缴费', '医疗健康', '其他支出', '工资收入']));
+    const catListStr = cats.join('、');
+    return `你是一个高精度智能账单识别专家。请提取图片中的账单信息，必须且仅返回如下严格的 JSON 对象：{"merchant": "商户全称", "amount": 金额数字如26.80, "category": "标准分类(${cats.length}选一)", "time": "交易时间如2026-10-26 12:00:00", "orderId": "交易单号", "channel": "微信支付或支付宝", "account": "支出账户"}。极其重要规则：1. category 字段必须严格且只能在以下标准分类中选择最匹配的一个（严禁自行创造词汇）：${catListStr}。2. account 字段为支付方式中的具体扣款账户：微信默认为“钱包”（或“零钱通”），支付宝默认为“余额”（或“余额宝”/“花呗”）；若是银行卡，必须剔除“中国”、“银联”、“储蓄卡”、“借记卡”、“信用卡”等卡种修饰词并保留卡号，如“工商银行银联储蓄卡[5678]”输出为“工商银行[5678]”，“中国工商银行储蓄卡(5678)”输出为“工商银行(5678)”。`;
+  }
+
   /**
    * 调用多模态大模型 VLM 深度视觉提取账单数据
    */
@@ -1112,7 +1145,7 @@
       ? window.DomainRegistry.getParentCategories()
       : (window.CORE_PARENT_CATEGORIES || ['餐饮美食', '交通出行', '日常购物', '休闲娱乐', '生活缴费', '医疗健康', '其他支出', '工资收入']);
     const catListStr = currentCats.join('、');
-    const promptText = `你是一个高精度智能账单识别专家。请提取图片中的账单信息，必须且仅返回如下严格的 JSON 对象：{"merchant": "商户全称", "amount": 金额数字如26.80, "category": "标准分类(${currentCats.length}选一)", "time": "交易时间如2026-10-26 12:00:00", "orderId": "交易单号", "channel": "微信支付或支付宝"}。极其重要规则：category 字段必须严格且只能在以下标准分类中选择最匹配的一个（严禁自行创造词汇）：${catListStr}。`;
+    const promptText = buildVlmPromptText(currentCats);
 
     // 动态同步结构化 Schema 中的分类枚举
     const currentSchema = window.BILL_STRUCTURED_SCHEMA || (window.DomainRegistry && window.DomainRegistry.getConfig().schema);
@@ -1154,9 +1187,10 @@
               },
               time: { type: "STRING" },
               orderId: { type: "STRING" },
-              channel: { type: "STRING" }
+              channel: { type: "STRING" },
+              account: { type: "STRING" }
             },
-            required: ["merchant", "amount", "category", "time", "channel"]
+            required: ["merchant", "amount", "category", "time", "channel", "account"]
           }
         }
       };
@@ -1579,9 +1613,16 @@
             : '';
           targetDraft.orderId = result.orderId || '';
           targetDraft.time = result.orderTime || result.time || ((typeof window.formatCurrentDateTime === 'function') ? window.formatCurrentDateTime() : '');
+          const resolveFn = window.resolveChannelAndAccount || (window.DomainRegistry && window.DomainRegistry.resolveChannelAndAccount);
+          const rawResultChannel = (result.payment && result.payment.channel) || result.channel || '';
+          const rawResultAccount = (result.payment && (result.payment.sub_type || result.payment.display_name)) || result.account || '';
+          const resolvedPayment = typeof resolveFn === 'function'
+            ? resolveFn(rawResultChannel, rawResultAccount, result.payment)
+            : { channel: rawResultChannel || '微信', account: rawResultAccount || '钱包' };
+
           targetDraft.payment = result.payment;
-          targetDraft.channel = (result.payment && result.payment.channel) || '微信';
-          targetDraft.account = (result.payment && result.payment.sub_type) || '钱包';
+          targetDraft.channel = resolvedPayment.channel;
+          targetDraft.account = resolvedPayment.account;
           targetDraft.tag = `置信度 ${targetDraft.confidence}%`;
           targetDraft.rule = result.rule || 'VLM 视觉智能识别';
           if (sourceDataUrl && !targetDraft.imageData) {
@@ -1924,15 +1965,6 @@
     window.lastUploadedData = null;
   }
 
-  /**
-   * 新规范：背部轻敲截屏监听已弃用，不自动后台轮询相册/本地目录，
-   * 仅保留【点击闪电记账】与【App内加一笔按钮】两个触发入口。
-   * 保留函数签名以兼容外部/测试调用，但不启动任何自动轮询定时器。
-   */
-  function initLocalShortcutWatcher() {
-    return false;
-  }
-
   // 挂载至全局对象
   window.BILL_KNOWLEDGE_BASE = BILL_KNOWLEDGE_BASE;
   window.getAdaptiveBillFromFeatures = getAdaptiveBillFromFeatures;
@@ -1979,10 +2011,10 @@
   window.callCloudVlmEngine = parseBillWithVlm;
   window.handleManualScreenshotUpload = handleManualScreenshotUpload;
   window.triggerRealOcrAndVlmTask = handleManualScreenshotUpload;
-  window.initLocalShortcutWatcher = initLocalShortcutWatcher;
   window.loadSampleScreenshot = loadSampleScreenshot;
   window.applyOcrResultToManualForm = applyOcrResultToManualForm;
   window.sendUploadedToDrafts = sendUploadedToDrafts;
+  window.buildVlmPromptText = buildVlmPromptText;
   window.formatVlmResult = formatVlmResult;
   window.clearManualImage = clearManualImage;
 
