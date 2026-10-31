@@ -2460,6 +2460,66 @@ async function runAllTestsSuite() {
       window.triggerOtaInstall();
       assert(capturedDownloadUrl === mockApkUrl, "Group 42: AndroidBridge.downloadAndInstallApk called with correct APK url");
 
+      // 8. 验证原生宿主版本号优先读取与徽章呈现 (真机 1.0.7)
+      window.AndroidBridge.getAppVersion = () => "1.0.7";
+      assert(typeof window.getEffectiveAppVersion === 'function', "Group 42: window.getEffectiveAppVersion is exposed");
+      assert(window.getEffectiveAppVersion() === "1.0.7", "Group 42: getEffectiveAppVersion prioritizes AndroidBridge.getAppVersion ('1.0.7')");
+      window.initAppVersionBadge();
+      const nativeBadge = document.getElementById('app-current-version-badge');
+      assert(nativeBadge && nativeBadge.innerText.startsWith('v1.0.7'), "Group 42: #app-current-version-badge updated to v1.0.7 from AndroidBridge");
+
+      // 9. 验证 checkOtaUpdate 形参默认值 triggerAsyncNetwork = null
+      // 9.1 当 __SW_DISABLE_NET_OTA__ = true 时，不发起异步请求，安全返回同步结果
+      const syncCheckRes = window.checkOtaUpdate();
+      assert(syncCheckRes && syncCheckRes.pendingAsync !== true, "Group 42: checkOtaUpdate with default null respects SW_DISABLE_NET_OTA");
+      // 9.2 当显式 triggerAsyncNetwork = true 时，发起异步请求并返回 pendingAsync: true
+      const asyncCheckRes = window.checkOtaUpdate(null, true);
+      assert(asyncCheckRes && asyncCheckRes.pendingAsync === true, "Group 42: checkOtaUpdate(null, true) triggers async network check");
+
+      // 10. 验证 GitHub PAT Token 解析与持久化
+      const samplePat = "ghp_MockSecretToken123456789012345678";
+      assert(typeof window.resolveGithubToken === 'function', "Group 42: window.resolveGithubToken is exposed");
+      const parsedPat = window.resolveGithubToken(samplePat);
+      assert(parsedPat === samplePat, "Group 42: resolveGithubToken correctly parses PAT string");
+      assert(localStorage.getItem('singwallet_github_token') === samplePat, "Group 42: PAT saved to localStorage singwallet_github_token");
+      assert(window.resolveGithubToken() === samplePat, "Group 42: resolveGithubToken reads from localStorage when no param passed");
+
+      // 11. 验证携带 Token 访问 GitHub API 时请求头注入 Authorization: token <token>
+      let capturedAuthHeader = null;
+      window.fetch = async function(url, options) {
+        if (options && options.headers) {
+          capturedAuthHeader = options.headers['Authorization'] || options.headers['authorization'];
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ sha: 'abcdef1234567890abcdef1234567890abcdef12', commit: { message: "token auth update" } })
+        };
+      };
+      await window.fetchAndRenderGitHubOtaUpdate();
+      assert(capturedAuthHeader === `token ${samplePat}`, "Group 42: fetch headers include Authorization: token <token>");
+
+      // 12. 验证热更新 Payload 透传 Token 给 AndroidBridge.performWebHotUpdate
+      let capturedHotToken = null;
+      window.AndroidBridge.performWebHotUpdate = function(jsonStr) {
+        const parsed = JSON.parse(jsonStr);
+        capturedHotToken = parsed.token;
+      };
+      window.triggerOtaInstall();
+      assert(capturedHotToken === samplePat, "Group 42: AndroidBridge.performWebHotUpdate received authToken");
+
+      // 13. 验证 404 且无 Token 时的明确 Toast 友好指引
+      localStorage.removeItem('singwallet_github_token');
+      const feedInputEl = document.getElementById('ota-feed-url-input');
+      if (feedInputEl) feedInputEl.value = '';
+      window.fetch = async function() {
+        return { ok: false, status: 404, json: async () => ({ message: "Not Found" }) };
+      };
+      const check404Res = await window.fetchAndRenderGitHubOtaUpdate();
+      assert(check404Res && check404Res.hasUpdate === false, "Group 42: Private repo returns hasUpdate: false");
+      const toastEl = document.querySelector('.singwallet-toast-wrap');
+      assert(toastEl && toastEl.innerText.includes('检查更新失败(404)：当前 GitHub 仓库为私有(Private)'), "Group 42: 404 error shows private repo guidance toast");
+
     } finally {
       window.fetch = originalFetch;
       delete window.AndroidBridge;

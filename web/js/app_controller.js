@@ -4302,13 +4302,45 @@
     label.innerText = `${txCount} 笔账单 · ${catCount} 个分类`;
   }
 
+  function getEffectiveAppVersion() {
+    let nativeVer = '';
+    if (window.AndroidBridge && typeof window.AndroidBridge.getAppVersion === 'function') {
+      try { nativeVer = window.AndroidBridge.getAppVersion() || ''; } catch (e) {}
+    }
+    const savedVer = localStorage.getItem('singwallet_app_version');
+    if (nativeVer) {
+      if (savedVer && typeof compareVersions === 'function') {
+        return compareVersions(nativeVer, savedVer) >= 0 ? nativeVer : savedVer;
+      }
+      return nativeVer;
+    }
+    if (savedVer) return savedVer;
+    return (window.APP_VERSION_META && window.APP_VERSION_META.currentVersion) ? window.APP_VERSION_META.currentVersion : '1.0.0';
+  }
+
   function initAppVersionBadge() {
     const badge = document.getElementById('app-current-version-badge');
     if (!badge) return;
+    let nativeVer = '';
+    if (window.AndroidBridge && typeof window.AndroidBridge.getAppVersion === 'function') {
+      try { nativeVer = window.AndroidBridge.getAppVersion() || ''; } catch (e) {}
+    }
     const savedVer = localStorage.getItem('singwallet_app_version');
     const savedSha = localStorage.getItem('singwallet_hot_commit_sha');
-    if (savedVer) {
-      const cleanVer = savedVer.replace(/^[vV]/, '');
+
+    let effectiveVer = '';
+    if (nativeVer) {
+      if (savedVer && typeof compareVersions === 'function') {
+        effectiveVer = compareVersions(nativeVer, savedVer) >= 0 ? nativeVer : savedVer;
+      } else {
+        effectiveVer = nativeVer;
+      }
+    } else if (savedVer) {
+      effectiveVer = savedVer;
+    }
+
+    if (effectiveVer) {
+      const cleanVer = effectiveVer.replace(/^[vV]/, '');
       const shaTag = savedSha ? ` #${savedSha.slice(0, 7)}` : '';
       badge.innerText = `v${cleanVer}${shaTag}`;
       badge.className = "text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono whitespace-nowrap";
@@ -4596,6 +4628,11 @@
       return { repo: defaultRepo, branch: defaultBranch };
     }
 
+    // 若输入包含空格分隔的 Token (例如: "Hsanli060/singwallet ghp_xxx")，取第一部分作为仓库
+    if (str.includes(' ')) {
+      str = str.split(/\s+/)[0];
+    }
+
     str = str.split('?')[0].split('#')[0];
 
     const ghUrlMatch = str.match(/(?:github\.com\/|api\.github\.com\/repos\/)([^\/\s]+)\/([^\/\s]+)/);
@@ -4615,6 +4652,38 @@
     }
 
     return { repo: defaultRepo, branch: defaultBranch };
+  }
+
+  /**
+   * 解析用户提供的 GitHub Token（支持直接输入 PAT、URL 参数或读取本地存储）
+   */
+  function resolveGithubToken(inputVal = '') {
+    let token = '';
+    const trimmed = (inputVal || '').trim();
+    if (trimmed) {
+      const tokenParamMatch = trimmed.match(/[?&]?(?:access_)?token=([A-Za-z0-9_]+)/);
+      if (tokenParamMatch) {
+        token = tokenParamMatch[1];
+      } else if (/^(?:ghp_|github_pat_|gho_)[A-Za-z0-9_]+$/.test(trimmed)) {
+        token = trimmed;
+      } else if (trimmed.includes(' ') && /^(?:ghp_|github_pat_|gho_)[A-Za-z0-9_]+$/.test(trimmed.split(/\s+/)[1])) {
+        token = trimmed.split(/\s+/)[1];
+      } else if (!trimmed.includes('/') && !trimmed.includes('{') && trimmed.length >= 20 && /^[A-Za-z0-9_]+$/.test(trimmed)) {
+        token = trimmed;
+      }
+    }
+    if (!token) {
+      try {
+        token = localStorage.getItem('singwallet_github_token') || '';
+      } catch (e) {}
+    }
+    if (token) {
+      token = token.trim();
+      try {
+        localStorage.setItem('singwallet_github_token', token);
+      } catch (e) {}
+    }
+    return token;
   }
 
   /**
@@ -4717,16 +4786,13 @@
 
     const inputVal = (customUrl || (feedInput && feedInput.value) || '').trim();
     const { repo, branch } = resolveRepoAndBranch(inputVal);
+    const token = resolveGithubToken(inputVal);
 
     if (btnCheckText) btnCheckText.innerText = '检查中...';
     if (btnCheckOta) btnCheckOta.disabled = true;
 
     try {
-      const currentVersion = (window.APP_VERSION_META && window.APP_VERSION_META.currentVersion) ? window.APP_VERSION_META.currentVersion : '1.0.0';
-      let installedVersion = currentVersion;
-      try {
-        installedVersion = localStorage.getItem('singwallet_app_version') || currentVersion;
-      } catch (e) {}
+      const installedVersion = getEffectiveAppVersion();
 
       let nativeHotSha = '';
       if (window.AndroidBridge && typeof window.AndroidBridge.getHotUpdateInfo === 'function') {
@@ -4744,26 +4810,34 @@
       const commitUrl = `https://api.github.com/repos/${repo}/commits/${branch}`;
       const releaseUrl = `https://api.github.com/repos/${repo}/releases/latest`;
 
-      let commitData = null;
-      let releaseData = null;
+      const headers = { 'Accept': 'application/vnd.github.v3+json' };
+      if (token) {
+        headers['Authorization'] = `token ${token}`;
+      }
 
+      let commitData = null;
+      let commitStatus = 0;
       try {
-        const commitRes = await fetch(commitUrl, {
-          headers: { 'Accept': 'application/vnd.github.v3+json' }
-        });
-        if (commitRes && commitRes.ok) {
-          commitData = await commitRes.json();
+        const commitRes = await fetch(commitUrl, { headers });
+        if (commitRes) {
+          commitStatus = commitRes.status;
+          if (commitRes.ok) {
+            commitData = await commitRes.json();
+          }
         }
       } catch (e) {
         console.warn('[SingWallet OTA] Commits fetch error:', e);
       }
 
+      let releaseData = null;
+      let releaseStatus = 0;
       try {
-        const releaseRes = await fetch(releaseUrl, {
-          headers: { 'Accept': 'application/vnd.github.v3+json' }
-        });
-        if (releaseRes && releaseRes.ok) {
-          releaseData = await releaseRes.json();
+        const releaseRes = await fetch(releaseUrl, { headers });
+        if (releaseRes) {
+          releaseStatus = releaseRes.status;
+          if (releaseRes.ok) {
+            releaseData = await releaseRes.json();
+          }
         }
       } catch (e) {
         console.warn('[SingWallet OTA] Release fetch error (may not have release):', e);
@@ -4773,6 +4847,15 @@
         if (btnCheckText) btnCheckText.innerText = '检查更新';
         if (btnCheckOta) btnCheckOta.disabled = false;
         if (resultBox) resultBox.classList.add('hidden');
+
+        if ((commitStatus === 404 || releaseStatus === 404) && !token) {
+          showToast('检查更新失败(404)：当前 GitHub 仓库为私有(Private)。请将仓库设为公开(Public)或在输入框填入 GitHub 访问令牌(Token)');
+          return { hasUpdate: false, error: 'Repository is private (404)' };
+        } else if (commitStatus === 404 || releaseStatus === 404) {
+          showToast('检查更新失败(404)：未找到更新源或访问令牌(Token)无仓库访问权限');
+          return { hasUpdate: false, error: 'Repository not found or invalid token (404)' };
+        }
+
         showToast('检查更新失败，请检查网络或更新源配置');
         return { hasUpdate: false, error: 'Network or repository not found' };
       }
@@ -4851,6 +4934,7 @@
           mode: isNewerRelease ? 'apk_or_web' : 'web_hot',
           repo,
           branch,
+          token: token || '',
           version: isNewerRelease ? `v${releaseVer}` : displayVersion,
           displayVersion,
           commitSha: fullSha,
@@ -4907,11 +4991,11 @@
     }
   }
 
-  function checkOtaUpdate(mockPayload = null, triggerAsyncNetwork = false) {
+  function checkOtaUpdate(mockPayload = null, triggerAsyncNetwork = null) {
     const feedInput = document.getElementById('ota-feed-url-input');
     const resultBox = document.getElementById('ota-check-result-box');
     const customUrl = (feedInput && feedInput.value) ? feedInput.value.trim() : '';
-    const currentVersion = (window.APP_VERSION_META && window.APP_VERSION_META.currentVersion) ? window.APP_VERSION_META.currentVersion : '1.0.0';
+    const currentVersion = getEffectiveAppVersion();
 
     let payload = mockPayload;
     if (!payload && customUrl) {
@@ -4943,10 +5027,12 @@
         const btnCheckText = document.getElementById('btn-check-ota-text');
         if (btnCheckText) btnCheckText.innerText = '检查更新';
 
+        const token = resolveGithubToken(customUrl);
         window.__pendingOtaUpdateMeta = {
           mode: releaseInfo.isWebHotUpdate ? 'web_hot' : 'apk_or_web',
           repo: (window.APP_VERSION_META && window.APP_VERSION_META.githubRepo) || 'Hsanli060/singwallet',
           branch: (window.APP_VERSION_META && window.APP_VERSION_META.githubBranch) || 'master',
+          token: token || '',
           version: displayVer,
           displayVersion: displayVer,
           commitSha: releaseInfo.commitSha || payload.sha || '',
@@ -5068,12 +5154,17 @@
       window.AndroidBridge.downloadAndInstallApk(meta.apkDownloadUrl, meta.sha256 || '');
       return true;
     } else if (typeof window.AndroidBridge.performWebHotUpdate === 'function') {
-      const hotPayload = JSON.stringify({
+      const token = meta.token || resolveGithubToken();
+      const payloadObj = {
         repo: meta.repo || (window.APP_VERSION_META && window.APP_VERSION_META.githubRepo) || 'Hsanli060/singwallet',
         branch: meta.branch || (window.APP_VERSION_META && window.APP_VERSION_META.githubBranch) || 'master',
         version: meta.version || displayVer,
         commitSha: meta.commitSha || ''
-      });
+      };
+      if (token) {
+        payloadObj.token = token;
+      }
+      const hotPayload = JSON.stringify(payloadObj);
       window.AndroidBridge.performWebHotUpdate(hotPayload);
       return true;
     } else {
@@ -5083,6 +5174,8 @@
 
   window.updateBackupStatsLabel = updateBackupStatsLabel;
   window.initAppVersionBadge = initAppVersionBadge;
+  window.getEffectiveAppVersion = getEffectiveAppVersion;
+  window.resolveGithubToken = resolveGithubToken;
   window.exportFullBackupSnapshot = exportFullBackupSnapshot;
   window.importBackupFromJson = importBackupFromJson;
   window.handleBackupFileUpload = handleBackupFileUpload;
@@ -5095,6 +5188,8 @@
   window.onNativeOtaProgress = onNativeOtaProgress;
 
   if (window.SingWalletDomain) {
+    window.SingWalletDomain.getEffectiveAppVersion = getEffectiveAppVersion;
+    window.SingWalletDomain.resolveGithubToken = resolveGithubToken;
     window.SingWalletDomain.exportFullBackupSnapshot = exportFullBackupSnapshot;
     window.SingWalletDomain.importBackupFromJson = importBackupFromJson;
     window.SingWalletDomain.checkOtaUpdate = checkOtaUpdate;

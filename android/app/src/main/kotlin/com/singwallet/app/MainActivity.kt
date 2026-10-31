@@ -381,6 +381,7 @@ class MainActivity : ComponentActivity() {
     private fun downloadUrlToFile(
         urlStr: String,
         destFile: File,
+        authToken: String? = null,
         onProgress: ((downloaded: Long, total: Long) -> Unit)? = null
     ) {
         var curUrl = urlStr
@@ -392,7 +393,16 @@ class MainActivity : ComponentActivity() {
                 readTimeout = 25000
                 instanceFollowRedirects = true
                 setRequestProperty("User-Agent", "SingWallet-OTA/${getAppVersion()} Mobile")
-                setRequestProperty("Accept", "*/*")
+                if (curUrl.contains("api.github.com")) {
+                    setRequestProperty("Accept", "application/vnd.github.v3.raw")
+                } else {
+                    setRequestProperty("Accept", "*/*")
+                }
+                val isS3Presigned = curUrl.contains("amazonaws.com") || curUrl.contains("X-Amz-")
+                val cleanToken = authToken?.trim()?.removePrefix("token ")?.removePrefix("Bearer ")?.trim()
+                if (!cleanToken.isNullOrEmpty() && !isS3Presigned) {
+                    setRequestProperty("Authorization", "token $cleanToken")
+                }
             }
             val responseCode = conn.responseCode
             if (responseCode in 301..308) {
@@ -924,6 +934,11 @@ class MainActivity : ComponentActivity() {
                 val version = config.optString("version", "")
                 val commitSha = config.optString("commitSha", "").trim()
                 val targetRef = if (commitSha.isNotEmpty()) commitSha else branch
+                val tokenFromPrefs = activity.getSharedPreferences(PREFS_OTA, MODE_PRIVATE).getString("github_token", "") ?: ""
+                val token = config.optString("token", "").trim().ifBlank { tokenFromPrefs }
+                if (token.isNotEmpty()) {
+                    activity.getSharedPreferences(PREFS_OTA, MODE_PRIVATE).edit().putString("github_token", token).apply()
+                }
 
                 val stagingDir = File(activity.filesDir, "web_hot_staging")
                 try {
@@ -938,18 +953,27 @@ class MainActivity : ComponentActivity() {
                         stagingFile.parentFile?.mkdirs()
 
                         val remotePath = "web/$relPath"
-                        val candidateUrls = listOf(
-                            "https://cdn.jsdelivr.net/gh/$repo@$targetRef/$remotePath?t=${System.currentTimeMillis()}",
-                            "https://ghfast.top/https://raw.githubusercontent.com/$repo/$targetRef/$remotePath",
-                            "https://raw.githubusercontent.com/$repo/$targetRef/$remotePath"
-                        )
+                        val candidateUrls = if (token.isNotEmpty()) {
+                            listOf(
+                                "https://raw.githubusercontent.com/$repo/$targetRef/$remotePath",
+                                "https://api.github.com/repos/$repo/contents/$remotePath?ref=$targetRef",
+                                "https://cdn.jsdelivr.net/gh/$repo@$targetRef/$remotePath?t=${System.currentTimeMillis()}",
+                                "https://ghfast.top/https://raw.githubusercontent.com/$repo/$targetRef/$remotePath"
+                            )
+                        } else {
+                            listOf(
+                                "https://cdn.jsdelivr.net/gh/$repo@$targetRef/$remotePath?t=${System.currentTimeMillis()}",
+                                "https://ghfast.top/https://raw.githubusercontent.com/$repo/$targetRef/$remotePath",
+                                "https://raw.githubusercontent.com/$repo/$targetRef/$remotePath"
+                            )
+                        }
 
                         var fileDownloaded = false
                         var lastErr: Throwable? = null
 
                         for (urlStr in candidateUrls) {
                             try {
-                                activity.downloadUrlToFile(urlStr, stagingFile)
+                                activity.downloadUrlToFile(urlStr, stagingFile, token.ifBlank { null })
                                 if (!stagingFile.exists() || stagingFile.length() == 0L) {
                                     stagingFile.delete()
                                     continue
@@ -1071,7 +1095,8 @@ class MainActivity : ComponentActivity() {
                         var lastPercent = -1
                         var lastTime = 0L
 
-                        activity.downloadUrlToFile(targetUrl, apkFile) { curBytes, totalBytes ->
+                        val savedToken = activity.getSharedPreferences(PREFS_OTA, MODE_PRIVATE).getString("github_token", null)
+                        activity.downloadUrlToFile(targetUrl, apkFile, savedToken) { curBytes, totalBytes ->
                             if (totalBytes > 0) {
                                 val pct = ((curBytes * 100) / totalBytes).toInt().coerceIn(0, 99)
                                 val now = System.currentTimeMillis()
