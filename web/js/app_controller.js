@@ -477,8 +477,9 @@
   }
 
   /**
-   * Bug 3 修复：将当前聚焦草稿表单的已修改内容同步回内存中的 draftQueue[currentDraftIndex]，
-   * 避免后台新抓屏入队或切换草稿时冲掉用户正在编辑的输入内容。
+   * 将当前聚焦草稿表单的已修改内容同步回内存中的 draftQueue[currentDraftIndex]，
+   * 包含金额、商户、单号、时间、渠道、账户、payment 对象以及分类，
+   * 并同步更新预览区文字与草稿胶囊，避免后台新抓屏入队、切换分类或切换草稿时被冲掉。
    */
   function syncActiveDraftFormToMemory() {
     if (!draftQueue || !Array.isArray(draftQueue) || draftQueue.length === 0) return;
@@ -518,13 +519,67 @@
     if (selAcc && selAcc.value) {
       cur.account = selAcc.value;
     }
+    if (cur.channel || cur.account) {
+      const ch = cur.channel || '微信';
+      const ac = cur.account || '钱包';
+      cur.payment = {
+        ...(cur.payment || {}),
+        channel: ch,
+        sub_type: ac,
+        account: ac,
+        display_name: `${ch} · ${ac}`
+      };
+    }
     if (selCat && selCat.value) {
       cur.category = selCat.value;
       cur.categoryName = selCat.value;
       cur.categoryIcon = getAppCatIcon(selCat.value);
     }
+
+    // 同步更新当前草稿预览区的文字
+    const ocrAmt = document.getElementById('draft-ocr-amount');
+    const ocrMer = document.getElementById('draft-ocr-merchant');
+    const ocrOrd = document.getElementById('draft-ocr-order');
+    const ocrTim = document.getElementById('draft-ocr-time');
+    if (ocrAmt && typeof cur.amount === 'number' && !isNaN(cur.amount)) {
+      ocrAmt.innerText = `¥ ${cur.amount.toFixed(2)}`;
+    }
+    if (ocrMer && cur.merchant) {
+      ocrMer.innerText = `收款商户：${cur.merchant}`;
+    }
+    if (ocrOrd && cur.orderId) {
+      ocrOrd.innerText = `单号: ${cur.orderId}`;
+    }
+    if (ocrTim && (cur.orderTime || cur.time)) {
+      ocrTim.innerText = `订单时间: ${cur.orderTime || cur.time}`;
+    }
+
+    if (typeof updateActiveDraftPill === 'function') {
+      updateActiveDraftPill();
+    }
+    if (typeof saveStoredDrafts === 'function') {
+      saveStoredDrafts();
+    }
   }
   window.syncActiveDraftFormToMemory = syncActiveDraftFormToMemory;
+
+  function updateActiveDraftPill() {
+    const container = document.getElementById('draft-pills-container');
+    if (!container || !draftQueue || currentDraftIndex < 0 || currentDraftIndex >= draftQueue.length) return;
+    const cur = draftQueue[currentDraftIndex];
+    if (!cur || cur.isParsing) return;
+    const pillBtn = container.children[currentDraftIndex];
+    if (!pillBtn) return;
+    const merSpan = pillBtn.querySelector('.font-semibold');
+    if (merSpan && cur.merchant) {
+      merSpan.innerText = cur.merchant.split('（')[0];
+    }
+    const amtSpan = pillBtn.querySelector('.font-bold');
+    if (amtSpan && typeof cur.amount === 'number' && !isNaN(cur.amount)) {
+      amtSpan.innerText = `¥${cur.amount.toFixed(2)}`;
+    }
+  }
+  window.updateActiveDraftPill = updateActiveDraftPill;
 
   function renderDraftQueue(options = {}) {
     const container = document.getElementById('draft-pills-container');
@@ -642,6 +697,9 @@
 
   function switchDraft(idx) {
     if (typeof closeDedupTopToast === 'function') closeDedupTopToast();
+    if (typeof syncActiveDraftFormToMemory === 'function') {
+      syncActiveDraftFormToMemory();
+    }
     if (idx >= 0 && idx < draftQueue.length) {
       currentDraftIndex = idx;
       renderDraftQueue();
@@ -650,6 +708,12 @@
 
   function loadDraftData(draft) {
     if (!draft) return;
+    if (draftQueue && Array.isArray(draftQueue)) {
+      const idx = draftQueue.findIndex(d => d === draft || (d && draft && d.id && d.id === draft.id));
+      if (idx !== -1) {
+        currentDraftIndex = idx;
+      }
+    }
     if (draft.isParsing) {
       const ocrAmount = document.getElementById('draft-ocr-amount');
       const ocrMerchant = document.getElementById('draft-ocr-merchant');
@@ -783,8 +847,18 @@
     if (inOrder) inOrder.value = draft.orderId || '';
     if (inTime) inTime.value = draft.orderTime || draft.time || '';
 
-    const rawChan = draft.payment ? draft.payment.channel : (draft.channel || '微信');
-    const rawAcc = draft.payment ? (draft.payment.sub_type === '银行卡' ? `${draft.payment.bank_name}(${draft.payment.card_last_4})` : draft.payment.sub_type) : (draft.account || '钱包');
+    const rawChan = draft.channel || (draft.payment ? draft.payment.channel : '微信');
+    let rawAcc = draft.account;
+    if (!rawAcc || rawAcc === '银行卡') {
+      if (draft.payment && draft.payment.sub_type === '银行卡' && draft.payment.bank_name && draft.payment.card_last_4) {
+        rawAcc = `${draft.payment.bank_name}(${draft.payment.card_last_4})`;
+      } else if (!rawAcc && draft.payment) {
+        rawAcc = draft.payment.account || draft.payment.sub_type || '钱包';
+      }
+    }
+    if (!rawAcc) {
+      rawAcc = '钱包';
+    }
 
     const resolveFn = window.resolveChannelAndAccount || (window.DomainRegistry && window.DomainRegistry.resolveChannelAndAccount);
     const normBankFn = window.normalizeBankCardAccount || (window.DomainRegistry && window.DomainRegistry.normalizeBankCardAccount);
@@ -837,6 +911,10 @@
     if (sugRule) {
       const bulbSvg = (typeof IconRegistry !== 'undefined' && typeof IconRegistry.getStatusIcon === 'function') ? IconRegistry.getStatusIcon('bulb') : '';
       sugRule.innerHTML = `<span class="w-3.5 h-3.5 inline-flex items-center justify-center align-text-bottom mr-1" data-ui-icon="bulb">${bulbSvg}</span>匹配规则：${draft.rule}`;
+    }
+
+    if (typeof bindDraftFormInputEvents === 'function') {
+      bindDraftFormInputEvents();
     }
   }
 
@@ -1166,6 +1244,9 @@
   };
 
   function onDraftCategorySelect(dummyIcon, name, event) {
+    if (typeof syncActiveDraftFormToMemory === 'function') {
+      syncActiveDraftFormToMemory();
+    }
     if (event) event.stopPropagation();
     const catIcon = getAppCatIcon(name);
     selectCategory(catIcon, name, '下拉选择');
@@ -1195,6 +1276,9 @@
   }
 
   function openCategoryPickerModal() {
+    if (typeof syncActiveDraftFormToMemory === 'function') {
+      syncActiveDraftFormToMemory();
+    }
     const modal = document.getElementById('category-modal');
     if (!modal) return;
     modal.classList.remove('hidden');
@@ -1219,6 +1303,9 @@
   }
 
   function selectCategory(icon, name, ruleText = '下拉选择') {
+    if (typeof syncActiveDraftFormToMemory === 'function') {
+      syncActiveDraftFormToMemory();
+    }
     const catIcon = getAppCatIcon(name);
     currentDraftCategory = {
       name: name,
@@ -1247,7 +1334,7 @@
     if (ruleEl) ruleEl.innerText = `已手动指定：${name}`;
     closeCategoryModal();
     showToast(`已更换分类为：${name}`);
-    renderDraftQueue();
+    renderDraftQueue({ skipFormReload: true });
   }
 
   // Order ID Security Modal
@@ -1617,7 +1704,7 @@
     } else if (category === 'expense') {
       showToast("已筛选：仅看支出");
     } else {
-      showToast(`已筛选父类：${category}`);
+      showToast(`已筛选：${category}`);
     }
   }
 
@@ -2804,7 +2891,7 @@
       deletedItems = deletedItems.filter(i => i.id !== itemId);
       const isIncomeOrRefund = Boolean((foundTx && (foundTx.refund || foundTx.type === 'income' || foundTx.cat === '工资收入' || foundTx.parentCat === '工资收入')) || (item && (item.dataset.type === 'income' || item.dataset.type === 'refund')));
       const paymentDisplay = foundTx ? formatTxPaymentDisplay(foundTx.channel, foundTx.account, foundTx.payment) : (item ? (item.getAttribute('data-account') || '') : '');
-      deletedItems.push({ id: itemId, name: resolvedName, amount: resolvedAmount, monthKey: foundMonthKey, isIncomeOrRefund: isIncomeOrRefund, paymentDisplay: paymentDisplay });
+      deletedItems.push({ id: itemId, name: resolvedName, amount: resolvedAmount, monthKey: foundMonthKey, isIncomeOrRefund: isIncomeOrRefund, paymentDisplay: paymentDisplay, orderId: orderToClean });
 
       // Deduct from monthly totals & recalculate day subtotal
       adjustMonthlyTotals(-resolvedAmount, !isIncomeOrRefund, -1, foundMonthKey);
@@ -2841,7 +2928,6 @@
         if (m && Array.isArray(m.txs)) {
           m.txs.forEach(tx => {
             if (tx && tx.id === lastDeletedId) {
-              tx.softDeleted = false;
               foundMonthKey = mKey;
               restoredTx = tx;
             }
@@ -2850,7 +2936,56 @@
       });
 
       const item = document.getElementById(lastDeletedId);
-      const lastItem = deletedItems[deletedItems.length - 1];
+      const lastItem = deletedItems.find(i => i.id === lastDeletedId) || deletedItems[deletedItems.length - 1];
+      const candidateOrd = (restoredTx && (restoredTx.orderId || restoredTx.order)) || (lastItem && lastItem.orderId) || (item && item.getAttribute('data-order')) || '';
+      const normOrd = typeof normalizeOrderId === 'function' ? normalizeOrderId(candidateOrd) : String(candidateOrd || '').trim();
+
+      if (normOrd) {
+        let isDup = false;
+        if (typeof isOrderIdDuplicate === 'function' && isOrderIdDuplicate(normOrd)) {
+          isDup = true;
+        }
+        if (!isDup && typeof allMonthlyData === 'object' && allMonthlyData) {
+          for (const k of Object.keys(allMonthlyData)) {
+            const m = allMonthlyData[k];
+            if (m && Array.isArray(m.txs)) {
+              for (const t of m.txs) {
+                if (t && !t.softDeleted && t.id !== lastDeletedId) {
+                  const tOrd = typeof normalizeOrderId === 'function' ? normalizeOrderId(t.orderId || t.order) : String(t.orderId || t.order || '').trim();
+                  if (tOrd && (tOrd === normOrd || (candidateOrd && tOrd === candidateOrd))) {
+                    isDup = true;
+                    break;
+                  }
+                }
+              }
+            }
+            if (isDup) break;
+          }
+        }
+        if (!isDup) {
+          const activeDomItems = Array.from(document.querySelectorAll('.tx-item:not(.soft-deleted)'));
+          for (const domIt of activeDomItems) {
+            if (domIt.id === lastDeletedId) continue;
+            const dOrd = domIt.getAttribute('data-order') || domIt.dataset?.order || '';
+            const normDOrd = typeof normalizeOrderId === 'function' ? normalizeOrderId(dOrd) : String(dOrd).trim();
+            if (normDOrd && (normDOrd === normOrd || (candidateOrd && normDOrd === candidateOrd))) {
+              isDup = true;
+              break;
+            }
+          }
+        }
+        if (isDup) {
+          const undoBar = document.getElementById('undo-snackbar');
+          if (undoBar) undoBar.classList.add('hidden');
+          showToast(`撤回失败：流水明细中已存在相同单号 (${normOrd}) 的账单，无法重复恢复！`, 'error');
+          return false;
+        }
+      }
+
+      if (restoredTx) {
+        restoredTx.softDeleted = false;
+      }
+
       const restoreAmt = (lastItem && typeof lastItem.amount === 'number')
         ? lastItem.amount
         : (restoredTx ? Number(restoredTx.amount) || 0 : 0);
@@ -2874,11 +3009,11 @@
       }
 
       // 恢复单号到 committedOrderIds
-      const restoredOrd = (restoredTx && restoredTx.orderId) || (item && item.getAttribute('data-order')) || '';
+      const restoredOrd = (restoredTx && (restoredTx.orderId || restoredTx.order)) || (item && item.getAttribute('data-order')) || candidateOrd || '';
       if (restoredOrd) {
         committedOrderIds.add(restoredOrd);
-        const normOrd = typeof normalizeOrderId === 'function' ? normalizeOrderId(restoredOrd) : restoredOrd.trim();
-        if (normOrd) committedOrderIds.add(normOrd);
+        const cleanOrd = typeof normalizeOrderId === 'function' ? normalizeOrderId(restoredOrd) : restoredOrd.trim();
+        if (cleanOrd) committedOrderIds.add(cleanOrd);
       }
 
       const undoBar = document.getElementById('undo-snackbar');
@@ -2891,6 +3026,7 @@
       updateDynamicCategoryChips();
       if (typeof renderMonthlyCategoryChart === 'function') renderMonthlyCategoryChart();
       showToast("已成功撤回删除");
+      return true;
     }
   }
 
@@ -3037,7 +3173,6 @@
       if (m && Array.isArray(m.txs)) {
         m.txs.forEach(tx => {
           if (tx && tx.id === id) {
-            tx.softDeleted = false;
             foundMonthKey = mKey;
             restoredTx = tx;
           }
@@ -3047,6 +3182,53 @@
 
     const item = document.getElementById(id);
     const found = deletedItems.find(i => i.id === id);
+    const candidateOrd = (restoredTx && (restoredTx.orderId || restoredTx.order)) || (found && found.orderId) || (item && item.getAttribute('data-order')) || '';
+    const normOrd = typeof normalizeOrderId === 'function' ? normalizeOrderId(candidateOrd) : String(candidateOrd || '').trim();
+
+    if (normOrd) {
+      let isDup = false;
+      if (typeof isOrderIdDuplicate === 'function' && isOrderIdDuplicate(normOrd)) {
+        isDup = true;
+      }
+      if (!isDup && typeof allMonthlyData === 'object' && allMonthlyData) {
+        for (const k of Object.keys(allMonthlyData)) {
+          const m = allMonthlyData[k];
+          if (m && Array.isArray(m.txs)) {
+            for (const t of m.txs) {
+              if (t && !t.softDeleted && t.id !== id) {
+                const tOrd = typeof normalizeOrderId === 'function' ? normalizeOrderId(t.orderId || t.order) : String(t.orderId || t.order || '').trim();
+                if (tOrd && (tOrd === normOrd || (candidateOrd && tOrd === candidateOrd))) {
+                  isDup = true;
+                  break;
+                }
+              }
+            }
+          }
+          if (isDup) break;
+        }
+      }
+      if (!isDup) {
+        const activeDomItems = Array.from(document.querySelectorAll('.tx-item:not(.soft-deleted)'));
+        for (const domIt of activeDomItems) {
+          if (domIt.id === id) continue;
+          const dOrd = domIt.getAttribute('data-order') || domIt.dataset?.order || '';
+          const normDOrd = typeof normalizeOrderId === 'function' ? normalizeOrderId(dOrd) : String(dOrd).trim();
+          if (normDOrd && (normDOrd === normOrd || (candidateOrd && normDOrd === candidateOrd))) {
+            isDup = true;
+            break;
+          }
+        }
+      }
+      if (isDup) {
+        showToast(`恢复失败：流水明细中已存在相同单号 (${normOrd}) 的账单，无法重复恢复！`, 'error');
+        return false;
+      }
+    }
+
+    if (restoredTx) {
+      restoredTx.softDeleted = false;
+    }
+
     const restoreAmt = (found && typeof found.amount === 'number')
       ? found.amount
       : (restoredTx ? Number(restoredTx.amount) || 0 : 0);
@@ -3070,11 +3252,11 @@
     }
 
     // 恢复单号到 committedOrderIds
-    const restoredOrd = (restoredTx && restoredTx.orderId) || (item && item.getAttribute('data-order')) || '';
+    const restoredOrd = (restoredTx && (restoredTx.orderId || restoredTx.order)) || (item && item.getAttribute('data-order')) || candidateOrd || '';
     if (restoredOrd) {
       committedOrderIds.add(restoredOrd);
-      const normOrd = typeof normalizeOrderId === 'function' ? normalizeOrderId(restoredOrd) : restoredOrd.trim();
-      if (normOrd) committedOrderIds.add(normOrd);
+      const cleanOrd = typeof normalizeOrderId === 'function' ? normalizeOrderId(restoredOrd) : restoredOrd.trim();
+      if (cleanOrd) committedOrderIds.add(cleanOrd);
     }
 
     deletedItems = deletedItems.filter(i => i.id !== id);
@@ -3087,7 +3269,8 @@
     applyActiveFilters();
     updateDynamicCategoryChips();
     if (typeof renderMonthlyCategoryChart === 'function') renderMonthlyCategoryChart();
-    showToast("账目已还原到流水");
+    showToast('已从回收站恢复账单');
+    return true;
   }
 
   function closeTrashModal() {
@@ -3910,16 +4093,20 @@
   function executeRefundLinkDemo() {}
 
   // Month Picker Modal & Full 12-Month Grid Engine
-  let currentActiveYear = '2026';
-  let currentActiveMonth = '10';
-  let pickerYear = 2026;
+  const _initDefaultDate = getDynamicDateBase();
+  let currentActiveYear = String(_initDefaultDate.getFullYear());
+  let currentActiveMonth = String(_initDefaultDate.getMonth() + 1).padStart(2, '0');
+  let pickerYear = _initDefaultDate.getFullYear();
 
   // Clean 12-Month Realistic Financial Dataset Engine & LocalStorage Persistence
   const allMonthlyData = {};
-  for (let m = 1; m <= 12; m++) {
-    const k = `2026-${String(m).padStart(2, '0')}`;
-    allMonthlyData[k] = { net: '0.00', exp: '0.00', ref: '0.00', inc: '0.00', txs: [] };
-  }
+  const _initYears = new Set(['2026', currentActiveYear]);
+  _initYears.forEach(yr => {
+    for (let m = 1; m <= 12; m++) {
+      const k = `${yr}-${String(m).padStart(2, '0')}`;
+      allMonthlyData[k] = { net: '0.00', exp: '0.00', ref: '0.00', inc: '0.00', count: '0 笔', avg: '¥0.00', txs: [] };
+    }
+  });
 
   function saveUserTransactionsToStorage() {
     try {
@@ -4049,6 +4236,37 @@
     }
 
     container.innerHTML = html;
+  }
+
+  // Initialize Active Month dynamically aligned with natural date
+  function initActiveMonth() {
+    const _bootNow = getDynamicDateBase();
+    currentActiveYear = String(_bootNow.getFullYear());
+    currentActiveMonth = String(_bootNow.getMonth() + 1).padStart(2, '0');
+    pickerYear = _bootNow.getFullYear();
+    const lblCurMonthInit = document.getElementById('label-current-month');
+    if (lblCurMonthInit) {
+      lblCurMonthInit.innerText = `${currentActiveYear} 年 ${currentActiveMonth} 月`;
+    }
+    if (!allMonthlyData[`${currentActiveYear}-${currentActiveMonth}`]) {
+      for (let m = 1; m <= 12; m++) {
+        const k = `${currentActiveYear}-${String(m).padStart(2, '0')}`;
+        if (!allMonthlyData[k]) {
+          allMonthlyData[k] = { net: '0.00', exp: '0.00', ref: '0.00', inc: '0.00', count: '0 笔', avg: '¥0.00', txs: [] };
+        }
+      }
+    }
+    const data = getMonthlyData(currentActiveYear, currentActiveMonth);
+    const monthlyNet = document.getElementById('monthly-net-expense');
+    const totalNet = document.getElementById('total-net-expense');
+    const totalExp = document.getElementById('total-expense');
+    const totalRef = document.getElementById('total-refund');
+    const totalInc = document.getElementById('total-income');
+    if (monthlyNet) monthlyNet.innerText = `¥ ${data.net || '0.00'}`;
+    if (totalNet) totalNet.innerText = `¥ ${data.net || '0.00'}`;
+    if (totalExp) totalExp.innerText = `¥ ${data.exp || '0.00'}`;
+    if (totalRef) totalRef.innerText = (data.ref && data.ref.startsWith('-')) ? data.ref : `-¥ ${data.ref || '0.00'}`;
+    if (totalInc) totalInc.innerText = `¥ ${data.inc || '0.00'}`;
   }
 
   // Select Year & Month
@@ -5632,6 +5850,18 @@
     set: (val) => { currentFilterKey = val; },
     configurable: true
   });
+  Object.defineProperty(window, 'currentActiveYear', {
+    get: () => currentActiveYear,
+    set: (val) => { currentActiveYear = String(val); },
+    configurable: true
+  });
+  Object.defineProperty(window, 'currentActiveMonth', {
+    get: () => currentActiveMonth,
+    set: (val) => { currentActiveMonth = String(val).padStart(2, '0'); },
+    configurable: true
+  });
+  window.getDynamicDateBase = getDynamicDateBase;
+  window.initActiveMonth = initActiveMonth;
 
   // ================= 方式 2：OTA 检查更新与三条铁律（全量 JSON 备份/恢复 + SQLite v2 无损迁移） =================
 
@@ -5657,6 +5887,16 @@
     label.innerText = `${txCount} 笔账单 · ${catCount} 个分类`;
   }
 
+  function cleanPureVersionString(rawVer, fallback = '1.0.8') {
+    if (!rawVer) return fallback;
+    const cleaned = String(rawVer)
+      .replace(/^[vV]/, '')
+      .replace(/\s*·\s*热更.*$/, '')
+      .replace(/\s*#.*$/, '')
+      .trim();
+    return cleaned || fallback;
+  }
+
   function getEffectiveAppVersion() {
     let nativeVer = '';
     if (window.AndroidBridge && typeof window.AndroidBridge.getAppVersion === 'function') {
@@ -5665,12 +5905,16 @@
     const savedVer = localStorage.getItem('singwallet_app_version');
     if (nativeVer) {
       if (savedVer && typeof compareVersions === 'function') {
-        return compareVersions(nativeVer, savedVer) >= 0 ? nativeVer : savedVer;
+        const bestVer = compareVersions(nativeVer, savedVer) >= 0 ? nativeVer : savedVer;
+        return cleanPureVersionString(bestVer, '1.0.8');
       }
-      return nativeVer;
+      return cleanPureVersionString(nativeVer, '1.0.8');
     }
-    if (savedVer) return savedVer;
-    return (window.APP_VERSION_META && window.APP_VERSION_META.currentVersion) ? window.APP_VERSION_META.currentVersion : '1.0.0';
+    if (savedVer) return cleanPureVersionString(savedVer, '1.0.8');
+    const metaVer = (window.APP_VERSION_META && window.APP_VERSION_META.currentVersion && window.APP_VERSION_META.currentVersion !== '1.0.0')
+      ? window.APP_VERSION_META.currentVersion
+      : '1.0.8';
+    return cleanPureVersionString(metaVer, '1.0.8');
   }
 
   function initAppVersionBadge() {
@@ -5681,7 +5925,6 @@
       try { nativeVer = window.AndroidBridge.getAppVersion() || ''; } catch (e) {}
     }
     const savedVer = localStorage.getItem('singwallet_app_version');
-    const savedSha = localStorage.getItem('singwallet_hot_commit_sha');
 
     let effectiveVer = '';
     if (nativeVer) {
@@ -5695,13 +5938,14 @@
     }
 
     if (effectiveVer) {
-      const cleanVer = effectiveVer.replace(/^[vV]/, '');
-      const shaTag = savedSha ? ` #${savedSha.slice(0, 7)}` : '';
-      badge.innerText = `v${cleanVer}${shaTag}`;
+      const cleanVer = cleanPureVersionString(effectiveVer, '1.0.8');
+      badge.innerText = `v${cleanVer}`;
       badge.className = "text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono whitespace-nowrap";
     } else {
-      const defaultVer = (window.APP_VERSION_META && window.APP_VERSION_META.currentVersion) ? window.APP_VERSION_META.currentVersion : '1.0.0';
-      badge.innerText = `v${defaultVer.replace(/^[vV]/, '')}`;
+      const metaVer = (window.APP_VERSION_META && window.APP_VERSION_META.currentVersion && window.APP_VERSION_META.currentVersion !== '1.0.0')
+        ? window.APP_VERSION_META.currentVersion
+        : '1.0.8';
+      badge.innerText = `v${cleanPureVersionString(metaVer, '1.0.8')}`;
       badge.className = "text-[10px] px-2 py-0.5 rounded-md bg-slate-700/60 text-slate-300 font-mono whitespace-nowrap";
     }
   }
@@ -6055,7 +6299,7 @@
     const btnTrigger = document.getElementById('btn-trigger-ota-upgrade');
 
     const meta = window.__pendingOtaUpdateMeta || {};
-    const targetVer = (meta.version || '1.1.0').replace(/^[vV]/, '');
+    const targetVer = cleanPureVersionString(meta.version || '1.0.8', '1.0.8');
     const displayVer = meta.displayVersion || meta.version || `v${targetVer}`;
 
     const percent = Math.min(100, Math.max(0, parseInt(progressData.percent, 10) || 0));
@@ -6106,7 +6350,7 @@
       window.currentAppVersion = targetVer;
 
       if (badge) {
-        badge.innerText = displayVer;
+        badge.innerText = `v${targetVer}`;
         badge.className = "text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono whitespace-nowrap";
       }
 
@@ -6270,6 +6514,7 @@
         let titleText = '';
         let triggerBtnText = '';
         let changelogLines = [];
+        const cleanInst = cleanPureVersionString(installedVersion, '1.0.8');
 
         if (isNewerRelease) {
           displayVersion = `v${releaseVer}`;
@@ -6278,7 +6523,6 @@
           changelogLines = releaseLines.length > 0 ? releaseLines : (commitLines.length > 0 ? commitLines : ['新版本 APK 安装包已发布']);
         } else {
           // Web 秒级热更新模式
-          const cleanInst = installedVersion.replace(/^[vV]/, '');
           displayVersion = `v${cleanInst} · 热更 #${shortSha}`;
           titleText = `发现新版本 ${displayVersion}`;
           triggerBtnText = '立即热更新 (免安装秒级生效)';
@@ -6290,7 +6534,7 @@
           repo,
           branch,
           token: token || '',
-          version: isNewerRelease ? `v${releaseVer}` : displayVersion,
+          version: isNewerRelease ? `v${releaseVer}` : `v${cleanInst}`,
           displayVersion,
           commitSha: fullSha,
           shortSha,
@@ -6443,7 +6687,7 @@
     const btnTrigger = document.getElementById('btn-trigger-ota-upgrade');
 
     const meta = window.__pendingOtaUpdateMeta || {};
-    const targetVer = (meta.version || '1.1.0').replace(/^[vV]/, '');
+    const targetVer = cleanPureVersionString(meta.version || '1.0.8', '1.0.8');
     const displayVer = meta.displayVersion || meta.version || `v${targetVer}`;
 
     // 确保原生回调挂载
@@ -6471,7 +6715,7 @@
       }
 
       if (badge) {
-        badge.innerText = displayVer;
+        badge.innerText = `v${targetVer}`;
         badge.className = "text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono whitespace-nowrap";
       }
 
@@ -6564,6 +6808,32 @@
   }
 
 
+  function bindDraftFormInputEvents() {
+    const draftFieldIds = [
+      'input-amount',
+      'input-merchant',
+      'input-order',
+      'input-time',
+      'select-channel',
+      'select-account'
+    ];
+    draftFieldIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el && !el.__draftSyncBound) {
+        el.__draftSyncBound = true;
+        const syncHandler = () => {
+          syncActiveDraftFormToMemory();
+          if (typeof updateActiveDraftPill === 'function') {
+            updateActiveDraftPill();
+          }
+        };
+        el.addEventListener('input', syncHandler);
+        el.addEventListener('change', syncHandler);
+      }
+    });
+  }
+  window.bindDraftFormInputEvents = bindDraftFormInputEvents;
+
   // ================= DOM CONTENT LOADED INITIALIZATION =================
   let isAppControllerInitialized = false;
   function initAppController() {
@@ -6573,6 +6843,8 @@
     if (typeof initAllCustomDropdowns === 'function') {
       initAllCustomDropdowns();
     }
+    // 1.1 实时绑定待确认表单输入框实时同步事件，防止手改数据被冲刷
+    bindDraftFormInputEvents();
     // 2. Sync VLM configuration to UI
     if (typeof syncVlmConfigToUI === 'function') {
       syncVlmConfigToUI();
@@ -6620,6 +6892,8 @@
     });
 
     // 7. Load stored user transactions from localStorage if any
+    initActiveMonth();
+
     const storedTxs = loadUserTransactionsFromStorage().filter(t => t && !t.softDeleted);
     if (Array.isArray(storedTxs) && storedTxs.length > 0) {
       // 预先将历史流水按从新到旧（降序）排序，倒序推入流水列表
@@ -6648,6 +6922,9 @@
       Object.keys(monthSums).forEach(mKey => {
         adjustMonthlyTotals(monthSums[mKey], true, 0, mKey);
       });
+      if (typeof recalculateMonthTotalsFromTxs === 'function') {
+        recalculateMonthTotalsFromTxs(`${currentActiveYear}-${currentActiveMonth}`);
+      }
     } else {
       // Clean initial state: 0 bills
       const emptyState = document.getElementById('tx-empty-state');

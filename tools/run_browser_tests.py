@@ -35,6 +35,15 @@ async function runAllTestsSuite() {
     // ========================================================
     console.log("=== Group 0: Clean App Initial State Verification ===");
 
+    // 0. 验证当月初始化（优化 1）：未设置 __MOCK_DATE__ 时，页面初始加载动态对齐当前自然年月
+    const now0 = new Date();
+    const expY0 = String(now0.getFullYear());
+    const expM0 = String(now0.getMonth() + 1).padStart(2, '0');
+    assert(String(currentActiveYear) === expY0, "Group 0: Initial currentActiveYear aligns with current year " + expY0 + " (got: " + currentActiveYear + ")");
+    assert(String(currentActiveMonth) === expM0, "Group 0: Initial currentActiveMonth aligns with current month " + expM0 + " (got: " + currentActiveMonth + ")");
+    const labelMonth0 = document.getElementById('label-current-month');
+    assert(labelMonth0 !== null && labelMonth0.innerText.trim() === `${expY0} 年 ${expM0} 月`, "Group 0: #label-current-month aligns with natural month '" + expY0 + " 年 " + expM0 + " 月' (got: " + (labelMonth0 ? labelMonth0.innerText.trim() : 'null') + ")");
+
     // 1. 验证流水账本初始状态为 0 笔账单，净支出为 ¥ 0.00
     const initialTxItems = document.querySelectorAll('#transactions-list .tx-item');
     assert(initialTxItems.length === 0, "Group 0: Initial transaction list is completely clean (found " + initialTxItems.length + ")");
@@ -90,6 +99,10 @@ async function runAllTestsSuite() {
     assert(initCircle.getAttribute('stroke-width') === '10', "Group 0: Initial circle has stroke-width='10'");
     const initLegend = document.getElementById('monthly-pie-legend');
     assert(initLegend !== null && initLegend.innerText.includes('暂无支出数据'), "Group 0: #monthly-pie-legend displays '暂无支出数据'");
+
+    // 设置 2026-10 测试环境以兼容后续历史测试夹具
+    window.__MOCK_DATE__ = '2026-10-26T12:00:00';
+    selectMonthYear(2026, '10');
 
     // ================= Test Helpers =================
     function injectTestDrafts() {
@@ -236,6 +249,7 @@ async function runAllTestsSuite() {
         const k = `2026-${String(m).padStart(2, '0')}`;
         allMonthlyData[k] = { net: '0.00', exp: '0.00', ref: '0.00', inc: '0.00', txs: [] };
       }
+      selectMonthYear(2026, '10');
       const monthlyNet = document.getElementById('monthly-net-expense');
       const totalNet = document.getElementById('total-net-expense');
       const totalExp = document.getElementById('total-expense');
@@ -255,6 +269,7 @@ async function runAllTestsSuite() {
       if (typeof updateDynamicCategoryChips === 'function') updateDynamicCategoryChips();
       if (typeof renderMonthlyCategoryChart === 'function') renderMonthlyCategoryChart();
       try { localStorage.clear(); } catch(e) {}
+      if (typeof initAppVersionBadge === 'function') initAppVersionBadge();
     }
 
 
@@ -1832,7 +1847,7 @@ async function runAllTestsSuite() {
     const versionBadge = document.getElementById('app-current-version-badge');
     assert(!!versionBadge, "Group 37: #app-current-version-badge exists");
     assert(otaUpdateCard.contains(versionBadge), "Group 37: #app-current-version-badge is inside #ota-update-card");
-    assert(versionBadge.innerText.includes('v1.0.0'), "Group 37: initial version is v1.0.0 (found " + versionBadge.innerText + ")");
+    assert(versionBadge.innerText === 'v1.0.8', "Group 37: initial version is v1.0.8 (found " + versionBadge.innerText + ")");
 
     // 2. 测试备份导出与无损恢复（铁律 3）
     // 2.1 先添加一个自定义分类（数码外设）
@@ -2412,7 +2427,7 @@ async function runAllTestsSuite() {
       assert(triggerBtn.disabled === true, "Group 42: Trigger button disabled after update complete");
       assert(triggerBtn.innerText.includes('已完成更新'), "Group 42: Trigger button text shows '已完成更新'");
       const vBadge = document.getElementById('app-current-version-badge');
-      assert(vBadge && vBadge.innerText.includes(mockShortSha), "Group 42: Version badge updated with commit shortSha #" + mockShortSha);
+      assert(vBadge && !vBadge.innerText.includes('#') && vBadge.innerText.startsWith('v'), "Group 42: Version badge cleanly shows version without commit shortSha (got: " + (vBadge ? vBadge.innerText : 'null') + ")");
 
       // 6. 验证 GitHub Release APK 更新流 (双擎之二)
       const mockApkUrl = 'https://github.com/Hsanli060/singwallet/releases/download/v1.2.0/singwallet-v1.2.0.apk';
@@ -3452,6 +3467,165 @@ async function runAllTestsSuite() {
       window.DomainRegistry.resetCategories();
       syncAllCategoryUIs();
     }
+
+    // ========================================================
+    console.log("=== Group 50: 3 项体验优化与回收站恢复单号判重专项回归测试 ===");
+
+    // ----------------------------------------------------
+    // Test 50.1: 优化 1 — 动态对齐当前自然年月与动态时间基准
+    // ----------------------------------------------------
+    delete window.__MOCK_DATE__;
+    const dynamicNow = getDynamicDateBase();
+    const realNow = new Date();
+    assert(dynamicNow.getFullYear() === realNow.getFullYear() && dynamicNow.getMonth() === realNow.getMonth(), "Test 50.1: getDynamicDateBase() aligns with real system date when __MOCK_DATE__ is unset");
+    initActiveMonth();
+    const expYear50 = String(realNow.getFullYear());
+    const expMonth50 = String(realNow.getMonth() + 1).padStart(2, '0');
+    assert(String(currentActiveYear) === expYear50, "Test 50.1: currentActiveYear matches real year " + expYear50 + " (got: " + currentActiveYear + ")");
+    assert(String(currentActiveMonth) === expMonth50, "Test 50.1: currentActiveMonth matches real month " + expMonth50 + " (got: " + currentActiveMonth + ")");
+    const lblCurrentMonthEl = document.getElementById('label-current-month');
+    assert(lblCurrentMonthEl && lblCurrentMonthEl.innerText.trim() === `${expYear50} 年 ${expMonth50} 月`, "Test 50.1: #label-current-month cleanly matches natural month '" + expYear50 + " 年 " + expMonth50 + " 月'");
+
+    // 恢复 2026-10 测试环境
+    window.__MOCK_DATE__ = '2026-10-26T12:00:00';
+    selectMonthYear(2026, '10');
+
+    // ----------------------------------------------------
+    // Test 50.2: 优化 2 — 修改分类时 100% 保留已编辑的表单输入项
+    // ----------------------------------------------------
+    cleanAllTestData();
+    draftQueue = [{
+      id: 'draft-50-edit',
+      merchant: '原始商户A',
+      amount: 12.34,
+      amountInCents: 1234,
+      channel: '微信',
+      account: '钱包',
+      category: '餐饮美食',
+      categoryName: '餐饮美食',
+      confidence: 85,
+      orderId: 'ORIG_ORD_12345',
+      orderTime: '2026-10-26 12:00:00'
+    }];
+    currentDraftIndex = 0;
+    renderDraftQueue();
+    switchTab('drafts');
+
+    // 用户在表单中手动修改各项字段
+    const inAmt50 = document.getElementById('input-amount');
+    const inOrder50 = document.getElementById('input-order');
+    const inMer50 = document.getElementById('input-merchant');
+    const inTime50 = document.getElementById('input-time');
+    const selChan50 = document.getElementById('select-channel');
+    const selAcc50 = document.getElementById('select-account');
+
+    inAmt50.value = "99.88";
+    inOrder50.value = "CUSTOM_ORDER_9988";
+    inMer50.value = "修改后的商户名";
+    inTime50.value = "2026-10-26 18:30:00";
+    selChan50.value = "支付宝";
+    selAcc50.value = "余额宝";
+
+    // 1) 通过 onDraftCategorySelect 切换分类为 '日常购物'
+    onDraftCategorySelect('', '日常购物');
+
+    // 验证所有修改字段 100% 保留
+    assert(document.getElementById('input-amount').value === "99.88", "Test 50.2: onDraftCategorySelect 后 input-amount 保留 '99.88'");
+    assert(document.getElementById('input-order').value === "CUSTOM_ORDER_9988", "Test 50.2: onDraftCategorySelect 后 input-order 保留 'CUSTOM_ORDER_9988'");
+    assert(document.getElementById('input-merchant').value === "修改后的商户名", "Test 50.2: onDraftCategorySelect 后 input-merchant 保留 '修改后的商户名'");
+    assert(document.getElementById('input-time').value === "2026-10-26 18:30:00", "Test 50.2: onDraftCategorySelect 后 input-time 保留 '2026-10-26 18:30:00'");
+    assert(document.getElementById('select-channel').value === "支付宝", "Test 50.2: onDraftCategorySelect 后 select-channel 保留 '支付宝'");
+    assert(document.getElementById('select-account').value === "余额宝", "Test 50.2: onDraftCategorySelect 后 select-account 保留 '余额宝'");
+    assert(draftQueue[0].categoryName === "日常购物", "Test 50.2: onDraftCategorySelect 分类成功更新为 '日常购物'");
+
+    // 2) 再次修改某个字段并调用 selectCategory 切换分类为 '交通出行'
+    document.getElementById('input-amount').value = "108.50";
+    selectCategory('', '交通出行', '分类选择器');
+
+    // 验证所有修改字段依然 100% 保留
+    assert(document.getElementById('input-amount').value === "108.50", "Test 50.2: selectCategory 后 input-amount 保留 '108.50'");
+    assert(document.getElementById('input-order').value === "CUSTOM_ORDER_9988", "Test 50.2: selectCategory 后 input-order 保持");
+    assert(document.getElementById('input-merchant').value === "修改后的商户名", "Test 50.2: selectCategory 后 input-merchant 保持");
+    assert(document.getElementById('input-time').value === "2026-10-26 18:30:00", "Test 50.2: selectCategory 后 input-time 保持");
+    assert(document.getElementById('select-channel').value === "支付宝", "Test 50.2: selectCategory 后 select-channel 保持");
+    assert(document.getElementById('select-account').value === "余额宝", "Test 50.2: selectCategory 后 select-account 保持");
+    assert(draftQueue[0].categoryName === "交通出行", "Test 50.2: selectCategory 分类成功更新为 '交通出行'");
+
+    // ----------------------------------------------------
+    // Test 50.3: 优化 3 — 应用版本号纯净展示 v1.0.8，绝不含 Commit Hash
+    // ----------------------------------------------------
+    const vBadge50 = document.getElementById('app-current-version-badge');
+    assert(vBadge50 && vBadge50.innerText.trim() === 'v1.0.8', "Test 50.3: #app-current-version-badge 纯净展示 'v1.0.8' (got: " + (vBadge50 ? vBadge50.innerText : 'null') + ")");
+    assert(vBadge50 && !vBadge50.innerText.includes('#'), "Test 50.3: 初始状态下 #app-current-version-badge 不含 commit hash");
+
+    // 模拟 localStorage 存有历史 singwallet_hot_commit_sha
+    localStorage.setItem('singwallet_hot_commit_sha', '5e1b30b999');
+    initAppVersionBadge();
+    assert(vBadge50.innerText.trim() === 'v1.0.8', "Test 50.3: 带历史 commit sha 时调用 initAppVersionBadge() 依然纯净展示 'v1.0.8'");
+    assert(!vBadge50.innerText.includes('#') && !vBadge50.innerText.includes('5e1b30b'), "Test 50.3: 绝不含 #5e1b30b");
+
+    // ----------------------------------------------------
+    // Test 50.4: Bug 1 — 回收站恢复/撤销删除时单号防重拦截
+    // ----------------------------------------------------
+    cleanAllTestData();
+    // 1) 插入一笔账单 A 并删除到回收站
+    insertTransactionToList({
+      id: "tx-50-dup-a",
+      merchant: "商户A",
+      amount: 50.00,
+      catName: "餐饮美食",
+      channel: "微信",
+      account: "钱包",
+      txDate: "2026-10-26",
+      txTime: "2026-10-26 12:00:00",
+      orderId: "ORD_RESTORE_DUP_001"
+    });
+    deleteTransaction("tx-50-dup-a", "商户A", 50.00);
+    assert(deletedItems.some(i => i.id === "tx-50-dup-a"), "Test 50.4: 账单 A 已成功移入回收站");
+    assert(document.querySelectorAll('#transactions-list .tx-item:not(.soft-deleted)').length === 0, "Test 50.4: 活跃账单数为 0");
+
+    // 2) 流水中新建一笔同单号 ORD_RESTORE_DUP_001 的活跃账单 B
+    insertTransactionToList({
+      id: "tx-50-dup-b",
+      merchant: "商户B",
+      amount: 60.00,
+      catName: "日常购物",
+      channel: "支付宝",
+      account: "余额宝",
+      txDate: "2026-10-26",
+      txTime: "2026-10-26 12:30:00",
+      orderId: "ORD_RESTORE_DUP_001"
+    });
+    assert(document.querySelectorAll('#transactions-list .tx-item:not(.soft-deleted)').length === 1, "Test 50.4: 活跃账单数为 1 (账单 B)");
+
+    // 3) 断言对 A 执行 undoDelete() 与 restoreTrash() 时均被拦截并返回 false
+    const undoRes = undoDelete();
+    assert(undoRes === false, "Test 50.4: 对账单 A 执行 undoDelete() 被成功拦截并返回 false");
+    const restoreRes = restoreTrash("tx-50-dup-a");
+    assert(restoreRes === false, "Test 50.4: 对账单 A 执行 restoreTrash() 被成功拦截并返回 false");
+    assert(deletedItems.some(i => i.id === "tx-50-dup-a"), "Test 50.4: 账单 A 仍安全保留在回收站中");
+    assert(document.querySelectorAll('#transactions-list .tx-item:not(.soft-deleted)').length === 1, "Test 50.4: 活跃账单依然仅 1 笔 (无重复账单进入流水)");
+
+    // 4) 将账单 B 彻底删除（移入回收站后直接从 deletedItems 中彻底移除）
+    deleteTransaction("tx-50-dup-b", "商户B", 60.00);
+    deletedItems = deletedItems.filter(i => i.id !== "tx-50-dup-b");
+    const domB = document.getElementById("tx-50-dup-b");
+    if (domB) domB.remove();
+    if (typeof committedOrderIds !== 'undefined') {
+      committedOrderIds.delete("ORD_RESTORE_DUP_001");
+    }
+    const curMonthData50 = getMonthlyData('2026', '10');
+    if (curMonthData50 && curMonthData50.txs) {
+      curMonthData50.txs = curMonthData50.txs.filter(t => t.id !== "tx-50-dup-b");
+    }
+
+    // 5) 再次对 A 执行 restoreTrash，断言成功恢复
+    const restoreSuccess = restoreTrash("tx-50-dup-a");
+    assert(restoreSuccess === true, "Test 50.4: 冲突账单 B 移除后对账单 A 执行 restoreTrash() 成功恢复并返回 true");
+    assert(!deletedItems.some(i => i.id === "tx-50-dup-a"), "Test 50.4: 账单 A 已从回收站中移除");
+    assert(document.querySelectorAll('#transactions-list .tx-item:not(.soft-deleted)').length === 1, "Test 50.4: 活跃账单恢复为 1 笔");
+    const restoredDomA = document.getElementById("tx-50-dup-a");
+    assert(restoredDomA && !restoredDomA.classList.contains('soft-deleted'), "Test 50.4: 账单 A 节点在流水列表中处于活跃状态");
 
     // 4. 测试收尾：清理全部测试数据，确保 App 还原为 100% 干净状态
     cleanAllTestData();
