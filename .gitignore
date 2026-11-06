@@ -1,0 +1,41 @@
+# Android Gradle & Build Artifacts
+.gradle/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/key.properties
+*.jks
+*.keystore
+
+# Build Outputs & Packages
+*.apk
+releases/*.apk
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# IDE & OS Metadata
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.class
+*.log
+
+# Scratch & Temporary Testing Files
+scratch/
+migrate_working_dir/
+tools/fixtures/user_bills/
+.agents/

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SingWallet</string>
+    <string name="accessibility_service_label">SingWallet 闪电记账抓屏服务</string>
+    <string name="accessibility_service_desc">用于「闪电记账」下拉控制中心快捷捕获当前屏幕账单，在内存中直接识别解析，零相册垃圾，保障极致私密记账体验。</string>
+</resources>
