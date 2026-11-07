@@ -43,6 +43,7 @@ import androidx.core.content.FileProvider
 import com.singwallet.app.services.LightningAiBackgroundProcessor
 import com.singwallet.app.services.QuickRecordTileService
 import com.singwallet.app.services.SingWalletAccessibilityService
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
@@ -104,25 +105,38 @@ class MainActivity : ComponentActivity() {
         @Volatile
         private var instance: MainActivity? = null
 
+        @Volatile
+        private var isForeground: Boolean = false
+
         fun getInstance(): MainActivity? = instance
 
         fun isAlive(): Boolean = instance != null && !(instance?.isFinishing ?: true)
 
         /**
-         * 当原生后台开始解析某张闪电抓屏时，若 MainActivity 存活且已加载，通知前端展示进度占位胶囊
+         * 判断 MainActivity 是否真正处于前台可见交互状态（避免后台 Stopped 状态下向被冻结的 WebView 推送占位胶囊或提前抢占消费 .parsed.json）
+         */
+        fun isInForeground(): Boolean = isAlive() && isForeground
+
+        /**
+         * 当原生后台开始解析某张闪电抓屏时，仅当 MainActivity 处于前台且已加载时，通知前端展示进度占位胶囊
          */
         fun notifyNativeParsingStarted(jpgFile: File, taskId: String) {
             val act = instance ?: return
-            if (!act.isPageLoaded) return
+            if (!isInForeground() || !act.isPageLoaded) return
             act.notifyNativeParsingStartedInternal(jpgFile, taskId)
         }
 
         /**
-         * 当原生后台完成 AI 解析并写入 .parsed.json 后，触发 MainActivity 立即消费已解析结果
+         * 当原生后台完成 AI 解析并写入 .parsed.json 后，若 MainActivity 处于前台则立即消费已解析结果；
+         * 若处于后台则保留在磁盘中，待用户打开 App (onResume) 时秒级直接展示已就绪结果
          */
         fun onBackgroundParseCompleted(fileName: String) {
             val act = instance ?: return
-            Log.i(TAG, "Native background AI parse completed for $fileName, triggering ingestion")
+            if (!isInForeground()) {
+                Log.i(TAG, "Native background AI parse completed for $fileName while Activity is in background; deferred until onResume")
+                return
+            }
+            Log.i(TAG, "Native background AI parse completed for $fileName, triggering immediate foreground ingestion")
             act.scanPendingLightningCaptures()
         }
 
@@ -208,6 +222,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         instance = this
+        isForeground = true
 
         // 注册全局异常捕获，确保即使有任何极端异常也能输出 Logcat，绝不静默闪退
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
@@ -816,6 +831,10 @@ class MainActivity : ComponentActivity() {
                                 val taskId = LightningAiBackgroundProcessor.getTaskIdForFile(originalName)
 
                                 if (parsedFile.exists()) {
+                                    // 仅当 Activity 处于前台时才认领并向 WebView 注入已解析结果；若在后台则保留文件待用户打开 App 时秒级消费
+                                    if (!isInForeground()) {
+                                        return@forEach
+                                    }
                                     // 场景 1：原生后台已完成 AI 解析 (.parsed.json 已就绪)，原子认领并直接将结构化结果注入前端
                                     val ts = System.currentTimeMillis()
                                     val processingImg = File(dir, "${file.nameWithoutExtension}_${ts}.img.processing")
@@ -860,8 +879,10 @@ class MainActivity : ComponentActivity() {
                                     }
                                 } else if (LightningAiBackgroundProcessor.isProcessing(originalName)) {
                                     // 场景 2：用户在点击闪电记账后 1~2 秒内立即切回了 App，原生后台正在请求大模型中
-                                    // 通知前端先展示进度胶囊，等后台线程返回后会自动触发 onBackgroundParseCompleted 完成更新
-                                    notifyNativeParsingStartedInternal(file, taskId)
+                                    // 仅在前台时通知前端先展示进度胶囊，等后台线程返回后会自动触发 onBackgroundParseCompleted 完成更新
+                                    if (isInForeground()) {
+                                        notifyNativeParsingStartedInternal(file, taskId)
+                                    }
                                 } else {
                                     // 场景 3：历史遗留尚未启动解析的原始抓屏文件，立即交由原生后台解析器异步处理
                                     LightningAiBackgroundProcessor.enqueueCapture(applicationContext, file)
@@ -988,22 +1009,92 @@ class MainActivity : ComponentActivity() {
         webView?.evaluateJavascript(script, null)
     }
 
+    /**
+     * 供前端 JS 主动同步拉取所有已在后台解析就绪 (.parsed.json) 的闪电记账结果，实现打开 App 零延迟直接渲染
+     */
+    internal fun consumeReadyLightningCapturesInternal(): String {
+        synchronized(scanLock) {
+            val resultArr = JSONArray()
+            val dir = File(filesDir, "pending_lightning_captures")
+            if (!dir.exists() || !dir.isDirectory) {
+                return resultArr.toString()
+            }
+            try {
+                val nowMs = System.currentTimeMillis()
+                dir.listFiles { f -> f.name.endsWith(".processing", ignoreCase = true) }?.forEach { procFile ->
+                    if (nowMs - procFile.lastModified() > 30_000L) {
+                        val basePrefix = procFile.name
+                            .removeSuffix(".img.processing")
+                            .removeSuffix(".parsed.processing")
+                            .substringBeforeLast("_")
+                        if (procFile.name.endsWith(".img.processing")) {
+                            val restoredImg = File(dir, "$basePrefix.jpg")
+                            if (!restoredImg.exists()) procFile.renameTo(restoredImg)
+                        } else if (procFile.name.endsWith(".parsed.processing")) {
+                            val restoredParsed = File(dir, "$basePrefix.parsed.json")
+                            if (!restoredParsed.exists()) procFile.renameTo(restoredParsed)
+                        }
+                    }
+                }
+
+                val files = dir.listFiles { f ->
+                    f.extension.equals("jpg", ignoreCase = true) ||
+                        f.extension.equals("jpeg", ignoreCase = true) ||
+                        f.extension.equals("png", ignoreCase = true)
+                }
+                files?.sortBy { it.lastModified() }
+                files?.forEach { file ->
+                    val originalName = file.name
+                    val parsedFile = LightningAiBackgroundProcessor.getParsedResultFile(file)
+                    val taskId = LightningAiBackgroundProcessor.getTaskIdForFile(originalName)
+                    if (parsedFile.exists()) {
+                        try {
+                            val bytes = file.readBytes()
+                            val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                            val dataUrl = "data:image/jpeg;base64,$base64"
+                            val parsedJsonStr = parsedFile.readText(Charsets.UTF_8)
+                            val itemObj = JSONObject().apply {
+                                put("fileName", originalName)
+                                put("dataUrl", dataUrl)
+                                put("parsedJson", parsedJsonStr)
+                            }
+                            resultArr.put(itemObj)
+                            notifiedInFlightTasks.remove(taskId)
+                            try { file.delete() } catch (_: Throwable) {}
+                            try { parsedFile.delete() } catch (_: Throwable) {}
+                        } catch (e: Exception) {
+                            Log.w(TAG, "consumeReadyLightningCapturesInternal error for $originalName: ${e.message}")
+                        }
+                    } else if (!LightningAiBackgroundProcessor.isProcessing(originalName)) {
+                        LightningAiBackgroundProcessor.enqueueCapture(applicationContext, file)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "consumeReadyLightningCapturesInternal error: ${e.message}")
+            }
+            return resultArr.toString()
+        }
+    }
+
     override fun onResume() {
         super.onResume()
+        isForeground = true
         webView?.onResume()
-        // 热启动恢复或从前台切回时，主动扫描离线捕获落盘的闪电抓屏任务，确保零丢单
+        // 热启动恢复或从前台切回时，主动扫描离线捕获落盘的闪电抓屏任务，确保零丢单与秒级展现
         scanPendingLightningCaptures()
     }
 
     override fun onPause() {
+        isForeground = false
         super.onPause()
         // 关键保活设计：绝不调用 webView?.onPause()！
-        // 保持后台 WebView JS 上下文活跃，确保用户在微信/支付宝付款页前台点击「闪电记账」磁贴时，
-        // 后台 WebView 能瞬间接收快照并执行大模型解析与 localStorage 存库，绝不挂起丢单。
+        // 后台 AI 解析由原生守护线程池 + LightningAiForegroundService 独立完成并写入 .parsed.json，
+        // 待用户下次回到前台 (onResume) 时直接消费已解析结果。
     }
 
     override fun onDestroy() {
         if (instance === this) {
+            isForeground = false
             instance = null
         }
         mainHandler.removeCallbacksAndMessages(null)
@@ -1121,6 +1212,11 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun syncAiConfigToNative(configJson: String) {
             LightningAiBackgroundProcessor.saveAiConfig(activity, configJson)
+        }
+
+        @JavascriptInterface
+        fun consumeReadyLightningCaptures(): String {
+            return activity.consumeReadyLightningCapturesInternal()
         }
 
         @JavascriptInterface

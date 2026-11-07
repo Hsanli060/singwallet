@@ -263,6 +263,9 @@ async function runAllTestsSuite() {
       deletedItems = [];
       lastDeletedId = null;
       if (typeof updateTrashBadge === 'function') updateTrashBadge();
+      if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
+      window.autoCommitEnabled = false;
+      window.autoCommitThreshold = 95;
       draftQueue = [];
       currentDraftIndex = 0;
       renderDraftQueue();
@@ -3662,6 +3665,140 @@ async function runAllTestsSuite() {
     const parsedRes51 = window.onNativeLightningParsed(parsedPayload51, "data:image/jpeg;base64,/9j/4AAQ", "lightning_test_51.jpg");
     assert(parsedRes51 === true, "Group 51.3: onNativeLightningParsed returns true");
     assert(draftQueue.length === 1 && draftQueue[0].isParsing === false && draftQueue[0].merchant === "霸王茶姬（万象城店）" && draftQueue[0].amount === 18.00, "Group 51.3: Placeholder draft updated in-place with parsed result");
+
+    // ========================================================
+    // Group 52: Asynchronous Pre-Parsed Lightning Ingestion & Focus Verification
+    // ========================================================
+    console.log("=== Group 52: Asynchronous Pre-Parsed Lightning Ingestion Verification ===");
+    cleanAllTestData();
+
+    assert(typeof window.isUserEditingDraft === 'function', "Group 52.1: window.isUserEditingDraft exists");
+    assert(typeof window.pullAndIngestReadyLightningCaptures === 'function', "Group 52.1: window.pullAndIngestReadyLightningCaptures exists");
+
+    // 1) 验证点击闪电记账并在后台解析完成后直接打开 App 的场景（无既有草稿与无前台占位）
+    const directPayload52 = {
+      taskId: "draft-native-lightning_sam_52",
+      fileName: "lightning_sam_52.jpg",
+      status: "ok",
+      engine: "llm",
+      result: {
+        merchant: "山姆会员商店（西溪印象城店）",
+        amount: 298.50,
+        confidence: 99.8,
+        category: "日常购物",
+        channel: "支付宝",
+        account: "余额宝",
+        payment: { channel: "支付宝", channel_key: "alipay", sub_type: "余额宝", display_name: "支付宝 · 余额宝" },
+        orderId: "202611082200145200",
+        orderTime: "2026-11-08 14:20:00",
+        time: "2026-11-08 14:20:00"
+      }
+    };
+    const directRes52 = window.onNativeLightningParsed(directPayload52, "data:image/jpeg;base64,/9j/sam52", "lightning_sam_52.jpg");
+    assert(directRes52 === true, "Group 52.2: onNativeLightningParsed returns true for pre-parsed background bill");
+    assert(draftQueue.length === 1, "Group 52.2: draftQueue length is 1");
+    assert(draftQueue[0].merchant === "山姆会员商店（西溪印象城店）", "Group 52.2: Merchant correctly parsed");
+    assert(draftQueue[0].amount === 298.50, "Group 52.2: Amount correctly parsed (298.50)");
+    assert(draftQueue[0].isParsing === false, "Group 52.2: isParsing is false (no spinner)");
+
+    // 验证当前选中的草稿卡片和输入框已自动聚焦并回填该解析好的账单
+    const inAmt52 = document.getElementById('input-amount');
+    const inMer52 = document.getElementById('input-merchant');
+    assert(inAmt52 && (inAmt52.value === "298.50" || inAmt52.value === "298.5"), "Group 52.3: Form amount input pre-filled with 298.50");
+    assert(inMer52 && inMer52.value === "山姆会员商店（西溪印象城店）", "Group 52.3: Form merchant input pre-filled");
+
+    // 2) 验证在已有草稿时，非编辑状态下新到达的后台已解析账单自动聚焦到 index 0
+    const secondPayload52 = {
+      taskId: "draft-native-lightning_kfc_52",
+      fileName: "lightning_kfc_52.jpg",
+      status: "ok",
+      engine: "llm",
+      result: {
+        merchant: "肯德基（武林门餐厅）",
+        amount: 39.90,
+        confidence: 99.5,
+        category: "餐饮美食",
+        channel: "微信",
+        account: "钱包",
+        orderId: "4200002026110852002",
+        orderTime: "2026-11-08 14:35:00",
+        time: "2026-11-08 14:35:00"
+      }
+    };
+    window.onNativeLightningParsed(secondPayload52, "data:image/jpeg;base64,/9j/kfc52", "lightning_kfc_52.jpg");
+    assert(draftQueue.length === 2, "Group 52.4: Queue now has 2 drafts");
+    assert(draftQueue[0].merchant === "肯德基（武林门餐厅）", "Group 52.4: New bill unshifted to index 0");
+    assert(inMer52 && inMer52.value === "肯德基（武林门餐厅）", "Group 52.4: Focus automatically switched to newly arrived bill at index 0");
+
+    // 3) 验证通过 AndroidBridge.consumeReadyLightningCaptures 主动同步拉取机制
+    let mockConsumed = false;
+    const originalBridge = window.AndroidBridge;
+    window.AndroidBridge = {
+      consumeReadyLightningCaptures: () => {
+        mockConsumed = true;
+        return JSON.stringify([{
+          fileName: "lightning_meituan_52.jpg",
+          dataUrl: "data:image/jpeg;base64,/9j/meituan52",
+          parsedJson: JSON.stringify({
+            taskId: "draft-native-lightning_meituan_52",
+            fileName: "lightning_meituan_52.jpg",
+            status: "ok",
+            engine: "llm",
+            result: {
+              merchant: "美团外卖（川湘小馆）",
+              amount: 45.80,
+              confidence: 99.9,
+              category: "餐饮美食",
+              channel: "微信",
+              account: "零钱通",
+              orderId: "4200002026110852003",
+              time: "2026-11-08 14:40:00"
+            }
+          })
+        }]);
+      },
+      syncAiConfigToNative: () => true
+    };
+
+    const pullRes52 = window.pullAndIngestReadyLightningCaptures();
+    assert(mockConsumed === true, "Group 52.5: consumeReadyLightningCaptures was invoked on AndroidBridge");
+    assert(pullRes52 === true, "Group 52.5: pullAndIngestReadyLightningCaptures returned true");
+    assert(draftQueue.some(d => d.merchant === "美团外卖（川湘小馆）"), "Group 52.5: Synchronously consumed bill ingested into draftQueue");
+
+    // 还原 AndroidBridge
+    window.AndroidBridge = originalBridge;
+
+    // 4) 验证由于强杀残留的 isParsing: true 孤儿草稿自愈机制
+    localStorage.setItem('singwallet_user_drafts', JSON.stringify([
+      { id: "orphan-draft-1", isParsing: true, merchant: "大模型解析中...", amount: 0 }
+    ]));
+    const healedDrafts = (typeof window.loadStoredDrafts === 'function')
+      ? window.loadStoredDrafts()
+      : ((typeof loadStoredDrafts === 'function') ? loadStoredDrafts() : []);
+    assert(healedDrafts.length === 1, "Group 52.6: loadStoredDrafts loaded 1 orphan draft");
+    assert(healedDrafts.length === 1 && healedDrafts[0].isParsing === false, "Group 52.6: Orphan draft isParsing self-healed to false");
+    assert(healedDrafts.length === 1 && healedDrafts[0].parseError === true, "Group 52.6: Orphan draft converted to parseError=true");
+    assert(healedDrafts.length === 1 && healedDrafts[0].tag === "待重试", "Group 52.6: Orphan draft tagged as 待重试");
+
+    // 5) 验证 autoCommitEnabled 与 autoCommitThreshold 响应式配置双向同步
+    let nativeSynced = false;
+    let syncedJson = "";
+    window.AndroidBridge = {
+      syncAiConfigToNative: (jsonStr) => {
+        nativeSynced = true;
+        syncedJson = jsonStr;
+        return true;
+      }
+    };
+    window.autoCommitEnabled = true;
+    assert(nativeSynced === true, "Group 52.7: Setting window.autoCommitEnabled triggers native config sync");
+    assert(syncedJson.includes('"autoCommitEnabled":true'), "Group 52.7: Native config contains autoCommitEnabled: true");
+
+    window.autoCommitThreshold = 98;
+    assert(syncedJson.includes('"autoCommitThreshold":98'), "Group 52.8: Setting window.autoCommitThreshold triggers native config sync with 98");
+
+    // 还原 AndroidBridge
+    window.AndroidBridge = originalBridge;
 
     // 4. 测试收尾：清理全部测试数据，确保 App 还原为 100% 干净状态
     cleanAllTestData();

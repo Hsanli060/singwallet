@@ -251,6 +251,9 @@
     } else if (tabId === 'drafts' || tabId === 1 || tabId === '1') {
       if (draftView) draftView.classList.remove('hidden');
       if (btnDr) btnDr.className = navActiveClassRel;
+      if (typeof pullAndIngestReadyLightningCaptures === 'function') {
+        pullAndIngestReadyLightningCaptures();
+      }
     } else if (tabId === 'rules' || tabId === 'rules-accounts' || tabId === 2 || tabId === '2') {
       if (rulesView) rulesView.classList.remove('hidden');
       if (btnRu) btnRu.className = navActiveClass;
@@ -289,24 +292,70 @@
   }
 
   // ================= 多待确认草稿队列 & 高置信度免确认入账机制 =================
+  function isUserEditingDraft() {
+    try {
+      const activeEl = document.activeElement;
+      if (!activeEl) return false;
+      const tag = activeEl.tagName ? activeEl.tagName.toUpperCase() : '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+        const draftsView = document.getElementById('view-drafts');
+        if (draftsView && draftsView.contains(activeEl)) {
+          return true;
+        }
+      }
+    } catch (_) {}
+    return false;
+  }
+  window.isUserEditingDraft = isUserEditingDraft;
+
   function loadStoredDrafts() {
     try {
       const raw = localStorage.getItem('singwallet_user_drafts');
       if (raw) {
         const list = JSON.parse(raw);
-        if (Array.isArray(list)) return list;
+        if (Array.isArray(list)) {
+          // 清理由于应用被强杀残留的 isParsing: true 孤儿状态，避免重新启动后永久转圈
+          return list.map(d => {
+            if (d && d.isParsing) {
+              return {
+                ...d,
+                isParsing: false,
+                parseError: true,
+                parseErrorReason: '上次解析中断，请重试或手动编辑',
+                merchant: d.merchant === '大模型解析中...' ? '闪电抓屏 (待解析)' : d.merchant,
+                tag: '待重试'
+              };
+            }
+            return d;
+          });
+        }
       }
     } catch (e) {}
     return [];
   }
+  window.loadStoredDrafts = loadStoredDrafts;
 
   function saveStoredDrafts() {
     try {
-      localStorage.setItem('singwallet_user_drafts', JSON.stringify(draftQueue));
+      // 避免将临时的 isParsing: true 存入持久化存储
+      const safePersistQueue = (draftQueue || []).map(d => {
+        if (d && d.isParsing) {
+          return {
+            ...d,
+            isParsing: false,
+            parseError: true,
+            parseErrorReason: '后台解析中...',
+            merchant: d.merchant === '大模型解析中...' ? '闪电抓屏 (待解析)' : d.merchant,
+            tag: '待重试'
+          };
+        }
+        return d;
+      });
+      localStorage.setItem('singwallet_user_drafts', JSON.stringify(safePersistQueue));
     } catch (e) {
       console.warn('[SingWallet] saveStoredDrafts quota warning, attempting cleanup of oldest imageData:', e);
       try {
-        const safeQueue = draftQueue.map(d => ({ ...d }));
+        const safeQueue = (draftQueue || []).map(d => ({ ...d }));
         for (let i = safeQueue.length - 1; i >= 0; i--) {
           if (safeQueue[i].imageData) {
             delete safeQueue[i].imageData;
@@ -351,8 +400,59 @@
       autoCommitThreshold = savedThreshold;
     }
   } catch (e) {}
-  window.autoCommitEnabled = autoCommitEnabled;
-  window.autoCommitThreshold = autoCommitThreshold;
+
+  function syncAiConfigToNativeBridge() {
+    try {
+      if (window.AndroidBridge && typeof window.AndroidBridge.syncAiConfigToNative === 'function') {
+        const rawCfg = localStorage.getItem('singwallet_vlm_config');
+        const cfg = rawCfg ? JSON.parse(rawCfg) : {};
+        const eng = localStorage.getItem('singwallet_ocr_engine') || 'llm';
+        const cats = (window.DomainRegistry && typeof window.DomainRegistry.getParentCategories === 'function')
+          ? window.DomainRegistry.getParentCategories()
+          : (window.CORE_PARENT_CATEGORIES || ['餐饮美食', '交通出行', '日常购物', '休闲娱乐', '生活缴费', '医疗健康', '其他支出', '工资收入']);
+        window.AndroidBridge.syncAiConfigToNative(JSON.stringify({
+          provider: cfg.provider || 'openai_chat',
+          apiKey: cfg.apiKey || '',
+          endpoint: cfg.endpoint || '',
+          model: cfg.model || '',
+          ocrEngine: eng,
+          categories: cats,
+          autoCommitEnabled: Boolean(autoCommitEnabled),
+          autoCommitThreshold: Number(autoCommitThreshold || 95)
+        }));
+        return true;
+      }
+    } catch (e) {
+      console.warn('[SingWallet] syncAiConfigToNativeBridge error:', e);
+    }
+    return false;
+  }
+  window.syncAiConfigToNativeBridge = syncAiConfigToNativeBridge;
+
+  // 主动从原生宿主拉取所有已在后台异步解析就绪的结果并直接消费渲染
+  function pullAndIngestReadyLightningCaptures() {
+    try {
+      if (window.AndroidBridge && typeof window.AndroidBridge.consumeReadyLightningCaptures === 'function') {
+        const rawJson = window.AndroidBridge.consumeReadyLightningCaptures();
+        if (rawJson && typeof rawJson === 'string' && rawJson.trim() !== '' && rawJson.trim() !== '[]') {
+          const list = JSON.parse(rawJson);
+          if (Array.isArray(list) && list.length > 0) {
+            console.info('[SingWallet] Consuming ready lightning captures from native bridge:', list.length);
+            list.forEach(item => {
+              if (item && item.parsedJson && typeof window.onNativeLightningParsed === 'function') {
+                window.onNativeLightningParsed(item.parsedJson, item.dataUrl || '', item.fileName || '');
+              }
+            });
+            return true;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[SingWallet] pullAndIngestReadyLightningCaptures error:', e);
+    }
+    return false;
+  }
+  window.pullAndIngestReadyLightningCaptures = pullAndIngestReadyLightningCaptures;
 
   function openConfidenceModal() {
     const modal = document.getElementById('confidence-modal');
@@ -5866,12 +5966,31 @@
   });
   Object.defineProperty(window, 'autoCommitEnabled', {
     get: () => autoCommitEnabled,
-    set: (val) => { autoCommitEnabled = val; },
+    set: (val) => {
+      autoCommitEnabled = Boolean(val);
+      try {
+        localStorage.setItem('singwallet_auto_commit_enabled', autoCommitEnabled ? '1' : '0');
+      } catch (e) {}
+      if (typeof syncAiConfigToNativeBridge === 'function') {
+        syncAiConfigToNativeBridge();
+      }
+    },
     configurable: true
   });
   Object.defineProperty(window, 'autoCommitThreshold', {
     get: () => autoCommitThreshold,
-    set: (val) => { autoCommitThreshold = val; },
+    set: (val) => {
+      const num = parseInt(val, 10);
+      if (!isNaN(num) && num >= 50 && num <= 100) {
+        autoCommitThreshold = num;
+        try {
+          localStorage.setItem('singwallet_auto_commit_threshold', String(autoCommitThreshold));
+        } catch (e) {}
+        if (typeof syncAiConfigToNativeBridge === 'function') {
+          syncAiConfigToNativeBridge();
+        }
+      }
+    },
     configurable: true
   });
   Object.defineProperty(window, 'currentDraftIndex', {
@@ -6223,6 +6342,9 @@
     }
     if (typeof updateBackupStatsLabel === 'function') {
       updateBackupStatsLabel();
+    }
+    if (typeof syncAiConfigToNativeBridge === 'function') {
+      syncAiConfigToNativeBridge();
     }
 
     showToast('数据恢复成功：已无损还原账单与配置');
@@ -6916,6 +7038,10 @@
     if (typeof checkA11yServiceStatus === 'function') {
       checkA11yServiceStatus();
     }
+    // 5.4 检查原生后台是否已有完成的闪电抓屏解析结果，秒级消费展示
+    if (typeof pullAndIngestReadyLightningCaptures === 'function') {
+      pullAndIngestReadyLightningCaptures();
+    }
     // 6. Supplement data-cat-icon on static items in HTML
     document.querySelectorAll('#transactions-list .tx-item, #tx-list-container .tx-item').forEach(item => {
       const cat = item.getAttribute('data-parent') || item.getAttribute('data-cat') || item.getAttribute('data-category') || '其他支出';
@@ -7024,6 +7150,21 @@
         }
       }
     } catch (e) {}
+
+    // 12. 当应用从后台切换至前台（窗口 focus 或从黑屏恢复）时，立即拉取后台已解析就绪的闪电记账
+    if (!window.__lightningResumeListenerBound && typeof window !== 'undefined') {
+      window.__lightningResumeListenerBound = true;
+      window.addEventListener('focus', () => {
+        if (typeof pullAndIngestReadyLightningCaptures === 'function') {
+          pullAndIngestReadyLightningCaptures();
+        }
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && typeof pullAndIngestReadyLightningCaptures === 'function') {
+          pullAndIngestReadyLightningCaptures();
+        }
+      });
+    }
   }
 
   /* ================= 状态栏闪电记账后台抓屏与识别引擎 ================= */
@@ -7206,6 +7347,7 @@
         return true;
       }
       const hadExistingDrafts = window.draftQueue.length > 0;
+      const isEditing = typeof isUserEditingDraft === 'function' ? isUserEditingDraft() : false;
       if (hadExistingDrafts && typeof syncActiveDraftFormToMemory === 'function') {
         syncActiveDraftFormToMemory();
       }
@@ -7233,12 +7375,14 @@
         imageData: dataUrl || ''
       };
       window.draftQueue.unshift(taskDraft);
-      if (hadExistingDrafts) {
+      if (hadExistingDrafts && isEditing) {
         currentDraftIndex = (typeof currentDraftIndex === 'number' ? currentDraftIndex : 0) + 1;
+      } else {
+        currentDraftIndex = 0;
       }
       saveStoredDrafts();
       if (typeof renderDraftQueue === 'function') {
-        renderDraftQueue({ skipFormReload: hadExistingDrafts });
+        renderDraftQueue({ skipFormReload: isEditing });
       }
       if (typeof updateDraftBadge === 'function') {
         updateDraftBadge();
@@ -7378,20 +7522,26 @@
             showToast(`已后台自动入账：${finishedDraft.merchant} ¥${finishedDraft.amount.toFixed(2)}`);
           }
         } else {
+          const isEditing = typeof isUserEditingDraft === 'function' ? isUserEditingDraft() : false;
           if (existingIdx !== -1) {
             Object.assign(window.draftQueue[existingIdx], finishedDraft);
+            if (!isEditing) {
+              currentDraftIndex = existingIdx;
+            }
           } else {
             const hadExistingDrafts = window.draftQueue.length > 0;
             if (hadExistingDrafts && typeof syncActiveDraftFormToMemory === 'function') {
               syncActiveDraftFormToMemory();
             }
             window.draftQueue.unshift(finishedDraft);
-            if (hadExistingDrafts) {
+            if (hadExistingDrafts && isEditing) {
               currentDraftIndex = (typeof currentDraftIndex === 'number' ? currentDraftIndex : 0) + 1;
+            } else {
+              currentDraftIndex = 0;
             }
           }
           saveStoredDrafts();
-          renderDraftQueue();
+          renderDraftQueue({ skipFormReload: isEditing });
           updateDraftBadge();
           if (typeof showToast === 'function') {
             showToast(`闪电记账后台已解析完成：${finishedDraft.merchant} ¥${finishedDraft.amount.toFixed(2)}`);
@@ -7422,20 +7572,26 @@
           time: formatCurrentDateTime(),
           imageData: dataUrl || ''
         };
+        const isEditing = typeof isUserEditingDraft === 'function' ? isUserEditingDraft() : false;
         if (existingIdx !== -1) {
           Object.assign(window.draftQueue[existingIdx], errorDraft);
+          if (!isEditing) {
+            currentDraftIndex = existingIdx;
+          }
         } else {
           const hadExistingDrafts = window.draftQueue.length > 0;
           if (hadExistingDrafts && typeof syncActiveDraftFormToMemory === 'function') {
             syncActiveDraftFormToMemory();
           }
           window.draftQueue.unshift(errorDraft);
-          if (hadExistingDrafts) {
+          if (hadExistingDrafts && isEditing) {
             currentDraftIndex = (typeof currentDraftIndex === 'number' ? currentDraftIndex : 0) + 1;
+          } else {
+            currentDraftIndex = 0;
           }
         }
         saveStoredDrafts();
-        renderDraftQueue();
+        renderDraftQueue({ skipFormReload: isEditing });
         updateDraftBadge();
         return true;
       }

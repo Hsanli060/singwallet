@@ -1,51 +1,33 @@
 package com.singwallet.app.services
 
 import android.app.PendingIntent
-import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.provider.Settings
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
-import android.util.Base64
 import android.util.Log
 import android.widget.Toast
-import com.singwallet.app.MainActivity
-import java.io.ByteArrayOutputStream
-import java.io.File
-import java.io.FileOutputStream
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
 
 /**
  * SingWallet 下拉控制中心「闪电记账」(Quick Settings Tile).
  *
  * 核心设计原则：
  * 1. 彻底移除强制切应用行为：控制中心收拢后，屏幕绝对留在微信/支付宝付款页，绝不跳转覆盖到 SingWallet。
- * 2. 毫秒级极速定格时序：控制中心收拢露出底层的瞬间 (180ms 极速延迟)，立即调用系统无障碍 takeScreenshot API
- *    在内存中直接冻结当前屏幕画面，用户即便立即切走、按返回键或锁屏，画面也早已安全存入内存。
- * 3. 即时感知反馈：抓取瞬间触发 50ms 触感短震动 + 系统 Toast「⚡ 闪电记账：已捕获账单画面，后台解析中...」。
- * 4. 零相册垃圾：直接在内存中将 Bitmap 压缩为 Base64 并派发给后端/WebView 进行异步大模型解析，相册零残留。
+ * 2. 生命周期解耦与防中断：Android 系统在控制中心面板收拢完成瞬间（约 350ms）会立即解绑并销毁 TileService (onDestroy)。
+ *    因此，点击磁贴后直接将「延时定格抓屏 -> 压缩落盘 -> 启动原生后台 AI 账单解析」全权交由常驻的
+ *    `SingWalletAccessibilityService.triggerLightningTileCapture()` 执行，确保后台 AI 解析 100% 完整走完。
  */
 class QuickRecordTileService : TileService() {
 
     companion object {
         private const val TAG = "QuickRecordTile"
         private const val PANEL_COLLAPSE_DELAY_MS = 340L
-        private const val TARGET_MAX_WIDTH = 1080
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val dispatchExecutor: ExecutorService = Executors.newSingleThreadExecutor()
-
-    @Volatile
-    private var isCapturing = false
 
     override fun onStartListening() {
         super.onStartListening()
@@ -84,134 +66,15 @@ class QuickRecordTileService : TileService() {
             return
         }
 
-        if (isCapturing) {
-            Log.d(TAG, "Capture already in progress, ignore redundant click")
-            return
-        }
-        isCapturing = true
-
         // 2. 更新瓷贴为活动捕获状态
         updateTileState(Tile.STATE_ACTIVE, "正在捕获...", "极速截取账单")
 
-        // 3. 立即收拢控制中心面板 (绝不使用 startActivityAndCollapse 切应用，确保屏幕留在微信/支付宝)
-        SingWalletAccessibilityService.collapseShade()
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            try {
-                @Suppress("DEPRECATION")
-                val closeIntent = Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)
-                sendBroadcast(closeIntent)
-            } catch (e: Exception) {
-                Log.w(TAG, "Unable to broadcast CLOSE_SYSTEM_DIALOGS: ${e.message}")
-            }
-        }
-
-        // 4. 时序控制：在控制中心面板收拢露出的第一瞬间 (340ms 调优延迟，对齐澎湃OS毛玻璃归零与震动快门体感)
-        // 毫秒级把当前屏幕画面直接固化到内存 Bitmap 中，绝不阻塞！
-        mainHandler.postDelayed({
-            SingWalletAccessibilityService.captureCurrentScreen { bitmap ->
-                isCapturing = false
-                if (bitmap != null) {
-                    // 4.1 捕获到内存的瞬间触发短震动 (Haptic feedback 50ms: 震动即快门确认)
-                    triggerHapticFeedback(50L)
-                    Log.i(TAG, "Snapshot locked in RAM (${bitmap.width}x${bitmap.height}), haptic shutter triggered")
-
-                    // 4.2 即时系统 Toast 提示，让用户明确知道画面已抓取成功，可自由切走或锁屏
-                    showToast("闪电记账：已捕获账单画面，后台解析中...")
-
-                    // 4.3 异步转码为 Base64 并派发给后端/WebView (不阻塞主线程)
-                    dispatchExecutor.execute {
-                        processCapturedBitmap(bitmap)
-                    }
-                } else {
-                    Log.e(TAG, "captureCurrentScreen returned null")
-                    showToast("闪电记账：未能捕获屏幕，请重试")
-                }
-
-                // 4.4 恢复瓷贴为待命状态
-                resetTileState()
-            }
-        }, PANEL_COLLAPSE_DELAY_MS)
-    }
-
-    private fun processCapturedBitmap(bitmap: Bitmap) {
-        var scaledBitmap: Bitmap? = null
-        try {
-            // 小米 14 原生分辨率 1200x2670 直接转 Base64 体积较大；若宽度 > 1080 则等比缩放至 1080
-            // 既保障 OCR 识别率 100%，又能大幅削减 evaluateJavascript 传输体积并节省存储
-            val bitmapToEncode = if (bitmap.width > TARGET_MAX_WIDTH) {
-                val scale = TARGET_MAX_WIDTH.toFloat() / bitmap.width.toFloat()
-                val targetHeight = (bitmap.height * scale).toInt()
-                scaledBitmap = Bitmap.createScaledBitmap(bitmap, TARGET_MAX_WIDTH, targetHeight, true)
-                scaledBitmap
-            } else {
-                bitmap
-            }
-
-            val outputStream = ByteArrayOutputStream()
-            bitmapToEncode.compress(Bitmap.CompressFormat.JPEG, 82, outputStream)
-            val byteArray = outputStream.toByteArray()
-
-            Log.i(TAG, "Encoded JPEG bytes=${byteArray.size}")
-
-            // 1. 先原子落盘至私有目录，确保任何极端场景下 100% 零丢单
-            val savedFile = savePendingCaptureToDisk(byteArray)
-            if (savedFile != null) {
-                // 2. 立即在 Android 原生后台守护线程池启动异步 AI 账单解析（无需等待用户打开 App 或依赖后台被冻结的 WebView）
-                LightningAiBackgroundProcessor.enqueueCapture(applicationContext, savedFile)
-            } else if (MainActivity.isAlive()) {
-                val base64 = Base64.encodeToString(byteArray, Base64.NO_WRAP)
-                val dataUrl = "data:image/jpeg;base64,$base64"
-                MainActivity.dispatchCapturedScreenshot(dataUrl, "lightning-tile")
-            }
-        } catch (e: Throwable) {
-            Log.e(TAG, "Error encoding captured bitmap: ${e.message}", e)
-        } finally {
-            try {
-                scaledBitmap?.recycle()
-            } catch (_: Throwable) {}
-            try {
-                bitmap.recycle()
-            } catch (_: Throwable) {}
-        }
-    }
-
-    private fun savePendingCaptureToDisk(byteArray: ByteArray): File? {
-        return try {
-            val dir = File(filesDir, "pending_lightning_captures")
-            if (!dir.exists()) dir.mkdirs()
-            val ts = System.currentTimeMillis()
-            val tmpFile = File(dir, "lightning_${ts}.tmp")
-            val file = File(dir, "lightning_${ts}.jpg")
-            FileOutputStream(tmpFile).use { it.write(byteArray) }
-            if (!tmpFile.renameTo(file)) {
-                FileOutputStream(file).use { it.write(byteArray) }
-                try { tmpFile.delete() } catch (_: Throwable) {}
-            }
-            Log.i(TAG, "Saved lightning capture to ${file.absolutePath} (${byteArray.size} bytes)")
-            file
-        } catch (e: Throwable) {
-            Log.e(TAG, "Failed to save pending capture: ${e.message}", e)
-            null
-        }
-    }
-
-    private fun triggerHapticFeedback(durationMs: Long = 50L) {
-        try {
-            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                vibratorManager?.defaultVibrator
-            } else {
-                @Suppress("DEPRECATION")
-                getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator?.vibrate(VibrationEffect.createOneShot(durationMs.coerceAtLeast(10L), VibrationEffect.DEFAULT_AMPLITUDE))
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator?.vibrate(durationMs)
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Haptic vibration failed: ${e.message}")
+        // 3. 委派给常驻无障碍服务执行收拢控制中心、定格抓屏、落盘与原生后台 AI 异步解析（不受 TileService onDestroy 影响）
+        SingWalletAccessibilityService.triggerLightningTileCapture(
+            context = applicationContext,
+            delayMs = PANEL_COLLAPSE_DELAY_MS
+        ) {
+            resetTileState()
         }
     }
 
@@ -227,7 +90,9 @@ class QuickRecordTileService : TileService() {
 
     private fun resetTileState() {
         mainHandler.post {
-            updateTileState(Tile.STATE_INACTIVE, "闪电记账", "轻点抓屏记账")
+            try {
+                updateTileState(Tile.STATE_INACTIVE, "闪电记账", "轻点抓屏记账")
+            } catch (_: Throwable) {}
         }
     }
 
@@ -239,11 +104,5 @@ class QuickRecordTileService : TileService() {
             tile.subtitle = subtitle
         }
         tile.updateTile()
-    }
-
-    override fun onDestroy() {
-        mainHandler.removeCallbacksAndMessages(null)
-        dispatchExecutor.shutdownNow()
-        super.onDestroy()
     }
 }

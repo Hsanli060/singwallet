@@ -76,6 +76,8 @@ object LightningAiBackgroundProcessor {
 
     fun isProcessing(fileName: String): Boolean = inFlightFiles.contains(fileName)
 
+    fun hasInFlightTasks(): Boolean = inFlightFiles.isNotEmpty()
+
     fun getTaskIdForFile(fileName: String): String {
         val base = fileName.substringBeforeLast(".")
         return "draft-native-$base"
@@ -153,8 +155,12 @@ object LightningAiBackgroundProcessor {
         val taskId = getTaskIdForFile(fileName)
         Log.i(TAG, "Enqueued background AI parse for $fileName (taskId=$taskId)")
 
-        // 若当前 MainActivity 恰在前台，立即通知前端展示解析进度占位胶囊
-        if (MainActivity.isAlive()) {
+        // 启动短时前台守护服务，防止 Android 12~15 / 澎湃 OS 冻结后台进程或阻断后台网络请求
+        LightningAiForegroundService.startIfNeeded(appContext)
+
+        // 仅当 MainActivity 真正处于前台可见状态时，才通知前端展示解析进度占位胶囊；
+        // 若处于后台，绝不向被冻结的 WebView 注入 isParsing 占位，避免点开 App 时仍残留“解析中”
+        if (MainActivity.isInForeground()) {
             MainActivity.notifyNativeParsingStarted(jpgFile, taskId)
         }
 
@@ -177,14 +183,20 @@ object LightningAiBackgroundProcessor {
                 writeErrorResult(jpgFile, taskId, t.message ?: "后台解析异常")
             } finally {
                 inFlightFiles.remove(fileName)
+                LightningAiForegroundService.stopIfIdle(appContext)
                 try {
                     if (wakeLock?.isHeld == true) {
                         wakeLock.release()
                     }
                 } catch (_: Throwable) {}
 
-                // 解析落盘完成后，若 MainActivity 存活则触发扫描消费
-                MainActivity.onBackgroundParseCompleted(fileName)
+                // 解析落盘完成后，仅当 MainActivity 在前台时立即触发扫描消费；
+                // 若在后台，保留 .jpg 与 .parsed.json 在磁盘上，待用户打开 App (onResume) 时秒级直接读取已就绪结果
+                if (MainActivity.isInForeground()) {
+                    MainActivity.onBackgroundParseCompleted(fileName)
+                } else {
+                    Log.i(TAG, "Background AI parse finished for $fileName while app is in background; .parsed.json ready on disk for instant resume")
+                }
             }
         }
     }
@@ -232,7 +244,18 @@ object LightningAiBackgroundProcessor {
             return
         }
 
-        if (rawEndpoint.isBlank()) {
+        val effectiveEndpoint = if (rawEndpoint.isNotBlank()) {
+            rawEndpoint
+        } else {
+            when (normalizeProtocol(provider)) {
+                "gemini_native" -> "https://generativelanguage.googleapis.com"
+                "anthropic_messages" -> "https://api.anthropic.com"
+                "openai_chat", "openai_responses" -> "https://api.openai.com"
+                else -> ""
+            }
+        }
+
+        if (effectiveEndpoint.isBlank()) {
             writeErrorResult(jpgFile, taskId, "未配置 Base URL (接口地址为空)，请前往「AI 配置」配置后重试")
             showToast(context, "闪电记账：截图已保单（未配置 AI 接口地址）")
             return
@@ -251,7 +274,7 @@ object LightningAiBackgroundProcessor {
         val parsedBill = callCloudVlmApi(
             provider = provider,
             apiKey = apiKey,
-            rawEndpoint = rawEndpoint,
+            rawEndpoint = effectiveEndpoint,
             model = model,
             rawBase64 = rawBase64,
             mimeType = mimeType,
@@ -638,37 +661,57 @@ object LightningAiBackgroundProcessor {
         headers: Map<String, String>,
         jsonBody: String
     ): Pair<Int, String> {
-        var conn: HttpURLConnection? = null
-        try {
-            val url = URL(urlStr)
-            conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = 15_000
-                readTimeout = 35_000
-                doInput = true
-                doOutput = true
-                useCaches = false
-                for ((k, v) in headers) {
-                    setRequestProperty(k, v)
-                }
-            }
-            OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { writer ->
-                writer.write(jsonBody)
-                writer.flush()
-            }
-            val statusCode = conn.responseCode
-            val stream = if (statusCode in 200..299) conn.inputStream else (conn.errorStream ?: conn.inputStream)
-            val responseText = if (stream != null) {
-                BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { it.readText() }
-            } else {
-                ""
-            }
-            return Pair(statusCode, responseText)
-        } finally {
+        val maxAttempts = 3
+        var lastException: Throwable? = null
+        for (attempt in 1..maxAttempts) {
+            var conn: HttpURLConnection? = null
             try {
-                conn?.disconnect()
-            } catch (_: Throwable) {}
+                val url = URL(urlStr)
+                conn = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 15_000
+                    readTimeout = 35_000
+                    doInput = true
+                    doOutput = true
+                    useCaches = false
+                    for ((k, v) in headers) {
+                        setRequestProperty(k, v)
+                    }
+                }
+                OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { writer ->
+                    writer.write(jsonBody)
+                    writer.flush()
+                }
+                val statusCode = conn.responseCode
+                val stream = if (statusCode in 200..299) conn.inputStream else (conn.errorStream ?: conn.inputStream)
+                val responseText = if (stream != null) {
+                    BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { it.readText() }
+                } else {
+                    ""
+                }
+                if (statusCode in listOf(429, 502, 503, 504) && attempt < maxAttempts) {
+                    Log.w(TAG, "Transient HTTP $statusCode on attempt $attempt/$maxAttempts, retrying after backoff...")
+                    Thread.sleep(800L * attempt)
+                    continue
+                }
+                return Pair(statusCode, responseText)
+            } catch (e: Throwable) {
+                lastException = e
+                Log.w(TAG, "HTTP POST network error on attempt $attempt/$maxAttempts: ${e.message}")
+                if (attempt < maxAttempts) {
+                    try {
+                        Thread.sleep(800L * attempt)
+                    } catch (_: InterruptedException) {
+                        break
+                    }
+                }
+            } finally {
+                try {
+                    conn?.disconnect()
+                } catch (_: Throwable) {}
+            }
         }
+        throw lastException ?: IllegalStateException("网络请求失败")
     }
 
     /**

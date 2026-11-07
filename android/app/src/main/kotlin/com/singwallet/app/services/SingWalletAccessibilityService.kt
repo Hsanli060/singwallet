@@ -9,32 +9,52 @@ import android.graphics.Bitmap
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.provider.Settings
 import android.text.TextUtils
+import android.util.Base64
 import android.util.Log
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
+import android.widget.Toast
 import androidx.annotation.RequiresApi
+import com.singwallet.app.MainActivity
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * SingWallet 官方无感快捷抓屏无障碍服务 (Accessibility Service).
  *
- * 核心设计规范 (Android 11+ API 30~34):
+ * 核心设计规范 (Android 11+ API 30~35):
  * 1. 内存零相册污染：利用系统官方 takeScreenshot API 直接在内存中获取 HardwareBuffer 并转为 Bitmap，
  *    绝不在相册生成任何临时文件，杜绝相册垃圾。
- * 2. 毫秒级极速定格：控制中心收拢的瞬间 (150ms~200ms) 立即冻结当前屏幕账单画面，即使用户切走或返回也不会漏单。
- * 3. 极简权限原则：仅声明并启用 canTakeScreenshot，不监听键盘按键或常态读取剪贴板，严格尊重用户隐私。
+ * 2. 毫秒级极速定格：控制中心收拢的瞬间 (150ms~340ms) 立即冻结当前屏幕账单画面，即使用户切走或返回也不会漏单。
+ * 3. 常驻生命周期托管：由于 QuickRecordTileService 在控制中心收拢瞬间 (约 350ms) 会被系统立刻解绑销毁 (onDestroy)，
+ *    所有延时抓屏、Bitmap 压缩落盘与触发原生后台 AI 解析全流程统一由本常驻服务及应用级守护线程池托管，彻底杜绝中途被打断。
+ * 4. 极简权限原则：仅声明并启用 canTakeScreenshot，不监听键盘按键或常态读取剪贴板，严格尊重用户隐私。
  */
 class SingWalletAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "SingWalletA11y"
+        private const val TARGET_MAX_WIDTH = 1080
+        private const val CAPTURE_WATCHDOG_MS = 5000L
 
         @Volatile
         private var instance: SingWalletAccessibilityService? = null
+
+        private val globalMainHandler = Handler(Looper.getMainLooper())
+        private val persistExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+        private val isCapturing = AtomicBoolean(false)
+        private val fileSeq = AtomicLong(0L)
 
         /**
          * 检测当前无障碍服务是否已连接并在后台运行
@@ -66,6 +86,162 @@ class SingWalletAccessibilityService : AccessibilityService() {
                 return
             }
             service.performCapture(onResult)
+        }
+
+        /**
+         * 托管完整的「收拢控制中心 -> 延时定格抓屏 -> 触感快门 -> 压缩落盘 -> 立即启动原生后台 AI 解析」全链路.
+         * 独立于 QuickRecordTileService 生命周期，防止控制中心收起解绑 TileService 时中断后台解析入队。
+         */
+        fun triggerLightningTileCapture(
+            context: Context,
+            delayMs: Long = 340L,
+            onDone: (() -> Unit)? = null
+        ): Boolean {
+            val service = instance
+            if (service == null) {
+                Log.w(TAG, "triggerLightningTileCapture aborted: AccessibilityService not running")
+                return false
+            }
+
+            if (!isCapturing.compareAndSet(false, true)) {
+                Log.d(TAG, "Capture already in progress, ignore redundant trigger")
+                onDone?.invoke()
+                return true
+            }
+
+            val appContext = context.applicationContext
+            val watchdogRunnable = Runnable {
+                if (isCapturing.compareAndSet(true, false)) {
+                    Log.w(TAG, "Capture watchdog reset isCapturing after ${CAPTURE_WATCHDOG_MS}ms timeout")
+                    onDone?.invoke()
+                }
+            }
+            globalMainHandler.postDelayed(watchdogRunnable, CAPTURE_WATCHDOG_MS)
+
+            // 1. 立即收拢控制中心面板
+            service.collapseControlCenter()
+
+            // 2. 在控制中心收拢露出底层账单画面的瞬间定格截图并启动后台 AI 解析
+            globalMainHandler.postDelayed({
+                val currentService = instance ?: service
+                currentService.performCapture { bitmap ->
+                    globalMainHandler.removeCallbacks(watchdogRunnable)
+                    isCapturing.set(false)
+
+                    if (bitmap != null) {
+                        triggerHapticFeedback(appContext, 50L)
+                        Log.i(TAG, "Snapshot locked in RAM (${bitmap.width}x${bitmap.height}), dispatching to background AI processor")
+                        showToast(appContext, "闪电记账：已捕获账单画面，后台解析中...")
+
+                        // 提前拉起短时前台守护服务，保障后台网络与 CPU 不被系统冻结
+                        LightningAiForegroundService.startIfNeeded(appContext)
+
+                        persistExecutor.execute {
+                            processAndEnqueueBitmap(appContext, bitmap)
+                        }
+                    } else {
+                        Log.e(TAG, "captureCurrentScreen returned null")
+                        showToast(appContext, "闪电记账：未能捕获屏幕，请重试")
+                    }
+
+                    onDone?.invoke()
+                }
+            }, delayMs)
+
+            return true
+        }
+
+        private fun processAndEnqueueBitmap(appContext: Context, bitmap: Bitmap) {
+            var scaledBitmap: Bitmap? = null
+            try {
+                val bitmapToEncode = if (bitmap.width > TARGET_MAX_WIDTH) {
+                    val scale = TARGET_MAX_WIDTH.toFloat() / bitmap.width.toFloat()
+                    val targetHeight = (bitmap.height * scale).toInt()
+                    scaledBitmap = Bitmap.createScaledBitmap(bitmap, TARGET_MAX_WIDTH, targetHeight, true)
+                    scaledBitmap
+                } else {
+                    bitmap
+                }
+
+                val outputStream = ByteArrayOutputStream()
+                bitmapToEncode.compress(Bitmap.CompressFormat.JPEG, 82, outputStream)
+                val byteArray = outputStream.toByteArray()
+
+                Log.i(TAG, "Encoded JPEG bytes=${byteArray.size}")
+
+                // 1. 先原子落盘至私有目录，确保任何极端场景下 100% 零丢单
+                val savedFile = savePendingCaptureToDisk(appContext, byteArray)
+                if (savedFile != null) {
+                    // 2. 立即在 Android 原生后台守护线程池启动异步 AI 账单解析（无需等待用户打开 App）
+                    LightningAiBackgroundProcessor.enqueueCapture(appContext, savedFile)
+                } else if (MainActivity.isInForeground()) {
+                    val base64 = Base64.encodeToString(byteArray, Base64.NO_WRAP)
+                    val dataUrl = "data:image/jpeg;base64,$base64"
+                    MainActivity.dispatchCapturedScreenshot(dataUrl, "lightning-tile")
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "Error encoding/enqueuing captured bitmap: ${e.message}", e)
+                LightningAiForegroundService.stopIfIdle(appContext)
+            } finally {
+                try {
+                    scaledBitmap?.recycle()
+                } catch (_: Throwable) {}
+                try {
+                    bitmap.recycle()
+                } catch (_: Throwable) {}
+            }
+        }
+
+        private fun savePendingCaptureToDisk(appContext: Context, byteArray: ByteArray): File? {
+            return try {
+                val dir = File(appContext.filesDir, "pending_lightning_captures")
+                if (!dir.exists()) dir.mkdirs()
+                val ts = System.currentTimeMillis()
+                val seq = fileSeq.incrementAndGet() % 1000L
+                val baseName = if (seq == 1L) "lightning_${ts}" else "lightning_${ts}_${seq}"
+                val tmpFile = File(dir, "${baseName}.tmp")
+                val file = File(dir, "${baseName}.jpg")
+                FileOutputStream(tmpFile).use { it.write(byteArray) }
+                if (!tmpFile.renameTo(file)) {
+                    FileOutputStream(file).use { it.write(byteArray) }
+                    try { tmpFile.delete() } catch (_: Throwable) {}
+                }
+                Log.i(TAG, "Saved lightning capture to ${file.absolutePath} (${byteArray.size} bytes)")
+                file
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to save pending capture: ${e.message}", e)
+                null
+            }
+        }
+
+        private fun triggerHapticFeedback(context: Context, durationMs: Long = 50L) {
+            try {
+                val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                    vibratorManager?.defaultVibrator
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator?.vibrate(VibrationEffect.createOneShot(durationMs.coerceAtLeast(10L), VibrationEffect.DEFAULT_AMPLITUDE))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator?.vibrate(durationMs)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Haptic vibration failed: ${e.message}")
+            }
+        }
+
+        private fun showToast(context: Context, message: String) {
+            globalMainHandler.post {
+                try {
+                    Toast.makeText(context.applicationContext, message, Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Log.w(TAG, "showToast error: ${e.message}")
+                }
+            }
         }
 
         /**
