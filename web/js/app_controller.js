@@ -6055,14 +6055,10 @@
     if (window.AndroidBridge && typeof window.AndroidBridge.getAppVersion === 'function') {
       try { nativeVer = window.AndroidBridge.getAppVersion() || ''; } catch (e) {}
     }
-    const savedVer = localStorage.getItem('singwallet_app_version');
     if (nativeVer) {
-      if (savedVer && typeof compareVersions === 'function') {
-        const bestVer = compareVersions(nativeVer, savedVer) >= 0 ? nativeVer : savedVer;
-        return cleanPureVersionString(bestVer, '1.0.8');
-      }
       return cleanPureVersionString(nativeVer, '1.0.8');
     }
+    const savedVer = localStorage.getItem('singwallet_app_version');
     if (savedVer) return cleanPureVersionString(savedVer, '1.0.8');
     const metaVer = (window.APP_VERSION_META && window.APP_VERSION_META.currentVersion && window.APP_VERSION_META.currentVersion !== '1.0.0')
       ? window.APP_VERSION_META.currentVersion
@@ -6081,11 +6077,7 @@
 
     let effectiveVer = '';
     if (nativeVer) {
-      if (savedVer && typeof compareVersions === 'function') {
-        effectiveVer = compareVersions(nativeVer, savedVer) >= 0 ? nativeVer : savedVer;
-      } else {
-        effectiveVer = nativeVer;
-      }
+      effectiveVer = nativeVer;
     } else if (savedVer) {
       effectiveVer = savedVer;
     }
@@ -6171,24 +6163,34 @@
       localStorage.setItem('singwallet_latest_backup', JSON.stringify(snapshot));
     } catch (e) {}
 
-    // Trigger browser file download: singwallet_backup_YYYYMMDD.json
+    // Trigger backup file export: AndroidBridge native file save or browser file download
     try {
       const now = new Date();
       const yyyy = now.getFullYear();
       const mm = String(now.getMonth() + 1).padStart(2, '0');
       const dd = String(now.getDate()).padStart(2, '0');
       const filename = `singwallet_backup_${yyyy}${mm}${dd}.json`;
-      const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        if (a.parentNode) a.parentNode.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 150);
+      const jsonStr = JSON.stringify(snapshot, null, 2);
+
+      if (window.AndroidBridge && typeof window.AndroidBridge.saveBackupFile === 'function') {
+        try {
+          window.AndroidBridge.saveBackupFile(jsonStr, filename);
+        } catch (err) {
+          console.warn('AndroidBridge.saveBackupFile failed:', err);
+        }
+      } else {
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          if (a.parentNode) a.parentNode.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 150);
+      }
     } catch (e) {
       console.warn('Backup file download skipped or failed:', e);
     }
@@ -6497,18 +6499,26 @@
       if (percentSpan) percentSpan.innerText = '100%';
       if (statusText) statusText.innerText = '更新完成';
 
+      const isApkMode = (meta.mode === 'apk' || meta.mode === 'apk_or_web');
+      const shouldUpdateLocalVer = !window.AndroidBridge || !isApkMode;
+
+      if (shouldUpdateLocalVer) {
+        try {
+          localStorage.setItem('singwallet_app_version', targetVer);
+        } catch (e) {}
+        window.currentAppVersion = targetVer;
+
+        if (badge) {
+          badge.innerText = `v${targetVer}`;
+          badge.className = "text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono whitespace-nowrap";
+        }
+      }
+
       try {
-        localStorage.setItem('singwallet_app_version', targetVer);
         if (meta.commitSha) {
           localStorage.setItem('singwallet_hot_commit_sha', meta.commitSha);
         }
       } catch (e) {}
-      window.currentAppVersion = targetVer;
-
-      if (badge) {
-        badge.innerText = `v${targetVer}`;
-        badge.className = "text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono whitespace-nowrap";
-      }
 
       if (btnTrigger) {
         btnTrigger.disabled = true;

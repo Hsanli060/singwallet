@@ -71,6 +71,14 @@ jobs:
           keyAlias=${KEY_ALIAS}
           storeFile=singwallet-release.jks
           EOF
+          elif [ -f "android/app/singwallet-release.keystore" ]; then
+            echo "Using tracked persistent release keystore from repository..."
+            cat <<EOF > android/key.properties
+          storePassword=singwallet_persistent_pass
+          keyPassword=singwallet_persistent_pass
+          keyAlias=singwallet
+          storeFile=singwallet-release.keystore
+          EOF
           else
             echo "No persistent keystore secret found. Creating reproducible release signing key..."
             keytool -genkey -v \

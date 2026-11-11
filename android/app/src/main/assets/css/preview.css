@@ -20,7 +20,7 @@
   }
   to {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: none;
   }
 }
 
@@ -562,10 +562,10 @@
     right: calc(50% - 19px) !important;
   }
 
-  /* 快速记一手操作悬浮栏：精准浮于微信比例底部导航栏上方 14px，间隙通透不拥挤 */
+  /* 快速记一手操作悬浮栏：精准浮于底部导航栏 (73px) 之上 10px，无缝衔接，消除中间 19px 截断死区 */
   #tx-quick-record-bar {
     position: fixed !important;
-    bottom: calc(74px + max(env(safe-area-inset-bottom, 0px), 18px) + 16px) !important;
+    bottom: 83px !important;
     left: 0 !important;
     right: 0 !important;
     padding: 0 2.5rem !important;
@@ -603,12 +603,12 @@
   }
 
   #view-transactions {
-    padding-bottom: calc(74px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
+    padding-bottom: 73px !important;
   }
 
   /* 滚动列表底部留白，确保滑到底部时最后一笔账单完整浮于「快记一手」按钮上方，毫无遮挡 */
   #tx-scroll-viewport {
-    padding-bottom: calc(148px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
+    padding-bottom: 140px !important;
   }
 
   #view-drafts {
@@ -823,7 +823,7 @@ body.native-app #draft-nav-dot {
 
 body.native-app #tx-quick-record-bar {
   position: fixed !important;
-  bottom: calc(74px + max(env(safe-area-inset-bottom, 0px), 18px) + 16px) !important;
+  bottom: 83px !important;
 }
 body.native-app #tx-quick-record-bar button {
   max-width: 200px !important;
@@ -834,11 +834,11 @@ body.native-app #monthly-pie-chart {
 }
 
 body.native-app #view-transactions {
-  padding-bottom: calc(74px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
+  padding-bottom: 73px !important;
 }
 
 body.native-app #tx-scroll-viewport {
-  padding-bottom: calc(148px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
+  padding-bottom: 140px !important;
 }
 
 body.native-app #view-drafts,
