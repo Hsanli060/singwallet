@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="1024" height="1024" fill="none">
+  <defs>
+    <!-- Deep Velvet Obsidian Background -->
+    <linearGradient id="sw-bg-base" x1="18" y1="0" x2="90" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0d1322" />
+      <stop offset="55%" stop-color="#060911" />
+      <stop offset="100%" stop-color="#020408" />
+    </linearGradient>
+
+    <!-- Subtle Ambient Halo -->
+    <radialGradient id="sw-ambient-glow" cx="54" cy="54" r="42" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4f46e5" stop-opacity="0.16" />
+      <stop offset="100%" stop-color="#020408" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Outer Squircle Bezel Rim -->
+    <linearGradient id="sw-bezel-rim" x1="0" y1="0" x2="108" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#c7d2fe" stop-opacity="0.22" />
+      <stop offset="50%" stop-color="#6366f1" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#c7d2fe" stop-opacity="0.04" />
+    </linearGradient>
+
+    <!-- Warm Champagne Gold Stroke (#fde68a) -->
+    <linearGradient id="sw-stroke-gold" x1="24" y1="24" x2="84" y2="70" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#fef3c7" />
+      <stop offset="50%" stop-color="#fde68a" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+
+    <!-- Luminous Indigo-Silver Stroke (#c7d2fe) -->
+    <linearGradient id="sw-stroke-silver" x1="22" y1="28" x2="86" y2="82" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#eef2ff" />
+      <stop offset="50%" stop-color="#c7d2fe" />
+      <stop offset="100%" stop-color="#818cf8" />
+    </linearGradient>
+
+    <!-- Opaque Obsidian Interior Fill -->
+    <linearGradient id="sw-occlude-fill" x1="22" y1="28" x2="86" y2="82" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0a0f1c" />
+      <stop offset="100%" stop-color="#050811" />
+    </linearGradient>
+  </defs>
+
+  <!-- 1. Squircle Base Plate -->
+  <rect x="2" y="2" width="104" height="104" rx="23.5" fill="url(#sw-bg-base)" />
+  <rect x="2" y="2" width="104" height="104" rx="23.5" fill="url(#sw-ambient-glow)" />
+  <rect x="2.2" y="2.2" width="103.6" height="103.6" rx="23.3" fill="none" stroke="url(#sw-bezel-rim)" stroke-width="0.3" />
+
+  <!-- 2. Back Card: Tilted Champagne Gold Card -->
+  <g transform="rotate(-11 52 50)">
+    <rect x="24" y="30" width="56" height="36" rx="7.5"
+          fill="url(#sw-occlude-fill)"
+          stroke="url(#sw-stroke-gold)"
+          stroke-width="2.4"
+          stroke-linecap="round"
+          stroke-linejoin="round" />
+  </g>
+
+  <!-- 3. Front Card: Horizontal Indigo-Silver Card -->
+  <rect x="25" y="40" width="58" height="37" rx="7.5"
+        fill="url(#sw-occlude-fill)"
+        stroke="url(#sw-stroke-silver)"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        stroke-linejoin="round" />
+
+  <!-- 4. Minimalist Gold EMV Chip & Dual-Tone Card Lines -->
+  <rect x="33" y="51" width="10" height="8" rx="2"
+        stroke="url(#sw-stroke-gold)"
+        stroke-width="2.0"
+        fill="#fde68a"
+        fill-opacity="0.15" />
+  <line x1="33" y1="67" x2="51" y2="67"
+        stroke="url(#sw-stroke-silver)"
+        stroke-width="2.2"
+        stroke-linecap="round" />
+  <line x1="57" y1="67" x2="65" y2="67"
+        stroke="url(#sw-stroke-gold)"
+        stroke-width="2.2"
+        stroke-linecap="round" />
+</svg>

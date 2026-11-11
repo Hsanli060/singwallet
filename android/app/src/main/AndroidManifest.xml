@@ -11,6 +11,7 @@
     <application
         android:label="SingWallet"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
@@ -42,7 +43,7 @@
         <!-- Xiaomi HyperOS / Android Quick Settings Tile (下拉控制中心「应用快捷开关」) -->
         <service
             android:name=".services.QuickRecordTileService"
-            android:icon="@mipmap/ic_launcher"
+            android:icon="@drawable/ic_qs_quick_record"
             android:label="闪电记账"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
             android:exported="true">
@@ -54,6 +55,8 @@
         <!-- SingWallet 无感抓屏无障碍服务 (Android 11+ takeScreenshot API) -->
         <service
             android:name=".services.SingWalletAccessibilityService"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:label="@string/accessibility_service_label"
             android:exported="true">
@@ -68,6 +71,7 @@
         <!-- 闪电记账后台 AI 解析短时前台守护服务 (防后台网络冻结与进程挂起) -->
         <service
             android:name=".services.LightningAiForegroundService"
+            android:icon="@drawable/ic_qs_quick_record"
             android:exported="false"
             android:foregroundServiceType="shortService" />
     </application>

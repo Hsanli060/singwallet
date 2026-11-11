@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 1. Back Card: Tilted Champagne Gold Card (-11 deg around 52,50) -->
+    <group
+        android:pivotX="52"
+        android:pivotY="50"
+        android:rotation="-11">
+        <path
+            android:pathData="M31.5,30 L72.5,30 A7.5,7.5 0 0,1 80,37.5 L80,58.5 A7.5,7.5 0 0,1 72.5,66 L31.5,66 A7.5,7.5 0 0,1 24,58.5 L24,37.5 A7.5,7.5 0 0,1 31.5,30 Z"
+            android:fillColor="#FF070B14"
+            android:strokeWidth="2.4"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:startX="24"
+                    android:startY="30"
+                    android:endX="80"
+                    android:endY="66"
+                    android:type="linear">
+                    <item android:offset="0.0" android:color="#FFFEF3C7" />
+                    <item android:offset="0.5" android:color="#FFFDE68A" />
+                    <item android:offset="1.0" android:color="#FFF59E0B" />
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+
+    <!-- 2. Front Card: Horizontal Indigo-Silver Card -->
+    <path
+        android:pathData="M32.5,40 L75.5,40 A7.5,7.5 0 0,1 83,47.5 L83,69.5 A7.5,7.5 0 0,1 75.5,77 L32.5,77 A7.5,7.5 0 0,1 25,69.5 L25,47.5 A7.5,7.5 0 0,1 32.5,40 Z"
+        android:fillColor="#FF070B14"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="25"
+                android:startY="40"
+                android:endX="83"
+                android:endY="77"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FFEEF2FF" />
+                <item android:offset="0.5" android:color="#FFC7D2FE" />
+                <item android:offset="1.0" android:color="#FF818CF8" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 3. Minimalist Gold EMV Chip -->
+    <path
+        android:pathData="M35,51 L41,51 A2,2 0 0,1 43,53 L43,57 A2,2 0 0,1 41,59 L35,59 A2,2 0 0,1 33,57 L33,53 A2,2 0 0,1 35,51 Z"
+        android:fillColor="#26FDE68A"
+        android:strokeWidth="2.0"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="33"
+                android:startY="51"
+                android:endX="43"
+                android:endY="59"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FFFEF3C7" />
+                <item android:offset="1.0" android:color="#FFFDE68A" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 4. Dual-Tone Card Lines -->
+    <path
+        android:pathData="M33,67 L51,67"
+        android:strokeColor="#FFC7D2FE"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M57,67 L65,67"
+        android:strokeColor="#FFFDE68A"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round" />
+</vector>

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Back Tilted Card Contour (Top Edge Visible Above Front Card) -->
+    <path
+        android:pathData="M4.2,11.5 L3.6,8.2 A2.4,2.4 0 0,1 5.5,5.4 L16.2,3.5 A2.4,2.4 0 0,1 19.0,5.4 L19.4,7.8"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.9"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Front Horizontal Card Contour -->
+    <path
+        android:pathData="M6.5,8 L18.5,8 A2.5,2.5 0 0,1 21,10.5 L21,17.5 A2.5,2.5 0 0,1 18.5,20 L6.5,20 A2.5,2.5 0 0,1 4,17.5 L4,10.5 A2.5,2.5 0 0,1 6.5,8 Z"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.9"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- EMV Chip Inside Front Card -->
+    <path
+        android:pathData="M7.8,11.4 L10.2,11.4 A0.8,0.8 0 0,1 11,12.2 L11,13.8 A0.8,0.8 0 0,1 10.2,14.6 L7.8,14.6 A0.8,0.8 0 0,1 7,13.8 L7,12.2 A0.8,0.8 0 0,1 7.8,11.4 Z"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Card Detail Lines -->
+    <path
+        android:pathData="M7,17 L12.5,17 M14.8,17 L17.5,17"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round" />
+</vector>

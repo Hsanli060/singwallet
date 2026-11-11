@@ -156,7 +156,7 @@ class LightningAiForegroundService : Service() {
         return builder
             .setContentTitle("SingWallet 闪电记账")
             .setContentText("正在后台异步识别账单画面...")
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_qs_quick_record)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .build()

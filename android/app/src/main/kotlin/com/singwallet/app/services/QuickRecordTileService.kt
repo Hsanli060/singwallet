@@ -2,6 +2,7 @@ package com.singwallet.app.services
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -10,6 +11,7 @@ import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.util.Log
 import android.widget.Toast
+import com.singwallet.app.R
 
 /**
  * SingWallet 下拉控制中心「闪电记账」(Quick Settings Tile).
@@ -98,6 +100,7 @@ class QuickRecordTileService : TileService() {
 
     private fun updateTileState(state: Int, label: String, subtitle: String) {
         val tile = qsTile ?: return
+        tile.icon = Icon.createWithResource(this, R.drawable.ic_qs_quick_record)
         tile.state = state
         tile.label = label
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
