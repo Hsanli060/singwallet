@@ -6365,6 +6365,16 @@
     reader.readAsText(file);
   }
 
+  function triggerImportBackupFile() {
+    if (window.AndroidBridge && typeof window.AndroidBridge.pickAndImportBackupFile === 'function') {
+      window.AndroidBridge.pickAndImportBackupFile();
+    } else {
+      const input = document.getElementById('input-import-backup');
+      if (input) input.click();
+    }
+  }
+  window.triggerImportBackupFile = triggerImportBackupFile;
+
   /**
    * 解析更新源配置，支持：
    * - 缺省空值: 默认使用 APP_VERSION_META 配置 (Hsanli060/singwallet / master)

@@ -695,8 +695,8 @@
               <span class="w-4 h-4 shrink-0" data-ui-icon="backupExport"></span>
               <span>导出备份</span>
             </button>
-            <input type="file" id="input-import-backup" accept=".json" class="hidden" onchange="handleBackupFileUpload(event)">
-            <button type="button" id="btn-import-backup" onclick="document.getElementById('input-import-backup').click()" class="py-2 px-3 rounded-xl bg-slate-900/90 hover:bg-slate-700/80 border border-slate-700/80 hover:border-indigo-500/50 text-slate-200 text-xs font-medium transition-all flex items-center justify-center gap-1.5 tap-highlight">
+            <input type="file" id="input-import-backup" accept=".json,application/json,text/plain,text/json" class="hidden" onchange="handleBackupFileUpload(event)">
+            <button type="button" id="btn-import-backup" onclick="triggerImportBackupFile()" class="py-2 px-3 rounded-xl bg-slate-900/90 hover:bg-slate-700/80 border border-slate-700/80 hover:border-indigo-500/50 text-slate-200 text-xs font-medium transition-all flex items-center justify-center gap-1.5 tap-highlight">
               <span class="w-4 h-4 shrink-0" data-ui-icon="backupImport"></span>
               <span>导入恢复</span>
             </button>

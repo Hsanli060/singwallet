@@ -220,6 +220,44 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val backupFilePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            val uri = result.data?.data ?: result.data?.clipData?.getItemAt(0)?.uri
+            if (uri != null) {
+                try {
+                    contentResolver.openInputStream(uri)?.use { stream ->
+                        val jsonContent = stream.readBytes().toString(Charsets.UTF_8)
+                        if (jsonContent.isNotBlank()) {
+                            mainHandler.post {
+                                val escaped = JSONObject.quote(jsonContent)
+                                webView?.evaluateJavascript("if (typeof window.importBackupFromJson === 'function') { window.importBackupFromJson($escaped); }", null)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to read picked backup file: ${e.message}", e)
+                    Toast.makeText(this, "读取备份文件失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    fun launchBackupFilePicker() {
+        try {
+            val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                type = "*/*"
+                putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
+                addCategory(Intent.CATEGORY_OPENABLE)
+            }
+            backupFilePickerLauncher.launch(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to launch backup file picker: ${e.message}", e)
+            Toast.makeText(this, "调起文件选择器失败: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -689,15 +727,20 @@ class MainActivity : ComponentActivity() {
                 val isMultiple = fileChooserParams?.mode == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE ||
                     fileChooserParams?.acceptTypes?.any { it.contains("image") } == true
                 val acceptTypes = fileChooserParams?.acceptTypes?.filter { it.isNotBlank() } ?: emptyList()
-                val isImagePick = acceptTypes.isEmpty() || acceptTypes.any { it.contains("image", ignoreCase = true) }
+                val isExplicitBackup = acceptTypes.any { it.contains("json", ignoreCase = true) }
+                val isImagePick = !isExplicitBackup && (acceptTypes.isEmpty() || acceptTypes.any { it.contains("image", ignoreCase = true) })
 
                 fun createGetContentIntent(): Intent {
                     return Intent(Intent.ACTION_GET_CONTENT).apply {
                         if (isImagePick) {
                             type = "image/*"
                             putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                        } else if (isExplicitBackup) {
+                            type = "*/*"
+                            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/json", "text/plain", "application/octet-stream", "*/*"))
                         } else {
-                            type = acceptTypes.firstOrNull() ?: "*/*"
+                            val rawType = acceptTypes.firstOrNull() ?: "*/*"
+                            type = if (rawType.contains("/")) rawType else "*/*"
                             if (isMultiple) {
                                 putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
                             }
@@ -1192,6 +1235,13 @@ class MainActivity : ComponentActivity() {
                     Toast.makeText(activity, "保存备份文件失败: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
                 false
+            }
+        }
+
+        @JavascriptInterface
+        fun pickAndImportBackupFile() {
+            activity.runOnUiThread {
+                activity.launchBackupFilePicker()
             }
         }
 
