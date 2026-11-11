@@ -83,6 +83,7 @@ class MainActivity : ComponentActivity() {
 
         private val WEB_BUNDLE_FILES = listOf(
             "index.html",
+            "favicon.svg",
             "css/preview.css",
             "js/domain_config.js",
             "js/icon_registry.js",
@@ -94,6 +95,7 @@ class MainActivity : ComponentActivity() {
 
         private val HOT_MUTABLE_FILES = listOf(
             "index.html",
+            "favicon.svg",
             "css/preview.css",
             "js/domain_config.js",
             "js/icon_registry.js",
