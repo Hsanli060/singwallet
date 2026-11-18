@@ -225,6 +225,18 @@
     { id: 'renovation', name: '装修' }
   ];
 
+  // 金额整数“分”精确计算辅助函数（优先委托 window.MoneyMath，保留内联兜底）
+  function _toCents(val) {
+    if (typeof window !== 'undefined' && window.MoneyMath && typeof window.MoneyMath.toCents === 'function') {
+      return window.MoneyMath.toCents(val);
+    }
+    if (typeof val === 'number') {
+      return Number.isFinite(val) ? Math.round(val * 100) : 0;
+    }
+    const num = parseFloat(String(val ?? '').replace(/[¥￥$€£,\s]/g, ''));
+    return Number.isFinite(num) ? Math.round(num * 100) : 0;
+  }
+
   // 账单大模型结构化输出 JSON Schema 定义 (OpenAI / Qwen / OpenAI Compatible 规范)
   const BILL_STRUCTURED_SCHEMA = {
     type: "json_schema",
@@ -245,7 +257,7 @@
           channel: { type: "string" },
           account: { type: "string" }
         },
-        required: ["merchant", "amount", "category", "time", "channel", "account"],
+        required: ["merchant", "amount", "category", "time", "orderId", "channel", "account"],
         additionalProperties: false
       }
     }
@@ -1020,7 +1032,7 @@
       : (Array.isArray(CORE_PARENT_CATEGORIES) ? CORE_PARENT_CATEGORIES : []);
     const activeSet = new Set(activeList);
 
-    const totals = {};
+    const totalsCents = {};
     if (Array.isArray(transactions)) {
       transactions.forEach(tx => {
         if (!tx) return;
@@ -1036,15 +1048,15 @@
         // 仅统计存在于当前激活分类中的支出
         if (!resolvedCat || (activeSet.size > 0 && !activeSet.has(resolvedCat))) return;
 
-        const amt = Math.abs(parseFloat(tx.amount) || 0);
-        if (amt <= 0) return;
+        const amtCents = Math.abs(_toCents(tx.amount));
+        if (amtCents <= 0) return;
 
-        totals[resolvedCat] = Math.round(((totals[resolvedCat] || 0) + amt) * 100) / 100;
+        totalsCents[resolvedCat] = (totalsCents[resolvedCat] || 0) + amtCents;
       });
     }
 
-    const total = Object.values(totals).reduce((a, b) => Math.round((a + b) * 100) / 100, 0);
-    if (total <= 0) {
+    const totalCents = Object.values(totalsCents).reduce((a, b) => a + b, 0);
+    if (totalCents <= 0) {
       return {
         totalExpense: 0,
         totalExpenseText: '0',
@@ -1053,18 +1065,18 @@
     }
 
     // 按金额降序排列
-    const sortedCats = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
+    const sortedCats = Object.keys(totalsCents).sort((a, b) => totalsCents[b] - totalsCents[a]);
 
     // 最大余额法 (Largest Remainder Method) 计算整数百分比，保证百分比总和为 100%
     const rawItems = sortedCats.map((catName, idx) => {
-      const catTotal = totals[catName];
-      const ratio = catTotal / total;
+      const catCents = totalsCents[catName];
+      const ratio = catCents / totalCents;
       const exactPercent = ratio * 100;
       const floorPercent = Math.floor(exactPercent);
       const remainder = exactPercent - floorPercent;
       return {
         catName,
-        catTotal,
+        catTotal: catCents / 100,
         ratio,
         floorPercent,
         remainder,
@@ -1097,9 +1109,10 @@
       };
     });
 
+    const totalYuan = totalCents / 100;
     return {
-      totalExpense: Number(total.toFixed(2)),
-      totalExpenseText: formatCompactAmount(total),
+      totalExpense: Number(totalYuan.toFixed(2)),
+      totalExpenseText: formatCompactAmount(totalYuan),
       items: items
     };
   }
@@ -1287,6 +1300,7 @@
    */
   function exportFullBackupSnapshot(appState = {}) {
     const state = appState || {};
+    const sanitizedVlm = (state.vlmConfig && typeof state.vlmConfig === 'object') ? { ...state.vlmConfig, apiKey: '' } : {};
     return {
       backupMagic: 'SINGWALLET_BACKUP_V2',
       packageId: APP_VERSION_META.packageId,
@@ -1295,7 +1309,7 @@
       exportedAt: new Date().toISOString(),
       data: {
         customCategories: Array.isArray(state.customCategories) ? [...state.customCategories] : [...CORE_PARENT_CATEGORIES],
-        vlmConfig: (state.vlmConfig && typeof state.vlmConfig === 'object') ? state.vlmConfig : {},
+        vlmConfig: sanitizedVlm,
         transactions: Array.isArray(state.transactions) ? state.transactions : [],
         monthlyData: (state.monthlyData && typeof state.monthlyData === 'object') ? state.monthlyData : {},
         draftQueue: Array.isArray(state.draftQueue) ? state.draftQueue : []

@@ -1,3 +1,6 @@
+html {
+  color-scheme: dark;
+}
 .hidden { display: none !important; }
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -254,7 +257,8 @@
 #tx-delete-confirm-modal,
 #trash-delete-confirm-modal,
 #category-edit-modal,
-#category-delete-confirm-modal {
+#category-delete-confirm-modal,
+#swbk-password-modal {
   z-index: 50 !important;
 }
 
@@ -506,28 +510,27 @@
     min-height: 52px !important;
   }
 
-  /* 底部导航栏：严格对标微信等主流国民级 App 黄金比例规范 (56px 内容高度 + 全面屏手势条安全区，总高约 74px~76px) */
+  /* 底部导航栏：56px 内容高度 + 全面屏手势条安全区，不设死板 max-height 防止全面屏裁切 */
   #bottom-nav-bar {
     position: fixed !important;
     bottom: 0 !important;
     left: 0 !important;
     right: 0 !important;
-    height: auto !important;
-    min-height: 45px !important;
-    max-height: 73px !important;
+    height: calc(56px + max(var(--safe-bottom, env(safe-area-inset-bottom, 0px)), 18px)) !important;
+    min-height: 56px !important;
     background-color: #020617 !important;
     border-top: 1px solid rgba(30, 41, 59, 0.8) !important;
     display: grid !important;
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
     align-items: start !important;
     padding-top: 0 !important;
-    padding-bottom: max(env(safe-area-inset-bottom, 0px), 18px) !important;
+    padding-bottom: max(var(--safe-bottom, env(safe-area-inset-bottom, 0px)), 18px) !important;
     margin: 0 !important;
     z-index: 30 !important;
   }
 
   #bottom-nav-bar > button {
-    height: 64px !important;
+    height: 56px !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
@@ -562,10 +565,10 @@
     right: calc(50% - 19px) !important;
   }
 
-  /* 快速记一手操作悬浮栏：精准浮于底部导航栏 (73px) 之上 10px，无缝衔接，消除中间 19px 截断死区 */
+  /* 快速记一手操作悬浮栏：动态贴合底部导航栏之上 */
   #tx-quick-record-bar {
     position: fixed !important;
-    bottom: 83px !important;
+    bottom: calc(66px + max(var(--safe-bottom, env(safe-area-inset-bottom, 0px)), 18px)) !important;
     left: 0 !important;
     right: 0 !important;
     padding: 0 2.5rem !important;
@@ -603,7 +606,7 @@
   }
 
   #view-transactions {
-    padding-bottom: 73px !important;
+    padding-bottom: calc(56px + max(var(--safe-bottom, env(safe-area-inset-bottom, 0px)), 18px)) !important;
   }
 
   /* 滚动列表底部留白，确保滑到底部时最后一笔账单完整浮于「快记一手」按钮上方，毫无遮挡 */
@@ -612,14 +615,14 @@
   }
 
   #view-drafts {
-    padding-bottom: calc(98px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
+    padding-bottom: calc(98px + max(var(--safe-bottom, env(safe-area-inset-bottom, 0px)), 18px)) !important;
   }
 
   /* AI 配置中心：横向适度微收，纵向精致纤巧 */
   #view-rules-accounts {
     padding-left: 1.65rem !important;
     padding-right: 1.65rem !important;
-    padding-bottom: calc(98px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
+    padding-bottom: calc(98px + max(var(--safe-bottom, env(safe-area-inset-bottom, 0px)), 18px)) !important;
   }
 
   #view-rules-accounts input:not([type="hidden"]):not([type="file"]):not([type="checkbox"]),
@@ -629,32 +632,6 @@
     padding: 0.35rem 0.7rem !important;
     font-size: 12px !important;
     border-radius: 0.75rem !important;
-  }
-
-  #view-rules-accounts #vlm-api-key {
-    padding-right: 2.5rem !important;
-  }
-
-  #vlm-eye-btn {
-    position: absolute !important;
-    top: 50% !important;
-    transform: translateY(-50%) !important;
-    right: 4px !important;
-    width: 28px !important;
-    height: 26px !important;
-    padding: 5px !important;
-    background-color: #0f172a !important; /* 与 bg-slate-900 一致，彻底遮挡底层文字与密码圆点 */
-    border-radius: 0.5rem !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    z-index: 5 !important;
-  }
-
-  #vlm-eye-btn svg {
-    width: 15px !important;
-    height: 15px !important;
-    display: block !important;
   }
 
   #vlm-config-card .grid-cols-2 > button,
@@ -719,7 +696,8 @@
   #tx-delete-confirm-modal,
   #trash-delete-confirm-modal,
   #category-edit-modal,
-  #category-delete-confirm-modal {
+  #category-delete-confirm-modal,
+  #swbk-password-modal {
     position: fixed !important;
     inset: 0 !important;
     z-index: 100 !important;
@@ -771,22 +749,21 @@ body.native-app #bottom-nav-bar {
   bottom: 0 !important;
   left: 0 !important;
   right: 0 !important;
-  height: auto !important;
-  min-height: 45px !important;
-  max-height: 73px !important;
+  height: calc(56px + max(var(--safe-bottom, env(safe-area-inset-bottom, 0px)), 18px)) !important;
+  min-height: 56px !important;
   background-color: #020617 !important;
   border-top: 1px solid rgba(30, 41, 59, 0.8) !important;
   display: grid !important;
   grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   align-items: start !important;
   padding-top: 0 !important;
-  padding-bottom: max(env(safe-area-inset-bottom, 0px), 18px) !important;
+  padding-bottom: max(var(--safe-bottom, env(safe-area-inset-bottom, 0px)), 18px) !important;
   margin: 0 !important;
   z-index: 30 !important;
 }
 
 body.native-app #bottom-nav-bar > button {
-  height: 64px !important;
+  height: 56px !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
@@ -823,18 +800,15 @@ body.native-app #draft-nav-dot {
 
 body.native-app #tx-quick-record-bar {
   position: fixed !important;
-  bottom: 83px !important;
+  bottom: calc(66px + max(var(--safe-bottom, env(safe-area-inset-bottom, 0px)), 18px)) !important;
 }
 body.native-app #tx-quick-record-bar button {
   max-width: 200px !important;
   height: 46px !important;
 }
-body.native-app #monthly-pie-chart {
-  transform: translateY(2px) !important;
-}
 
 body.native-app #view-transactions {
-  padding-bottom: 73px !important;
+  padding-bottom: calc(56px + max(var(--safe-bottom, env(safe-area-inset-bottom, 0px)), 18px)) !important;
 }
 
 body.native-app #tx-scroll-viewport {
@@ -843,6 +817,15 @@ body.native-app #tx-scroll-viewport {
 
 body.native-app #view-drafts,
 body.native-app #view-rules-accounts {
-  padding-bottom: calc(98px + max(env(safe-area-inset-bottom, 0px), 18px)) !important;
+  padding-bottom: calc(98px + max(var(--safe-bottom, env(safe-area-inset-bottom, 0px)), 18px)) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 

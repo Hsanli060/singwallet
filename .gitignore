@@ -7,14 +7,29 @@ android/local.properties
 android/key.properties
 *.jks
 *.keystore
-!android/app/singwallet-release.keystore
 
-# Build Outputs & Packages
+# Single-Source Generated Android Web Assets (generated from web/ via sync_web_assets.py / preBuild)
+android/app/src/main/assets/
+
+# Build Outputs, OTA Manifests & Packages
 *.apk
 releases/*.apk
+version.json
+web_manifest.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# User Backups, Secrets & Environment Files (NEVER commit)
+singwallet_user_backup.json
+*backup*.json
+*.swbk
+.env
+.env.*
+
+# Node / Frontend Tooling
+node_modules/
+package-lock.json
 
 # Python
 __pycache__/

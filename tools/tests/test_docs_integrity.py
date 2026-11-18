@@ -1,8 +1,10 @@
 import os
 import re
 import ssl
+import sys
 import json
 import ctypes
+import ctypes.util
 import hashlib
 import struct
 import sqlite3
@@ -211,11 +213,86 @@ def test_sqlite_ddl(root_dir=None):
 
     conn.close()
 
-def test_swbk_container_crypto():
-    print("\n--- 4. Testing SWBK v1 Cross-Platform Backup Encryption & Authentication ---")
-    dll_path = os.path.join(os.path.dirname(ssl._ssl.__file__), "libcrypto-3.dll")
-    lib = ctypes.CDLL(dll_path)
-    
+def _load_openssl_libcrypto():
+    """Fallback loader for OpenSSL libcrypto across Linux, macOS, and Windows."""
+    candidates = []
+    if sys.platform == "win32":
+        ssl_dir = os.path.dirname(ssl._ssl.__file__)
+        for name in ("libcrypto-3-x64.dll", "libcrypto-3.dll", "libcrypto-1_1-x64.dll", "libcrypto-1_1.dll"):
+            candidates.append(os.path.join(ssl_dir, name))
+            candidates.append(name)
+    elif sys.platform == "darwin":
+        candidates.extend([
+            "libcrypto.3.dylib",
+            "libcrypto.dylib",
+            "/opt/homebrew/opt/openssl@3/lib/libcrypto.dylib",
+            "/usr/local/opt/openssl@3/lib/libcrypto.dylib",
+        ])
+    else:
+        candidates.extend(["libcrypto.so.3", "libcrypto.so.1.1", "libcrypto.so"])
+
+    found_lib = ctypes.util.find_library("crypto")
+    if found_lib:
+        candidates.append(found_lib)
+
+    for candidate in candidates:
+        if not candidate:
+            continue
+        if os.path.isabs(candidate) and not os.path.exists(candidate):
+            continue
+        try:
+            lib = ctypes.CDLL(candidate)
+            if hasattr(lib, "EVP_CIPHER_CTX_new"):
+                return lib
+        except OSError:
+            continue
+
+    raise RuntimeError("Neither 'cryptography' package nor OpenSSL libcrypto dynamic library is available")
+
+
+def _test_swbk_with_cryptography(sample_data, password, MAGIC, VERSION, ITERATIONS, SALT_LEN, IV_LEN, TAG_LEN, HEADER_FORMAT, HEADER_SIZE):
+    from cryptography.exceptions import InvalidTag
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+    json_bytes = json.dumps(sample_data, ensure_ascii=False).encode("utf-8")
+    salt = os.urandom(SALT_LEN)
+    iv = os.urandom(IV_LEN)
+    aad = MAGIC + struct.pack(">H", VERSION)
+
+    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=ITERATIONS)
+    key = kdf.derive(password.encode("utf-8"))
+    encrypted = AESGCM(key).encrypt(iv, json_bytes, aad)
+    ct_bytes, tag_bytes = encrypted[:-TAG_LEN], encrypted[-TAG_LEN:]
+
+    header = struct.pack(HEADER_FORMAT, MAGIC, VERSION, ITERATIONS, salt, iv, len(ct_bytes))
+    container_bytes = header + ct_bytes + tag_bytes
+    print(f"  [cryptography] Container packed: Total {len(container_bytes)} bytes (Header: {HEADER_SIZE}B, Ciphertext: {len(ct_bytes)}B, Tag: {len(tag_bytes)}B)")
+
+    assert len(container_bytes) == HEADER_SIZE + len(ct_bytes) + TAG_LEN
+    m, v, iters, s, i_v, plen = struct.unpack(HEADER_FORMAT, container_bytes[:HEADER_SIZE])
+    assert m == MAGIC and v == VERSION and iters == ITERATIONS and plen == len(ct_bytes)
+
+    dec_kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=s, iterations=iters)
+    dec_key = dec_kdf.derive(password.encode("utf-8"))
+    dec_bytes = AESGCM(dec_key).decrypt(i_v, container_bytes[HEADER_SIZE:], aad)
+    recovered = json.loads(dec_bytes.decode("utf-8"))
+    assert recovered == sample_data, "Decrypted data does not match original JSON data"
+    print("  SWBK v1 AES-256-GCM + PBKDF2 decryption round-trip 100% verified!")
+
+    bad_kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=s, iterations=iters)
+    bad_key = bad_kdf.derive(b"WrongPassword!")
+    try:
+        AESGCM(bad_key).decrypt(i_v, container_bytes[HEADER_SIZE:], aad)
+        assert False, "AES-GCM tag should have rejected incorrect password!"
+    except InvalidTag:
+        print("  Wrong password correctly rejected by authentication tag!")
+
+
+def _test_swbk_with_ctypes(sample_data, password, MAGIC, VERSION, ITERATIONS, SALT_LEN, IV_LEN, TAG_LEN, HEADER_FORMAT, HEADER_SIZE):
+    lib = _load_openssl_libcrypto()
+
     lib.EVP_CIPHER_CTX_new.restype = ctypes.c_void_p
     lib.EVP_CIPHER_CTX_free.argtypes = [ctypes.c_void_p]
     lib.EVP_aes_256_gcm.restype = ctypes.c_void_p
@@ -234,13 +311,93 @@ def test_swbk_container_crypto():
         ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_void_p
     ]
 
+    json_bytes = json.dumps(sample_data, ensure_ascii=False).encode("utf-8")
+    salt = os.urandom(SALT_LEN)
+    iv = os.urandom(IV_LEN)
+    key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, ITERATIONS, dklen=32)
+    aad = MAGIC + struct.pack(">H", VERSION)
+
+    ctx = lib.EVP_CIPHER_CTX_new()
+    try:
+        assert lib.EVP_CipherInit_ex(ctx, lib.EVP_aes_256_gcm(), None, None, None, 1) == 1
+        assert lib.EVP_CIPHER_CTX_ctrl(ctx, 0x9, len(iv), None) == 1
+        assert lib.EVP_CipherInit_ex(ctx, None, None, key, iv, 1) == 1
+
+        outlen = ctypes.c_int(0)
+        assert lib.EVP_CipherUpdate(ctx, None, ctypes.byref(outlen), aad, len(aad)) == 1
+
+        ciphertext = (ctypes.c_char * (len(json_bytes) + 16))()
+        assert lib.EVP_CipherUpdate(ctx, ciphertext, ctypes.byref(outlen), json_bytes, len(json_bytes)) == 1
+        ct_len = outlen.value
+
+        final_outlen = ctypes.c_int(0)
+        assert lib.EVP_CipherFinal_ex(ctx, (ctypes.c_char * 16)(), ctypes.byref(final_outlen)) == 1
+
+        tag = (ctypes.c_char * 16)()
+        assert lib.EVP_CIPHER_CTX_ctrl(ctx, 0x10, 16, tag) == 1
+        tag_bytes = bytes(tag)
+        ct_bytes = bytes(ciphertext[:ct_len])
+    finally:
+        lib.EVP_CIPHER_CTX_free(ctx)
+
+    header = struct.pack(HEADER_FORMAT, MAGIC, VERSION, ITERATIONS, salt, iv, len(ct_bytes))
+    container_bytes = header + ct_bytes + tag_bytes
+    print(f"  [ctypes OpenSSL] Container packed: Total {len(container_bytes)} bytes (Header: {HEADER_SIZE}B, Ciphertext: {len(ct_bytes)}B, Tag: {len(tag_bytes)}B)")
+
+    assert len(container_bytes) == HEADER_SIZE + len(ct_bytes) + TAG_LEN
+    m, v, iters, s, i_v, plen = struct.unpack(HEADER_FORMAT, container_bytes[:HEADER_SIZE])
+    assert m == MAGIC and v == VERSION and iters == ITERATIONS and plen == len(ct_bytes)
+
+    dec_key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), s, iters, dklen=32)
+    dec_ctx = lib.EVP_CIPHER_CTX_new()
+    try:
+        assert lib.EVP_CipherInit_ex(dec_ctx, lib.EVP_aes_256_gcm(), None, None, None, 0) == 1
+        assert lib.EVP_CIPHER_CTX_ctrl(dec_ctx, 0x9, len(i_v), None) == 1
+        assert lib.EVP_CipherInit_ex(dec_ctx, None, None, dec_key, i_v, 0) == 1
+
+        outlen2 = ctypes.c_int(0)
+        assert lib.EVP_CipherUpdate(dec_ctx, None, ctypes.byref(outlen2), aad, len(aad)) == 1
+
+        decrypted = (ctypes.c_char * (plen + 16))()
+        assert lib.EVP_CipherUpdate(dec_ctx, decrypted, ctypes.byref(outlen2), ct_bytes, plen) == 1
+        dec_len = outlen2.value
+
+        assert lib.EVP_CIPHER_CTX_ctrl(dec_ctx, 0x11, 16, tag_bytes) == 1
+        ret = lib.EVP_CipherFinal_ex(dec_ctx, (ctypes.c_char * 16)(), ctypes.byref(final_outlen))
+        assert ret > 0, "Authentication tag failed on valid decrypt"
+        dec_bytes = bytes(decrypted[:dec_len])
+    finally:
+        lib.EVP_CIPHER_CTX_free(dec_ctx)
+
+    recovered = json.loads(dec_bytes.decode("utf-8"))
+    assert recovered == sample_data, "Decrypted data does not match original JSON data"
+    print("  SWBK v1 AES-256-GCM + PBKDF2 decryption round-trip 100% verified!")
+
+    bad_key = hashlib.pbkdf2_hmac("sha256", b"WrongPassword!", s, iters, dklen=32)
+    bad_ctx = lib.EVP_CIPHER_CTX_new()
+    try:
+        assert lib.EVP_CipherInit_ex(bad_ctx, lib.EVP_aes_256_gcm(), None, None, None, 0) == 1
+        assert lib.EVP_CIPHER_CTX_ctrl(bad_ctx, 0x9, len(i_v), None) == 1
+        assert lib.EVP_CipherInit_ex(bad_ctx, None, None, bad_key, i_v, 0) == 1
+        assert lib.EVP_CipherUpdate(bad_ctx, None, ctypes.byref(outlen2), aad, len(aad)) == 1
+        lib.EVP_CipherUpdate(bad_ctx, decrypted, ctypes.byref(outlen2), ct_bytes, plen)
+        assert lib.EVP_CIPHER_CTX_ctrl(bad_ctx, 0x11, 16, tag_bytes) == 1
+        ret = lib.EVP_CipherFinal_ex(bad_ctx, (ctypes.c_char * 16)(), ctypes.byref(final_outlen))
+        assert ret <= 0, "AES-GCM tag should have rejected incorrect password!"
+        print("  Wrong password correctly rejected by authentication tag!")
+    finally:
+        lib.EVP_CIPHER_CTX_free(bad_ctx)
+
+
+def test_swbk_container_crypto():
+    print("\n--- 4. Testing SWBK v1 Cross-Platform Backup Encryption & Authentication ---")
     MAGIC = b"SWBK"
     VERSION = 1
     ITERATIONS = 100000
     SALT_LEN = 16
     IV_LEN = 12
     TAG_LEN = 16
-    HEADER_FORMAT = ">4sHI16s12sQ" # 46 bytes: magic(4), version(2), iter(4), salt(16), iv(12), payload_len(8)
+    HEADER_FORMAT = ">4sHI16s12sQ"  # 46 bytes: magic(4), version(2), iter(4), salt(16), iv(12), payload_len(8)
     HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
     assert HEADER_SIZE == 46, f"Expected 46-byte header, got {HEADER_SIZE}"
 
@@ -264,87 +421,17 @@ def test_swbk_container_crypto():
         "transaction_metadata": [], "transaction_tags": [],
         "refund_links": [], "classification_rules": [], "confirmed_identifiers": []
     }
-    
     password = "CorrectStrongPassword2026!"
-    json_bytes = json.dumps(sample_data, ensure_ascii=False).encode("utf-8")
-    salt = os.urandom(SALT_LEN)
-    iv = os.urandom(IV_LEN)
-    key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, ITERATIONS, dklen=32)
-    aad = MAGIC + struct.pack(">H", VERSION) # 6 bytes AAD
-    
-    # 1. Pack / Encrypt
-    ctx = lib.EVP_CIPHER_CTX_new()
-    try:
-        assert lib.EVP_CipherInit_ex(ctx, lib.EVP_aes_256_gcm(), None, None, None, 1) == 1
-        assert lib.EVP_CIPHER_CTX_ctrl(ctx, 0x9, len(iv), None) == 1
-        assert lib.EVP_CipherInit_ex(ctx, None, None, key, iv, 1) == 1
-        
-        outlen = ctypes.c_int(0)
-        assert lib.EVP_CipherUpdate(ctx, None, ctypes.byref(outlen), aad, len(aad)) == 1
-        
-        ciphertext = (ctypes.c_char * (len(json_bytes) + 16))()
-        assert lib.EVP_CipherUpdate(ctx, ciphertext, ctypes.byref(outlen), json_bytes, len(json_bytes)) == 1
-        ct_len = outlen.value
-        
-        final_outlen = ctypes.c_int(0)
-        assert lib.EVP_CipherFinal_ex(ctx, (ctypes.c_char * 16)(), ctypes.byref(final_outlen)) == 1
-        
-        tag = (ctypes.c_char * 16)()
-        assert lib.EVP_CIPHER_CTX_ctrl(ctx, 0x10, 16, tag) == 1
-        tag_bytes = bytes(tag)
-        ct_bytes = bytes(ciphertext[:ct_len])
-    finally:
-        lib.EVP_CIPHER_CTX_free(ctx)
-        
-    header = struct.pack(HEADER_FORMAT, MAGIC, VERSION, ITERATIONS, salt, iv, len(ct_bytes))
-    container_bytes = header + ct_bytes + tag_bytes
-    print(f"  Container packed: Total {len(container_bytes)} bytes (Header: {HEADER_SIZE}B, Ciphertext: {len(ct_bytes)}B, Tag: {len(tag_bytes)}B)")
 
-    # 2. Unpack / Decrypt
-    assert len(container_bytes) == HEADER_SIZE + len(ct_bytes) + TAG_LEN
-    m, v, iters, s, i_v, plen = struct.unpack(HEADER_FORMAT, container_bytes[:HEADER_SIZE])
-    assert m == MAGIC and v == VERSION and iters == ITERATIONS and plen == len(ct_bytes)
-    
-    dec_key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), s, iters, dklen=32)
-    dec_ctx = lib.EVP_CIPHER_CTX_new()
     try:
-        assert lib.EVP_CipherInit_ex(dec_ctx, lib.EVP_aes_256_gcm(), None, None, None, 0) == 1
-        assert lib.EVP_CIPHER_CTX_ctrl(dec_ctx, 0x9, len(i_v), None) == 1
-        assert lib.EVP_CipherInit_ex(dec_ctx, None, None, dec_key, i_v, 0) == 1
-        
-        outlen2 = ctypes.c_int(0)
-        assert lib.EVP_CipherUpdate(dec_ctx, None, ctypes.byref(outlen2), aad, len(aad)) == 1
-        
-        decrypted = (ctypes.c_char * (plen + 16))()
-        assert lib.EVP_CipherUpdate(dec_ctx, decrypted, ctypes.byref(outlen2), ct_bytes, plen) == 1
-        dec_len = outlen2.value
-        
-        assert lib.EVP_CIPHER_CTX_ctrl(dec_ctx, 0x11, 16, tag_bytes) == 1
-        ret = lib.EVP_CipherFinal_ex(dec_ctx, (ctypes.c_char * 16)(), ctypes.byref(final_outlen))
-        assert ret > 0, "Authentication tag failed on valid decrypt"
-        dec_bytes = bytes(decrypted[:dec_len])
-    finally:
-        lib.EVP_CIPHER_CTX_free(dec_ctx)
-        
-    recovered = json.loads(dec_bytes.decode("utf-8"))
-    assert recovered == sample_data, "Decrypted data does not match original JSON data"
-    print("  SWBK v1 AES-256-GCM + PBKDF2 decryption round-trip 100% verified!")
-
-    # 3. Test wrong password
-    bad_key = hashlib.pbkdf2_hmac("sha256", b"WrongPassword!", s, iters, dklen=32)
-    bad_ctx = lib.EVP_CIPHER_CTX_new()
-    try:
-        assert lib.EVP_CipherInit_ex(bad_ctx, lib.EVP_aes_256_gcm(), None, None, None, 0) == 1
-        assert lib.EVP_CIPHER_CTX_ctrl(bad_ctx, 0x9, len(i_v), None) == 1
-        assert lib.EVP_CipherInit_ex(bad_ctx, None, None, bad_key, i_v, 0) == 1
-        assert lib.EVP_CipherUpdate(bad_ctx, None, ctypes.byref(outlen2), aad, len(aad)) == 1
-        lib.EVP_CipherUpdate(bad_ctx, decrypted, ctypes.byref(outlen2), ct_bytes, plen)
-        assert lib.EVP_CIPHER_CTX_ctrl(bad_ctx, 0x11, 16, tag_bytes) == 1
-        ret = lib.EVP_CipherFinal_ex(bad_ctx, (ctypes.c_char * 16)(), ctypes.byref(final_outlen))
-        assert ret <= 0, "AES-GCM tag should have rejected incorrect password!"
-        print("  Wrong password correctly rejected by authentication tag!")
-    finally:
-        lib.EVP_CIPHER_CTX_free(bad_ctx)
+        _test_swbk_with_cryptography(
+            sample_data, password, MAGIC, VERSION, ITERATIONS, SALT_LEN, IV_LEN, TAG_LEN, HEADER_FORMAT, HEADER_SIZE
+        )
+    except ImportError:
+        print("  'cryptography' not installed; falling back to OpenSSL libcrypto ctypes...")
+        _test_swbk_with_ctypes(
+            sample_data, password, MAGIC, VERSION, ITERATIONS, SALT_LEN, IV_LEN, TAG_LEN, HEADER_FORMAT, HEADER_SIZE
+        )
 
 def test_csv_injection_sanitization():
     print("\n--- 5. Testing CSV Formula Injection Protection ---")

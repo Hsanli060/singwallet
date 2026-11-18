@@ -2,16 +2,13 @@ name: Release OTA Build & Publish
 
 on:
   push:
-    branches:
-      - master
-      - main
     tags:
       - 'v*'
   workflow_dispatch:
     inputs:
       version_tag:
         description: 'Release Version Tag (e.g., v1.0.0)'
-        required: false
+        required: true
         default: 'v1.0.0'
       changelog:
         description: 'Changelog / Release Notes'
@@ -19,19 +16,29 @@ on:
         default: 'SingWallet Android Release with QuickRecordTileService and AI Ingestion'
 
 permissions:
-  contents: write
-  actions: read
+  contents: read
 
 jobs:
-  build_and_release:
-    name: Build Signed Release APK & Publish OTA
+  build:
+    name: Build Signed Release APK & Manifests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tag_name: ${{ steps.version_step.outputs.TAG_NAME }}
+      clean_ver: ${{ steps.version_step.outputs.CLEAN_VER }}
+      apk_name: ${{ steps.prepare_artifacts.outputs.APK_NAME }}
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -40,20 +47,32 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
-      - name: Resolve Version and Tag
+      - name: Resolve and Validate Version Tag
         id: version_step
+        env:
+          INPUT_VERSION_TAG: ${{ github.event.inputs.version_tag }}
+          REF_NAME: ${{ github.ref_name }}
+          RUN_NUMBER: ${{ github.run_number }}
         run: |
-          if [ -n "${{ github.event.inputs.version_tag }}" ]; then
-            TAG_NAME="${{ github.event.inputs.version_tag }}"
-          elif [ -n "${{ github.ref_name }}" ]; then
-            TAG_NAME="${{ github.ref_name }}"
+          if [ -n "$INPUT_VERSION_TAG" ]; then
+            TAG_NAME="$INPUT_VERSION_TAG"
+          elif [ -n "$REF_NAME" ]; then
+            TAG_NAME="$REF_NAME"
           else
-            TAG_NAME="v1.0.0"
+            echo "::error::Unable to determine version tag."
+            exit 1
           fi
-          # Strip leading v if needed for semantic version
+
+          if ! [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Invalid version tag '$TAG_NAME'. Expected format: vX.Y.Z or vX.Y.Z-prerelease"
+            exit 1
+          fi
+
           CLEAN_VER="${TAG_NAME#v}"
-          echo "TAG_NAME=${TAG_NAME}" >> $GITHUB_OUTPUT
-          echo "CLEAN_VER=${CLEAN_VER}" >> $GITHUB_OUTPUT
+          BUILD_NUMBER=$((10 + RUN_NUMBER))
+          echo "TAG_NAME=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "CLEAN_VER=${CLEAN_VER}" >> "$GITHUB_OUTPUT"
+          echo "BUILD_NUMBER=${BUILD_NUMBER}" >> "$GITHUB_OUTPUT"
 
       - name: Restore Persistent Release Keystore
         env:
@@ -62,132 +81,187 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "Decoding persistent release keystore from GitHub Secrets..."
-            echo "$KEYSTORE_BASE64" | base64 --decode > android/app/singwallet-release.jks
-            cat <<EOF > android/key.properties
-          storePassword=${KEYSTORE_PASSWORD}
-          keyPassword=${KEY_PASSWORD}
-          keyAlias=${KEY_ALIAS}
-          storeFile=singwallet-release.jks
-          EOF
-          elif [ -f "android/app/singwallet-release.keystore" ]; then
-            echo "Using tracked persistent release keystore from repository..."
-            cat <<EOF > android/key.properties
-          storePassword=singwallet_persistent_pass
-          keyPassword=singwallet_persistent_pass
-          keyAlias=singwallet
-          storeFile=singwallet-release.keystore
-          EOF
-          else
-            echo "No persistent keystore secret found. Creating reproducible release signing key..."
-            keytool -genkey -v \
-              -keystore android/app/singwallet-release.jks \
-              -alias singwallet \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -storepass singwallet_persistent_pass \
-              -keypass singwallet_persistent_pass \
-              -dname "CN=SingWallet, OU=Mobile, O=SingWallet, C=CN"
-            cat <<EOF > android/key.properties
-          storePassword=singwallet_persistent_pass
-          keyPassword=singwallet_persistent_pass
-          keyAlias=singwallet
-          storeFile=singwallet-release.jks
-          EOF
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::Missing required Android release signing secrets!"
+            echo "Please configure all 4 secrets in GitHub Repository Settings -> Secrets and variables -> Actions:"
+            echo "  - ANDROID_KEYSTORE_BASE64 (base64-encoded release JKS/keystore)"
+            echo "  - KEYSTORE_PASSWORD"
+            echo "  - KEY_ALIAS"
+            echo "  - KEY_PASSWORD"
+            exit 1
           fi
 
+          echo "Decoding persistent release keystore from GitHub Secrets..."
+          printf '%s' "$KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > android/app/singwallet-release.jks
+          if [ ! -s android/app/singwallet-release.jks ]; then
+            echo "::error::Decoded keystore android/app/singwallet-release.jks is empty!"
+            exit 1
+          fi
+
+          {
+            printf 'storePassword=%s\n' "$KEYSTORE_PASSWORD"
+            printf 'keyPassword=%s\n' "$KEY_PASSWORD"
+            printf 'keyAlias=%s\n' "$KEY_ALIAS"
+            printf 'storeFile=singwallet-release.jks\n'
+          } > android/key.properties
+
       - name: Sync Single-Source Web Assets
-        run: |
-          python tools/sync_web_assets.py
+        run: python tools/sync_web_assets.py
 
       - name: Build Android Release APK
+        env:
+          CLEAN_VER: ${{ steps.version_step.outputs.CLEAN_VER }}
+          BUILD_NUMBER: ${{ steps.version_step.outputs.BUILD_NUMBER }}
         run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease \
-            -PAPP_VERSION_NAME="${{ steps.version_step.outputs.CLEAN_VER }}" \
-            -PAPP_VERSION_CODE="$((10 + ${{ github.run_number }}))" \
+            -PAPP_VERSION_NAME="$CLEAN_VER" \
+            -PAPP_VERSION_CODE="$BUILD_NUMBER" \
             --no-daemon
 
-      - name: Upload APK to Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: singwallet-release-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
-
-      - name: Prepare Release Artifacts & Generate version.json
+      - name: Prepare Release Artifacts & Generate version.json & web_manifest.json
         id: prepare_artifacts
         env:
           TAG_NAME: ${{ steps.version_step.outputs.TAG_NAME }}
           CLEAN_VER: ${{ steps.version_step.outputs.CLEAN_VER }}
+          BUILD_NUMBER: ${{ steps.version_step.outputs.BUILD_NUMBER }}
           REPO_NAME: ${{ github.repository }}
+          INPUT_CHANGELOG: ${{ github.event.inputs.changelog }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           APK_ORIGIN="android/app/build/outputs/apk/release/app-release.apk"
           if [ ! -f "$APK_ORIGIN" ]; then
-            FOUND_APK=$(find android/app/build/outputs/apk/release -name "*.apk" 2>/dev/null | head -n 1)
+            FOUND_APK=$(find android/app/build/outputs/apk/release -name "*.apk" 2>/dev/null | head -n 1 || true)
             if [ -n "$FOUND_APK" ] && [ -f "$FOUND_APK" ]; then
               APK_ORIGIN="$FOUND_APK"
             else
-              echo "Error: Release APK not found at $APK_ORIGIN"
+              echo "::error::Release APK not found at $APK_ORIGIN"
               exit 1
             fi
           fi
 
           FINAL_APK_NAME="singwallet-${TAG_NAME}-release.apk"
           cp "$APK_ORIGIN" "$FINAL_APK_NAME"
-          
+
           APK_SIZE=$(stat -c%s "$FINAL_APK_NAME" 2>/dev/null || stat -f%z "$FINAL_APK_NAME")
           APK_SHA256=$(sha256sum "$FINAL_APK_NAME" | awk '{print $1}')
           DOWNLOAD_URL="https://github.com/${REPO_NAME}/releases/download/${TAG_NAME}/${FINAL_APK_NAME}"
-          
-          CHANGELOG="${{ github.event.inputs.changelog }}"
+          RELEASE_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          CHANGELOG="$INPUT_CHANGELOG"
           if [ -z "$CHANGELOG" ]; then
             CHANGELOG="Release ${TAG_NAME}: Performance optimizations, incremental database schema preservation, and seamless OTA update support."
           fi
 
-          # Generate standard version.json for in-app OTA checking
-          cat <<EOF > version.json
-          {
-            "version": "${CLEAN_VER}",
-            "tagName": "${TAG_NAME}",
-            "buildNumber": $((10 + ${{ github.run_number }})),
-            "releaseDate": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-            "changelog": "${CHANGELOG}",
-            "downloadUrl": "${DOWNLOAD_URL}",
-            "apkSize": ${APK_SIZE},
-            "sha256": "${APK_SHA256}",
-            "preserveDataGuaranteed": true,
-            "minCompatibleVersion": "1.0.0"
-          }
-          EOF
+          jq -n \
+            --arg version "$CLEAN_VER" \
+            --arg tagName "$TAG_NAME" \
+            --argjson buildNumber "$BUILD_NUMBER" \
+            --arg releaseDate "$RELEASE_DATE" \
+            --arg changelog "$CHANGELOG" \
+            --arg downloadUrl "$DOWNLOAD_URL" \
+            --argjson apkSize "$APK_SIZE" \
+            --arg sha256 "$APK_SHA256" \
+            --arg minCompatibleVersion "1.0.0" \
+            '{
+              version: $version,
+              tagName: $tagName,
+              buildNumber: $buildNumber,
+              releaseDate: $releaseDate,
+              changelog: $changelog,
+              downloadUrl: $downloadUrl,
+              apkSize: $apkSize,
+              sha256: $sha256,
+              preserveDataGuaranteed: true,
+              minCompatibleVersion: $minCompatibleVersion
+            }' > version.json
 
           echo "Generated version.json:"
           cat version.json
 
-          echo "APK_NAME=${FINAL_APK_NAME}" >> $GITHUB_OUTPUT
+          python3 -c '
+          import hashlib, json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
 
-      - name: Publish to GitHub Releases
-        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-        uses: softprops/action-gh-release@v2
+          web_dir = Path("web")
+          files_map = {}
+          for p in sorted(web_dir.rglob("*")):
+              if p.is_file():
+                  rel = p.relative_to(web_dir).as_posix()
+                  h = hashlib.sha256()
+                  with p.open("rb") as f:
+                      while chunk := f.read(65536):
+                          h.update(chunk)
+                  files_map[rel] = h.hexdigest()
+
+          manifest = {
+              "version": os.environ["CLEAN_VER"],
+              "commitSha": os.environ["COMMIT_SHA"],
+              "generatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "files": files_map,
+          }
+          with open("web_manifest.json", "w", encoding="utf-8") as out:
+              json.dump(manifest, out, ensure_ascii=False, indent=2)
+          '
+
+          echo "Generated web_manifest.json:"
+          cat web_manifest.json
+
+          {
+            printf '## SingWallet %s\n\n' "$TAG_NAME"
+            printf '### 更新说明 (Changelog)\n'
+            printf '%s\n\n' "$CHANGELOG"
+            printf -- '---\n'
+            printf '### 升级不丢数据铁律保障\n'
+            printf -- '- **包名锁定**: `com.singwallet.app`\n'
+            printf -- '- **持久签名**: 保持一致的 Release 证书覆盖安装\n'
+            printf -- '- **无损迁移**: SQLite 数据库增量 `onUpgrade` 迁移机制，严禁 `DROP TABLE`\n'
+            printf -- '- **OTA 适配**: 支持 App 内一键静默比对与无缝升级\n'
+          } > release_notes.md
+
+          echo "APK_NAME=${FINAL_APK_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK to Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ steps.version_step.outputs.TAG_NAME }}
-          name: SingWallet ${{ steps.version_step.outputs.TAG_NAME }}
-          body: |
-            ## SingWallet ${{ steps.version_step.outputs.TAG_NAME }}
-            
-            ### 更新说明 (Changelog)
-            ${{ github.event.inputs.changelog || '全量发布版本，具备数据无损平滑覆盖升级能力。' }}
-            
-            ---
-            ### 升级不丢数据铁律保障
-            - **包名锁定**: `com.singwallet.app`
-            - **持久签名**: 保持一致的 Release 证书覆盖安装
-            - **无损迁移**: SQLite 数据库增量 `onUpgrade` 迁移机制，严禁 `DROP TABLE`
-            - **OTA 适配**: 支持 App 内一键静默比对与无缝升级
-          files: |
+          name: singwallet-release-apk
+          path: ${{ steps.prepare_artifacts.outputs.APK_NAME }}
+
+      - name: Upload Release Bundle to Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: singwallet-release-bundle
+          path: |
             ${{ steps.prepare_artifacts.outputs.APK_NAME }}
             version.json
+            web_manifest.json
+            release_notes.md
+
+  publish_release:
+    name: Publish to GitHub Releases
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Release Bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: singwallet-release-bundle
+
+      - name: Publish Release Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.build.outputs.tag_name }}
+          name: SingWallet ${{ needs.build.outputs.tag_name }}
+          body_path: release_notes.md
+          files: |
+            ${{ needs.build.outputs.apk_name }}
+            version.json
+            web_manifest.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
