@@ -991,6 +991,7 @@ object LightningAiBackgroundProcessor {
                     put("model", model)
                     put("messages", messagesArr)
                     put("temperature", 0.1)
+                    put("max_tokens", 512)
                     put("response_format", JSONObject().put("type", "json_object"))
                 }
 
@@ -1005,6 +1006,7 @@ object LightningAiBackgroundProcessor {
                         put("model", model)
                         put("messages", messagesArr)
                         put("temperature", 0.1)
+                        put("max_tokens", 512)
                     }
                     val retryRes = executeHttpPost(targetEndpoint, headers, plainPayload.toString(), deadlineNanos)
                     code = retryRes.first

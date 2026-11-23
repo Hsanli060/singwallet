@@ -1145,7 +1145,7 @@
     const startTime = Date.now();
     let latency = 0;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
 
     let proto = (provider || 'openai_chat').toLowerCase();
     if (proto === 'openai' || proto === 'qwen' || proto === 'custom') proto = 'openai_chat';
@@ -1207,7 +1207,7 @@
           body: JSON.stringify({
             model: model,
             messages: [{ role: "user", content: "ping" }],
-            max_tokens: 3
+            max_tokens: 16
           }),
           signal: controller.signal
         });
@@ -1232,7 +1232,7 @@
               const retryRes = await fetchWithCorsFallback(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-                body: JSON.stringify({ model: best, messages: [{ role: "user", content: "ping" }], max_tokens: 3 }),
+                body: JSON.stringify({ model: best, messages: [{ role: "user", content: "ping" }], max_tokens: 16 }),
                 signal: controller.signal
               });
               if (retryRes && retryRes.ok) {
@@ -1271,7 +1271,7 @@
       latency = Date.now() - startTime;
       let reason = err.message || '网络连接异常';
       if (err.name === 'AbortError') {
-        reason = '网络超时 (12000ms)';
+        reason = '网络超时 (20000ms)';
       } else if (reason.includes('Failed to fetch') || reason.includes('NetworkError')) {
         reason = '网络不可达或跨域拦截 (Failed to fetch)';
       }
@@ -1804,7 +1804,8 @@
               ]
             }
           ],
-          temperature: 0.1
+          temperature: 0.1,
+          max_tokens: 512
         };
 
         const schema = window.BILL_STRUCTURED_SCHEMA || (window.DomainRegistry && window.DomainRegistry.getConfig().schema);

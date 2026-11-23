@@ -2694,7 +2694,7 @@ async function runAllTestsSuite() {
     assert(vlmPromptText.includes('如“工商银行银联储蓄卡[5678]”输出为“工商银行[5678]”'), "Group 44: VLM Prompt contains square bracket card normalization example");
     assert(vlmPromptText.includes('“中国工商银行储蓄卡(5678)”输出为“工商银行(5678)”'), "Group 44: VLM Prompt contains round bracket card normalization example");
 
-    // 4. 验证结构化 Schema 包含 account 字段
+    // 4. 验证结构化 Schema 包含 account 字段，且严格模式下 required 覆盖全部 properties（兼容 Groq/OpenAI strict json_schema）
     const structuredSchema = window.BILL_STRUCTURED_SCHEMA || (window.DomainRegistry && window.DomainRegistry.getConfig().schema);
     assert(structuredSchema &&
            structuredSchema.json_schema &&
@@ -2702,6 +2702,10 @@ async function runAllTestsSuite() {
            structuredSchema.json_schema.schema.properties &&
            structuredSchema.json_schema.schema.properties.account !== undefined,
            "Group 44: VLM structured output JSON schema contains 'account' property definition");
+    const schemaProps = Object.keys(structuredSchema.json_schema.schema.properties || {});
+    const schemaRequired = structuredSchema.json_schema.schema.required || [];
+    assert(schemaProps.every(k => schemaRequired.includes(k)),
+           "Group 44: strict BILL_STRUCTURED_SCHEMA required array includes every property key (Groq/OpenAI strict compatibility)");
 
     // 5. 验证 formatVlmResult 对大模型提取结果的账户规范化输出
     const mockRawResult = {
