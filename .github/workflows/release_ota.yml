@@ -27,7 +27,6 @@ jobs:
     outputs:
       tag_name: ${{ steps.version_step.outputs.TAG_NAME }}
       clean_ver: ${{ steps.version_step.outputs.CLEAN_VER }}
-      apk_name: ${{ steps.prepare_artifacts.outputs.APK_NAME }}
 
     steps:
       - name: Checkout Code
@@ -227,14 +226,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: singwallet-release-apk
-          path: ${{ steps.prepare_artifacts.outputs.APK_NAME }}
+          if-no-files-found: error
+          path: singwallet-${{ steps.version_step.outputs.TAG_NAME }}-release.apk
 
       - name: Upload Release Bundle to Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: singwallet-release-bundle
+          if-no-files-found: error
           path: |
-            ${{ steps.prepare_artifacts.outputs.APK_NAME }}
+            singwallet-${{ steps.version_step.outputs.TAG_NAME }}-release.apk
             version.json
             web_manifest.json
             release_notes.md
@@ -253,14 +254,30 @@ jobs:
         with:
           name: singwallet-release-bundle
 
+      - name: Verify Release Bundle Contents
+        env:
+          TAG_NAME: ${{ needs.build.outputs.tag_name }}
+        run: |
+          EXPECTED_APK="singwallet-${TAG_NAME}-release.apk"
+          ls -la
+          if [ ! -s "$EXPECTED_APK" ]; then
+            echo "::error::Missing or empty release APK: $EXPECTED_APK"
+            exit 1
+          fi
+          if [ ! -s "version.json" ] || [ ! -s "web_manifest.json" ] || [ ! -s "release_notes.md" ]; then
+            echo "::error::Missing required release metadata files!"
+            exit 1
+          fi
+
       - name: Publish Release Assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.build.outputs.tag_name }}
           name: SingWallet ${{ needs.build.outputs.tag_name }}
           body_path: release_notes.md
+          fail_on_unmatched_files: true
           files: |
-            ${{ needs.build.outputs.apk_name }}
+            singwallet-${{ needs.build.outputs.tag_name }}-release.apk
             version.json
             web_manifest.json
         env:
