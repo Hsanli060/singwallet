@@ -7,43 +7,6 @@
 (function (window) {
   'use strict';
 
-  function _escapeHtml(str) {
-    if (typeof window !== 'undefined' && typeof window.escapeHtml === 'function') {
-      return window.escapeHtml(str);
-    }
-    if (str === null || str === undefined) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
-  function _renderSafeIconAndText(msg) {
-    const str = String(msg ?? '');
-    if (typeof window !== 'undefined' && window.IconRegistry && window.IconRegistry.uiStatusEmojis) {
-      const trimmed = str.trimStart();
-      for (const iconHtml of Object.values(window.IconRegistry.uiStatusEmojis)) {
-        if (iconHtml && trimmed.startsWith(iconHtml)) {
-          return iconHtml + _escapeHtml(trimmed.slice(iconHtml.length));
-        }
-      }
-    }
-    return _escapeHtml(str);
-  }
-
-  function _toCents(val) {
-    if (typeof window !== 'undefined' && window.MoneyMath && typeof window.MoneyMath.toCents === 'function') {
-      return window.MoneyMath.toCents(val);
-    }
-    if (typeof val === 'number') {
-      return Number.isFinite(val) ? Math.round(val * 100) : 0;
-    }
-    const num = parseFloat(String(val ?? '').replace(/[¥￥$€£,\s]/g, ''));
-    return Number.isFinite(num) ? Math.round(num * 100) : 0;
-  }
-
   // 状态与分类图标辅助函数 (完全遵循 SSOT 图标注册中心，0 硬编码 Emoji)
   function getStatusIcon(key) {
     return (window.IconRegistry && typeof window.IconRegistry.getStatusIcon === 'function')
@@ -157,44 +120,21 @@
         const currentCats = (window.DomainRegistry && typeof window.DomainRegistry.getParentCategories === 'function')
           ? window.DomainRegistry.getParentCategories()
           : (window.CORE_PARENT_CATEGORIES || ['餐饮美食', '交通出行', '日常购物', '休闲娱乐', '生活缴费', '医疗健康', '其他支出', '工资收入']);
-        let activeCfg = (window.vlmConfig && typeof window.vlmConfig === 'object') ? window.vlmConfig : vlmConfig;
-        if (!activeCfg || (!activeCfg.apiKey && !activeCfg.endpoint && !activeCfg.model)) {
-          try {
-            const rawCfg = localStorage.getItem('singwallet_vlm_config');
-            if (rawCfg) activeCfg = { ...activeCfg, ...JSON.parse(rawCfg) };
-          } catch (_) {}
-        }
-        let eng = currentOcrEngine || 'llm';
-        try { eng = localStorage.getItem('singwallet_ocr_engine') || eng; } catch (_) {}
-        let autoEnabled = Boolean(window.autoCommitEnabled);
-        let autoThresh = Number(window.autoCommitThreshold || 95);
-        try {
-          if (window.autoCommitEnabled === undefined) {
-            const savedAuto = localStorage.getItem('singwallet_auto_commit_enabled');
-            autoEnabled = (savedAuto === '1' || savedAuto === 'true');
-          }
-          if (window.autoCommitThreshold === undefined) {
-            const savedT = parseInt(localStorage.getItem('singwallet_auto_commit_threshold') || '', 10);
-            if (!isNaN(savedT) && savedT >= 50 && savedT <= 100) autoThresh = savedT;
-          }
-        } catch (_) {}
         const payload = {
-          provider: (activeCfg && activeCfg.provider) || 'openai_chat',
-          apiKey: ((activeCfg && activeCfg.apiKey) || '').trim(),
-          endpoint: ((activeCfg && activeCfg.endpoint) || '').trim(),
-          model: ((activeCfg && activeCfg.model) || '').trim(),
-          ocrEngine: eng,
+          provider: vlmConfig.provider || 'openai_chat',
+          apiKey: (vlmConfig.apiKey || '').trim(),
+          endpoint: (vlmConfig.endpoint || '').trim(),
+          model: (vlmConfig.model || '').trim(),
+          ocrEngine: currentOcrEngine || 'llm',
           categories: currentCats,
-          autoCommitEnabled: autoEnabled,
-          autoCommitThreshold: autoThresh
+          autoCommitEnabled: Boolean(window.autoCommitEnabled),
+          autoCommitThreshold: Number(window.autoCommitThreshold || 95)
         };
         window.AndroidBridge.syncAiConfigToNative(JSON.stringify(payload));
-        return true;
       }
     } catch (e) {
       console.warn('syncAiConfigToNativeBridge warning:', e);
     }
-    return false;
   }
   syncAiConfigToNativeBridge();
 
@@ -471,9 +411,9 @@
 
     if (toast && titleEl && msgEl) {
       titleEl.innerText = title || '大模型请求异常';
-      msgEl.innerHTML = _renderSafeIconAndText(msg);
+      msgEl.innerHTML = msg;
       if (actionWrap) {
-        if (msg && String(msg).includes('未配置大模型 API Key')) {
+        if (msg && msg.includes('未配置大模型 API Key')) {
           actionWrap.classList.remove('hidden');
         } else {
           actionWrap.classList.add('hidden');
@@ -529,28 +469,10 @@
 
     const currentModel = (document.getElementById('vlm-model')?.value || vlmConfig.model || '').trim();
 
-    menu.innerHTML = '';
-    const frag = document.createDocumentFragment();
-    list.forEach(rawModel => {
-      const m = String(rawModel ?? '');
+    menu.innerHTML = list.map(m => {
       const isSelected = m === currentModel;
-      const opt = document.createElement('div');
-      opt.className = `custom-dropdown-option rounded-xl ${isSelected ? 'selected' : ''}`;
-      opt.tabIndex = 0;
-      opt.setAttribute('data-value', m);
-      opt.onclick = function (event) {
-        selectVlmModelOption(m, event);
-      };
-      opt.onkeydown = function (event) {
-        if (event.key === 'Enter' || event.key === ' ') {
-          selectVlmModelOption(m, event);
-          event.preventDefault();
-        }
-      };
-      opt.innerHTML = `<span class="truncate">${_escapeHtml(m)}</span><span class="opt-check">✓</span>`;
-      frag.appendChild(opt);
-    });
-    menu.appendChild(frag);
+      return `<div class="custom-dropdown-option rounded-xl ${isSelected ? 'selected' : ''}" tabindex="0" data-value="${m}" onclick="selectVlmModelOption('${m}', event)" onkeydown="if(event.key==='Enter'||event.key===' '){selectVlmModelOption('${m}', event);event.preventDefault();}"><span class="truncate">${m}</span><span class="opt-check">✓</span></div>`;
+    }).join('');
   }
 
   /**
@@ -675,8 +597,7 @@
 
       if (proto === 'gemini_native') {
         const hasVer = /\/v\d+(?:beta\d*)?$/i.test(baseOrigin);
-        url = hasVer ? `${baseOrigin}/models` : `${baseOrigin}/v1beta/models`;
-        headers['x-goog-api-key'] = apiKey;
+        url = hasVer ? `${baseOrigin}/models?key=${encodeURIComponent(apiKey)}` : `${baseOrigin}/v1beta/models?key=${encodeURIComponent(apiKey)}`;
       } else if (proto === 'anthropic_messages') {
         const hasVer = /\/v\d+(?:beta\d*)?$/i.test(baseOrigin);
         url = hasVer ? `${baseOrigin}/models` : `${baseOrigin}/v1/models`;
@@ -688,18 +609,10 @@
         headers['Authorization'] = `Bearer ${apiKey}`;
       }
 
-      const modelsController = new AbortController();
-      const modelsTimeoutId = setTimeout(() => modelsController.abort(), 15000);
-      let res;
-      try {
-        res = await fetchWithCorsFallback(url, {
-          method: 'GET',
-          headers,
-          signal: modelsController.signal
-        });
-      } finally {
-        clearTimeout(modelsTimeoutId);
-      }
+      const res = await fetchWithCorsFallback(url, {
+        method: 'GET',
+        headers
+      });
 
       if (!res.ok) {
         let errDetail = `HTTP ${res.status}`;
@@ -745,9 +658,7 @@
       }
     } catch (err) {
       console.warn('Fetch VLM models error:', err);
-      const msg = (err && err.name === 'AbortError')
-        ? '获取模型列表超时 (15000ms)'
-        : ((err && err.message) || '获取模型列表失败');
+      const msg = err.message || '获取模型列表失败';
       showLlmTopError('获取模型列表失败', msg);
       if (typeof showToast === 'function') {
         showToast(`获取模型列表失败: ${msg}`, 'error');
@@ -893,7 +804,7 @@
     if (box && statusEl) {
       box.className = "p-2 rounded-xl text-[11px] font-mono bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 animate-fadeIn";
       box.classList.remove('hidden');
-      statusEl.innerHTML = _renderSafeIconAndText(msg);
+      statusEl.innerHTML = msg;
     }
     if (typeof showToast === 'function') {
       showToast(msg);
@@ -906,7 +817,7 @@
     if (box && statusEl) {
       box.className = "p-2 rounded-xl text-[11px] font-mono bg-rose-500/15 border border-rose-500/40 text-rose-300 animate-fadeIn";
       box.classList.remove('hidden');
-      statusEl.innerHTML = _renderSafeIconAndText(msg);
+      statusEl.innerHTML = msg;
     }
     showLlmTopError("大模型连通性检测失败", msg);
   }
@@ -1156,11 +1067,13 @@
     try {
       let res;
       if (proto === 'gemini_native') {
-        res = await fetchWithCorsFallback(endpoint, {
+        const url = endpoint.includes('?') ? `${endpoint}&key=${apiKey}` : `${endpoint}?key=${apiKey}`;
+        res = await fetchWithCorsFallback(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-goog-api-key': apiKey
+            'x-goog-api-key': apiKey,
+            'Authorization': `Bearer ${apiKey}`
           },
           body: JSON.stringify({
             contents: [{ role: 'user', parts: [{ text: "ping" }] }]
@@ -1287,8 +1200,8 @@
 
   function formatVlmResult(parsed, file) {
     const cleanedAmtStr = String((parsed && parsed.amount !== undefined && parsed.amount !== null) ? parsed.amount : '').replace(/[¥￥$€£,\s]/g, '');
-    const amtCents = Math.abs(_toCents(cleanedAmtStr));
-    const amt = amtCents / 100;
+    const parsedFloat = parseFloat(cleanedAmtStr);
+    const amt = (!isNaN(parsedFloat) && isFinite(parsedFloat)) ? Math.round(Math.abs(parsedFloat) * 100) / 100 : 0.00;
     
     // 商户名提取：优先使用 AI 识别的商户名称，未返回时从上传文件名提取，绝不掺杂写死的商户名
     const extractedMerchant = (parsed && (parsed.merchant || parsed.merchantName || parsed.merchant_header || parsed.title))
@@ -1298,7 +1211,6 @@
       ? file.name.replace(/\.[^/.]+$/, '').trim()
       : '商户凭证';
     const merchant = extractedMerchant || fallbackMerchant;
-    const computedConfidence = (amt > 0 && Boolean(extractedMerchant)) ? 99 : 40;
 
     const resolver = window.resolveParentCategory || (window.DomainRegistry && window.DomainRegistry.resolveParentCategory);
     const currentCats = (window.DomainRegistry && typeof window.DomainRegistry.getParentCategories === 'function')
@@ -1359,7 +1271,7 @@
 
     return {
       amount: amt,
-      amountInCents: amtCents,
+      amountInCents: Math.round(amt * 100),
       merchant: merchant,
       merchantHeader: merchant,
       cat: category,
@@ -1371,7 +1283,7 @@
       orderId: orderId,
       time: time,
       orderTime: time,
-      confidence: computedConfidence,
+      confidence: 99.9,
       tag: '大模型 VLM 高精识别',
       isVlm: true
     };
@@ -1466,11 +1378,11 @@
   }
 
   /**
-   * 鲁棒提取大模型响应中的首个完整 JSON 对象（括号配平扫描，忽略字符串字面量内花括号，支持剥离 <think> 与 Markdown 代码块）
+   * 鲁棒提取大模型响应中的 JSON 对象（支持剥离 <think>...</think> 思维链、Markdown 代码块及尾随逗号）
    */
   function extractJsonFromVlmResponse(rawText) {
     if (!rawText || typeof rawText !== 'string') return null;
-    const cleaned = rawText
+    let cleaned = rawText
       .replace(/<think>[\s\S]*?<\/think>/gi, '')
       .replace(/<think>[\s\S]*$/gi, '')
       .replace(/```(?:json)?/gi, '')
@@ -1478,65 +1390,24 @@
       .trim();
     if (!cleaned) return null;
 
-    const tryParseCandidate = (candidate) => {
-      try {
-        const obj = JSON.parse(candidate);
-        if (obj && typeof obj === 'object') return obj;
-      } catch (e1) {
-        const sanitized = candidate
-          .replace(/,\s*([}\]])/g, '$1')
-          .replace(/[\u0000-\u0019]+/g, ' ');
-        try {
-          const obj2 = JSON.parse(sanitized);
-          if (obj2 && typeof obj2 === 'object') return obj2;
-        } catch (e2) {}
-      }
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
       return null;
-    };
-
-    let searchFrom = 0;
-    while (searchFrom < cleaned.length) {
-      const startIdx = cleaned.indexOf('{', searchFrom);
-      if (startIdx === -1) break;
-
-      let depth = 0;
-      let inString = false;
-      let escaped = false;
-      let matchedEnd = -1;
-
-      for (let i = startIdx; i < cleaned.length; i++) {
-        const ch = cleaned[i];
-        if (inString) {
-          if (escaped) {
-            escaped = false;
-          } else if (ch === '\\') {
-            escaped = true;
-          } else if (ch === '"') {
-            inString = false;
-          }
-        } else {
-          if (ch === '"') {
-            inString = true;
-          } else if (ch === '{') {
-            depth++;
-          } else if (ch === '}') {
-            depth--;
-            if (depth === 0) {
-              matchedEnd = i;
-              break;
-            }
-          }
-        }
-      }
-
-      if (matchedEnd !== -1) {
-        const parsed = tryParseCandidate(cleaned.slice(startIdx, matchedEnd + 1));
-        if (parsed) return parsed;
-      }
-      searchFrom = startIdx + 1;
     }
-
-    return null;
+    const jsonCandidate = cleaned.slice(firstBrace, lastBrace + 1);
+    try {
+      return JSON.parse(jsonCandidate);
+    } catch (e1) {
+      const sanitized = jsonCandidate
+        .replace(/,\s*([}\]])/g, '$1')
+        .replace(/[\u0000-\u0019]+/g, ' ');
+      try {
+        return JSON.parse(sanitized);
+      } catch (e2) {
+        return null;
+      }
+    }
   }
 
   function buildVlmPromptText(currentCats) {
@@ -1616,13 +1487,48 @@
     let res = null;
     let data = null;
 
-    const vlmController = new AbortController();
-    const vlmTimeoutId = setTimeout(() => vlmController.abort(), 45000);
-
-    try {
-      if (proto === 'gemini_native') {
-        const endpoint = targetEndpoint;
-        const payload = {
+    if (proto === 'gemini_native') {
+      const endpoint = targetEndpoint.includes('?') ? `${targetEndpoint}&key=${activeKey}` : `${targetEndpoint}?key=${activeKey}`;
+      const payload = {
+        contents: [{
+          role: 'user',
+          parts: [
+            { text: promptText },
+            { inlineData: { mimeType: mimeType, data: rawBase64 } }
+          ]
+        }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              merchant: { type: "STRING" },
+              amount: { type: "NUMBER" },
+              category: {
+                type: "STRING",
+                enum: [...currentCats]
+              },
+              time: { type: "STRING" },
+              orderId: { type: "STRING" },
+              channel: { type: "STRING" },
+              account: { type: "STRING" }
+            },
+            required: ["merchant", "amount", "category", "time", "channel", "account"]
+          }
+        }
+      };
+      res = await fetchWithCorsFallback(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': activeKey,
+          'Authorization': `Bearer ${activeKey}`
+        },
+        body: JSON.stringify(payload)
+      });
+      // 上游不支持 responseSchema 时降级重试
+      if (!res.ok && (res.status === 400 || res.status === 422)) {
+        const fallbackPayload = {
           contents: [{
             role: 'user',
             parts: [
@@ -1631,112 +1537,92 @@
             ]
           }],
           generationConfig: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: "OBJECT",
-              properties: {
-                merchant: { type: "STRING" },
-                amount: { type: "NUMBER" },
-                category: {
-                  type: "STRING",
-                  enum: [...currentCats]
-                },
-                time: { type: "STRING" },
-                orderId: { type: "STRING" },
-                channel: { type: "STRING" },
-                account: { type: "STRING" }
-              },
-              required: ["merchant", "amount", "category", "time", "orderId", "channel", "account"]
-            }
+            responseMimeType: "application/json"
           }
         };
         res = await fetchWithCorsFallback(endpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-goog-api-key': activeKey
+            'x-goog-api-key': activeKey,
+            'Authorization': `Bearer ${activeKey}`
           },
-          body: JSON.stringify(payload),
-          signal: vlmController.signal
+          body: JSON.stringify(fallbackPayload)
         });
-        // 上游不支持 responseSchema 时降级重试
-        if (!res.ok && (res.status === 400 || res.status === 422)) {
-          const fallbackPayload = {
-            contents: [{
-              role: 'user',
-              parts: [
-                { text: promptText },
-                { inlineData: { mimeType: mimeType, data: rawBase64 } }
-              ]
-            }],
-            generationConfig: {
-              responseMimeType: "application/json"
-            }
-          };
-          res = await fetchWithCorsFallback(endpoint, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-goog-api-key': activeKey
-            },
-            body: JSON.stringify(fallbackPayload),
-            signal: vlmController.signal
-          });
-        }
-        try {
-          data = await res.json();
-        } catch (e) {
-          data = { error: { message: `无法解析响应 (${res.status})` } };
-        }
-        if (!res.ok || data.error) {
-          const errMsg = data.error?.message || `HTTP ${res.status}`;
-          throw new Error(`Gemini 接口调用失败: ${errMsg}`);
-        }
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || data.choices?.[0]?.message?.content || '';
-        const parsed = extractJsonFromVlmResponse(text);
-        if (parsed) {
-          return formatVlmResult(parsed, file);
-        }
-      } else if (proto === 'anthropic_messages') {
-        const payload = {
-          model: targetModel,
-          max_tokens: 1024,
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'image', source: { type: 'base64', media_type: mimeType, data: rawBase64 } },
-              { type: 'text', text: promptText }
-            ]
-          }]
-        };
-        res = await fetchWithCorsFallback(targetEndpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': activeKey,
-            'Authorization': `Bearer ${activeKey}`,
-            'anthropic-version': '2023-06-01'
-          },
-          body: JSON.stringify(payload),
-          signal: vlmController.signal
-        });
-        try {
-          data = await res.json();
-        } catch (e) {
-          data = { error: { message: `无法解析响应 (${res.status})` } };
-        }
-        if (!res.ok || data.error) {
-          const errMsg = data.error?.message || `HTTP ${res.status}`;
-          throw new Error(`Anthropic 接口调用失败: ${errMsg}`);
-        }
-        const text = data?.content?.[0]?.text || data?.choices?.[0]?.message?.content || '';
-        const parsed = extractJsonFromVlmResponse(text);
-        if (parsed) {
-          return formatVlmResult(parsed, file);
-        }
-      } else if (proto === 'openai_responses') {
-        const schema = window.BILL_STRUCTURED_SCHEMA || (window.DomainRegistry && window.DomainRegistry.getConfig().schema);
-        let payload = {
+      }
+      try {
+        data = await res.json();
+      } catch (e) {
+        data = { error: { message: `无法解析响应 (${res.status})` } };
+      }
+      if (!res.ok || data.error) {
+        const errMsg = data.error?.message || `HTTP ${res.status}`;
+        throw new Error(`Gemini 接口调用失败: ${errMsg}`);
+      }
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || data.choices?.[0]?.message?.content || '';
+      const parsed = extractJsonFromVlmResponse(text);
+      if (parsed) {
+        return formatVlmResult(parsed, file);
+      }
+    } else if (proto === 'anthropic_messages') {
+      const payload = {
+        model: targetModel,
+        max_tokens: 1024,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mimeType, data: rawBase64 } },
+            { type: 'text', text: promptText }
+          ]
+        }]
+      };
+      res = await fetchWithCorsFallback(targetEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': activeKey,
+          'Authorization': `Bearer ${activeKey}`,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify(payload)
+      });
+      try {
+        data = await res.json();
+      } catch (e) {
+        data = { error: { message: `无法解析响应 (${res.status})` } };
+      }
+      if (!res.ok || data.error) {
+        const errMsg = data.error?.message || `HTTP ${res.status}`;
+        throw new Error(`Anthropic 接口调用失败: ${errMsg}`);
+      }
+      const text = data?.content?.[0]?.text || data?.choices?.[0]?.message?.content || '';
+      const parsed = extractJsonFromVlmResponse(text);
+      if (parsed) {
+        return formatVlmResult(parsed, file);
+      }
+    } else if (proto === 'openai_responses') {
+      const schema = window.BILL_STRUCTURED_SCHEMA || (window.DomainRegistry && window.DomainRegistry.getConfig().schema);
+      let payload = {
+        model: targetModel,
+        input: [{
+          role: 'user',
+          content: [
+            { type: 'input_text', text: promptText },
+            { type: 'input_image', image_url: base64Data }
+          ]
+        }],
+        response_format: schema
+      };
+      res = await fetchWithCorsFallback(targetEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${activeKey}`
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok && (res.status === 400 || res.status === 422)) {
+        payload = {
           model: targetModel,
           input: [{
             role: 'user',
@@ -1744,8 +1630,7 @@
               { type: 'input_text', text: promptText },
               { type: 'input_image', image_url: base64Data }
             ]
-          }],
-          response_format: schema
+          }]
         };
         res = await fetchWithCorsFallback(targetEndpoint, {
           method: 'POST',
@@ -1753,140 +1638,108 @@
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${activeKey}`
           },
-          body: JSON.stringify(payload),
-          signal: vlmController.signal
+          body: JSON.stringify(payload)
         });
-        if (!res.ok && (res.status === 400 || res.status === 422)) {
-          payload = {
-            model: targetModel,
-            input: [{
-              role: 'user',
-              content: [
-                { type: 'input_text', text: promptText },
-                { type: 'input_image', image_url: base64Data }
-              ]
-            }]
-          };
-          res = await fetchWithCorsFallback(targetEndpoint, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${activeKey}`
-            },
-            body: JSON.stringify(payload),
-            signal: vlmController.signal
-          });
-        }
-        try {
-          data = await res.json();
-        } catch (e) {
-          data = { error: { message: `无法解析响应 (${res.status})` } };
-        }
-        if (!res.ok || data.error) {
-          const errMsg = data.error?.message || `HTTP ${res.status}`;
-          throw new Error(`Responses API 接口调用失败: ${errMsg}`);
-        }
-        const text = data?.output_text || data?.output?.[0]?.content?.[0]?.text || data?.choices?.[0]?.message?.content || '';
-        const parsed = extractJsonFromVlmResponse(text);
-        if (parsed) {
-          return formatVlmResult(parsed, file);
-        }
-      } else {
-        // openai_chat
-        const basePayload = {
-          model: targetModel,
-          messages: [
-            {
-              role: "user",
-              content: [
-                { type: "text", text: promptText },
-                { type: "image_url", image_url: { url: base64Data } }
-              ]
-            }
-          ],
-          temperature: 0.1,
-          max_tokens: 512
-        };
+      }
+      try {
+        data = await res.json();
+      } catch (e) {
+        data = { error: { message: `无法解析响应 (${res.status})` } };
+      }
+      if (!res.ok || data.error) {
+        const errMsg = data.error?.message || `HTTP ${res.status}`;
+        throw new Error(`Responses API 接口调用失败: ${errMsg}`);
+      }
+      const text = data?.output_text || data?.output?.[0]?.content?.[0]?.text || data?.choices?.[0]?.message?.content || '';
+      const parsed = extractJsonFromVlmResponse(text);
+      if (parsed) {
+        return formatVlmResult(parsed, file);
+      }
+    } else {
+      // openai_chat
+      const basePayload = {
+        model: targetModel,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: promptText },
+              { type: "image_url", image_url: { url: base64Data } }
+            ]
+          }
+        ],
+        temperature: 0.1,
+        max_tokens: 512
+      };
 
-        const schema = window.BILL_STRUCTURED_SCHEMA || (window.DomainRegistry && window.DomainRegistry.getConfig().schema);
-        let payload = {
+      const schema = window.BILL_STRUCTURED_SCHEMA || (window.DomainRegistry && window.DomainRegistry.getConfig().schema);
+      let payload = {
+        ...basePayload,
+        response_format: schema
+      };
+
+      res = await fetchWithCorsFallback(targetEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${activeKey}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      try {
+        data = await res.json();
+      } catch (e) {
+        data = { error: { message: `无法解析响应 (${res.status})` } };
+      }
+
+      if (!res.ok && (res.status === 400 || res.status === 422 || (data && data.error && /response_format|json_schema|schema|unsupported/i.test(JSON.stringify(data.error))))) {
+        console.warn('json_schema structured outputs unsupported, falling back to standard json_object');
+        payload = {
           ...basePayload,
-          response_format: schema
+          response_format: { type: "json_object" }
         };
-
         res = await fetchWithCorsFallback(targetEndpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${activeKey}`
           },
-          body: JSON.stringify(payload),
-          signal: vlmController.signal
+          body: JSON.stringify(payload)
         });
-
         try {
           data = await res.json();
         } catch (e) {
           data = { error: { message: `无法解析响应 (${res.status})` } };
         }
 
-        if (!res.ok && (res.status === 400 || res.status === 422 || (data && data.error && /response_format|json_schema|schema|unsupported/i.test(JSON.stringify(data.error))))) {
-          console.warn('json_schema structured outputs unsupported, falling back to standard json_object');
-          payload = {
-            ...basePayload,
-            response_format: { type: "json_object" }
-          };
+        if (!res.ok && (res.status === 400 || res.status === 422 || (data && data.error && /response_format/i.test(JSON.stringify(data.error))))) {
+          console.warn('json_object unsupported, falling back to prompt-only structured extraction');
           res = await fetchWithCorsFallback(targetEndpoint, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${activeKey}`
             },
-            body: JSON.stringify(payload),
-            signal: vlmController.signal
+            body: JSON.stringify(basePayload)
           });
           try {
             data = await res.json();
           } catch (e) {
             data = { error: { message: `无法解析响应 (${res.status})` } };
           }
-
-          if (!res.ok && (res.status === 400 || res.status === 422 || (data && data.error && /response_format/i.test(JSON.stringify(data.error))))) {
-            console.warn('json_object unsupported, falling back to prompt-only structured extraction');
-            res = await fetchWithCorsFallback(targetEndpoint, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${activeKey}`
-              },
-              body: JSON.stringify(basePayload),
-              signal: vlmController.signal
-            });
-            try {
-              data = await res.json();
-            } catch (e) {
-              data = { error: { message: `无法解析响应 (${res.status})` } };
-            }
-          }
-        }
-
-        if (!res.ok || (data && data.error)) {
-          const errMsg = data?.error?.message || `HTTP ${res.status}`;
-          throw new Error(`大模型接口调用失败: ${errMsg}`);
-        }
-        const text = data?.choices?.[0]?.message?.content || '';
-        const parsed = extractJsonFromVlmResponse(text);
-        if (parsed) {
-          return formatVlmResult(parsed, file);
         }
       }
-    } catch (err) {
-      if (err && err.name === 'AbortError') {
-        throw new Error('大模型视觉识别请求超时 (45000ms)');
+
+      if (!res.ok || (data && data.error)) {
+        const errMsg = data?.error?.message || `HTTP ${res.status}`;
+        throw new Error(`大模型接口调用失败: ${errMsg}`);
       }
-      throw err;
-    } finally {
-      clearTimeout(vlmTimeoutId);
+      const text = data?.choices?.[0]?.message?.content || '';
+      const parsed = extractJsonFromVlmResponse(text);
+      if (parsed) {
+        return formatVlmResult(parsed, file);
+      }
     }
 
     throw new Error("未能从大模型返回中解析到结构化 JSON 数据");
@@ -2493,17 +2346,6 @@
     }
   }
 
-  function __clearOcrInternalUploadState() {
-    currentUploadedImageFile = null;
-    currentUploadedImageDataUrl = null;
-    currentManualOcrResult = null;
-    lastUploadedData = null;
-    window.currentUploadedImageFile = null;
-    window.currentUploadedImageDataUrl = null;
-    window.currentManualOcrResult = null;
-    window.lastUploadedData = null;
-  }
-
   /**
    * 清除手动上传的图片与缓存状态
    */
@@ -2521,7 +2363,12 @@
       imgPreview.classList.add('hidden');
     }
     if (fileInput) fileInput.value = '';
-    __clearOcrInternalUploadState();
+    currentUploadedImageFile = null;
+    currentUploadedImageDataUrl = null;
+    currentManualOcrResult = null;
+    lastUploadedData = null;
+    window.currentManualOcrResult = null;
+    window.lastUploadedData = null;
   }
 
   // 挂载至全局对象
@@ -2577,7 +2424,6 @@
   window.buildVlmPromptText = buildVlmPromptText;
   window.formatVlmResult = formatVlmResult;
   window.clearManualImage = clearManualImage;
-  window.__clearOcrInternalUploadState = __clearOcrInternalUploadState;
 
   window.renderVlmModelDropdownOptions = renderVlmModelDropdownOptions;
   window.toggleVlmModelDropdown = toggleVlmModelDropdown;

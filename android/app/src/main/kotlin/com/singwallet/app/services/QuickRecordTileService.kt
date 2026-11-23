@@ -12,7 +12,6 @@ import android.service.quicksettings.TileService
 import android.util.Log
 import android.widget.Toast
 import com.singwallet.app.R
-import java.lang.ref.WeakReference
 
 /**
  * SingWallet 下拉控制中心「闪电记账」(Quick Settings Tile).
@@ -21,7 +20,7 @@ import java.lang.ref.WeakReference
  * 1. 彻底移除强制切应用行为：控制中心收拢后，屏幕绝对留在微信/支付宝付款页，绝不跳转覆盖到 SingWallet。
  * 2. 生命周期解耦与防中断：Android 系统在控制中心面板收拢完成瞬间（约 350ms）会立即解绑并销毁 TileService (onDestroy)。
  *    因此，点击磁贴后直接将「延时定格抓屏 -> 压缩落盘 -> 启动原生后台 AI 账单解析」全权交由常驻的
- *    `SingWalletAccessibilityService.triggerLightningTileCapture()` 执行，并通过 WeakReference 回调避免泄漏。
+ *    `SingWalletAccessibilityService.triggerLightningTileCapture()` 执行，确保后台 AI 解析 100% 完整走完。
  */
 class QuickRecordTileService : TileService() {
 
@@ -72,19 +71,13 @@ class QuickRecordTileService : TileService() {
         // 2. 更新瓷贴为活动捕获状态
         updateTileState(Tile.STATE_ACTIVE, "正在捕获...", "极速截取账单")
 
-        // 3. 委派给常驻无障碍服务执行收拢控制中心、定格抓屏、落盘与原生后台 AI 异步解析（WeakReference 防泄漏）
-        val weakTile = WeakReference(this)
+        // 3. 委派给常驻无障碍服务执行收拢控制中心、定格抓屏、落盘与原生后台 AI 异步解析（不受 TileService onDestroy 影响）
         SingWalletAccessibilityService.triggerLightningTileCapture(
             context = applicationContext,
             delayMs = PANEL_COLLAPSE_DELAY_MS
         ) {
-            weakTile.get()?.resetTileState()
+            resetTileState()
         }
-    }
-
-    override fun onDestroy() {
-        mainHandler.removeCallbacksAndMessages(null)
-        super.onDestroy()
     }
 
     private fun showToast(message: String) {

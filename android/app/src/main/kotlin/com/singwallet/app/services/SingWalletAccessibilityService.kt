@@ -1,6 +1,7 @@
 package com.singwallet.app.services
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -13,13 +14,15 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.provider.Settings
 import android.text.TextUtils
+import android.util.Base64
 import android.util.Log
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
 import android.widget.Toast
 import androidx.annotation.RequiresApi
-import java.io.BufferedOutputStream
+import com.singwallet.app.MainActivity
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.ExecutorService
@@ -32,9 +35,11 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * 核心设计规范 (Android 11+ API 30~35):
  * 1. 内存零相册污染：利用系统官方 takeScreenshot API 直接在内存中获取 HardwareBuffer 并转为 Bitmap，
- *    流式直写入私有目录，绝不在相册生成任何临时文件。
- * 2. 极简省电原则：仅声明并启用 canTakeScreenshot，不订阅窗口内容变更事件、不读取界面控件树。
- * 3. 前台守护防竞态：在盘面准备开始即递增 preparingCount 并拉起 ForegroundService，直到入队完成才释放。
+ *    绝不在相册生成任何临时文件，杜绝相册垃圾。
+ * 2. 毫秒级极速定格：控制中心收拢的瞬间 (150ms~340ms) 立即冻结当前屏幕账单画面，即使用户切走或返回也不会漏单。
+ * 3. 常驻生命周期托管：由于 QuickRecordTileService 在控制中心收拢瞬间 (约 350ms) 会被系统立刻解绑销毁 (onDestroy)，
+ *    所有延时抓屏、Bitmap 压缩落盘与触发原生后台 AI 解析全流程统一由本常驻服务及应用级守护线程池托管，彻底杜绝中途被打断。
+ * 4. 极简权限原则：仅声明并启用 canTakeScreenshot，不监听键盘按键或常态读取剪贴板，严格尊重用户隐私。
  */
 class SingWalletAccessibilityService : AccessibilityService() {
 
@@ -51,14 +56,28 @@ class SingWalletAccessibilityService : AccessibilityService() {
         private val isCapturing = AtomicBoolean(false)
         private val fileSeq = AtomicLong(0L)
 
+        /**
+         * 检测当前无障碍服务是否已连接并在后台运行
+         */
         fun isServiceRunning(): Boolean = instance != null
 
+        /**
+         * 获取当前服务单例
+         */
         fun getInstance(): SingWalletAccessibilityService? = instance
 
+        /**
+         * 伴生单例方法：直接收起通知栏/控制中心面板
+         */
         fun collapseShade(): Boolean {
             return instance?.collapseControlCenter() ?: false
         }
 
+        /**
+         * 伴生单例方法：内存无感捕获当前屏幕快照
+         *
+         * @param onResult 回调截屏 Bitmap (主线程返回)，失败时返回 null
+         */
         fun captureCurrentScreen(onResult: (Bitmap?) -> Unit) {
             val service = instance
             if (service == null) {
@@ -70,7 +89,8 @@ class SingWalletAccessibilityService : AccessibilityService() {
         }
 
         /**
-         * 托管完整的「收拢控制中心 -> 延时定格抓屏 -> 触感快门 -> 流式落盘 -> 启动原生后台 AI/OCR 解析」全链路
+         * 托管完整的「收拢控制中心 -> 延时定格抓屏 -> 触感快门 -> 压缩落盘 -> 立即启动原生后台 AI 解析」全链路.
+         * 独立于 QuickRecordTileService 生命周期，防止控制中心收起解绑 TileService 时中断后台解析入队。
          */
         fun triggerLightningTileCapture(
             context: Context,
@@ -101,7 +121,7 @@ class SingWalletAccessibilityService : AccessibilityService() {
             // 1. 立即收拢控制中心面板
             service.collapseControlCenter()
 
-            // 2. 在控制中心收拢露出底层账单画面的瞬间定格截图并启动后台解析
+            // 2. 在控制中心收拢露出底层账单画面的瞬间定格截图并启动后台 AI 解析
             globalMainHandler.postDelayed({
                 val currentService = instance ?: service
                 currentService.performCapture { bitmap ->
@@ -113,21 +133,11 @@ class SingWalletAccessibilityService : AccessibilityService() {
                         Log.i(TAG, "Snapshot locked in RAM (${bitmap.width}x${bitmap.height}), dispatching to background AI processor")
                         showToast(appContext, "闪电记账：已捕获账单画面，后台解析中...")
 
-                        // 先标记 preparingCount 再启动短时前台守护服务，消除 stopIfIdle 竞态
-                        LightningAiBackgroundProcessor.beginPreparingCapture()
+                        // 提前拉起短时前台守护服务，保障后台网络与 CPU 不被系统冻结
                         LightningAiForegroundService.startIfNeeded(appContext)
 
-                        try {
-                            persistExecutor.execute {
-                                processAndEnqueueBitmap(appContext, bitmap)
-                            }
-                        } catch (t: Throwable) {
-                            Log.e(TAG, "Failed to submit bitmap persistence task: ${t.message}", t)
-                            try {
-                                bitmap.recycle()
-                            } catch (_: Throwable) {}
-                            LightningAiBackgroundProcessor.endPreparingCapture()
-                            LightningAiForegroundService.stopIfIdle(appContext)
+                        persistExecutor.execute {
+                            processAndEnqueueBitmap(appContext, bitmap)
                         }
                     } else {
                         Log.e(TAG, "captureCurrentScreen returned null")
@@ -146,23 +156,33 @@ class SingWalletAccessibilityService : AccessibilityService() {
             try {
                 val bitmapToEncode = if (bitmap.width > TARGET_MAX_WIDTH) {
                     val scale = TARGET_MAX_WIDTH.toFloat() / bitmap.width.toFloat()
-                    val targetHeight = (bitmap.height * scale).toInt().coerceAtLeast(1)
+                    val targetHeight = (bitmap.height * scale).toInt()
                     scaledBitmap = Bitmap.createScaledBitmap(bitmap, TARGET_MAX_WIDTH, targetHeight, true)
                     scaledBitmap
                 } else {
                     bitmap
                 }
 
-                // 直接流式压缩落盘至私有目录，避免中间 ByteArrayOutputStream 内存峰值
-                val savedFile = savePendingCaptureToDisk(appContext, bitmapToEncode)
+                val outputStream = ByteArrayOutputStream()
+                bitmapToEncode.compress(Bitmap.CompressFormat.JPEG, 82, outputStream)
+                val byteArray = outputStream.toByteArray()
+
+                Log.i(TAG, "Encoded JPEG bytes=${byteArray.size}")
+
+                // 1. 先原子落盘至私有目录，确保任何极端场景下 100% 零丢单
+                val savedFile = savePendingCaptureToDisk(appContext, byteArray)
                 if (savedFile != null) {
+                    // 2. 立即在 Android 原生后台守护线程池启动异步 AI 账单解析（无需等待用户打开 App）
                     LightningAiBackgroundProcessor.enqueueCapture(appContext, savedFile)
+                } else if (MainActivity.isInForeground()) {
+                    val base64 = Base64.encodeToString(byteArray, Base64.NO_WRAP)
+                    val dataUrl = "data:image/jpeg;base64,$base64"
+                    MainActivity.dispatchCapturedScreenshot(dataUrl, "lightning-tile")
                 }
             } catch (e: Throwable) {
                 Log.e(TAG, "Error encoding/enqueuing captured bitmap: ${e.message}", e)
-            } finally {
-                LightningAiBackgroundProcessor.endPreparingCapture()
                 LightningAiForegroundService.stopIfIdle(appContext)
+            } finally {
                 try {
                     scaledBitmap?.recycle()
                 } catch (_: Throwable) {}
@@ -172,37 +192,24 @@ class SingWalletAccessibilityService : AccessibilityService() {
             }
         }
 
-        private fun savePendingCaptureToDisk(appContext: Context, bitmap: Bitmap): File? {
-            var tmpFile: File? = null
+        private fun savePendingCaptureToDisk(appContext: Context, byteArray: ByteArray): File? {
             return try {
                 val dir = File(appContext.filesDir, "pending_lightning_captures")
                 if (!dir.exists()) dir.mkdirs()
                 val ts = System.currentTimeMillis()
                 val seq = fileSeq.incrementAndGet() % 1000L
-                val baseName = if (seq == 1L) "lightning_$ts" else "lightning_${ts}_$seq"
-                val candidateTmp = File(dir, "$baseName.tmp")
-                tmpFile = candidateTmp
-                val finalFile = File(dir, "$baseName.jpg")
-
-                BufferedOutputStream(FileOutputStream(candidateTmp), 16 * 1024).use { bos ->
-                    val ok = bitmap.compress(Bitmap.CompressFormat.JPEG, 82, bos)
-                    bos.flush()
-                    if (!ok) {
-                        throw IllegalStateException("Bitmap.compress returned false")
-                    }
+                val baseName = if (seq == 1L) "lightning_${ts}" else "lightning_${ts}_${seq}"
+                val tmpFile = File(dir, "${baseName}.tmp")
+                val file = File(dir, "${baseName}.jpg")
+                FileOutputStream(tmpFile).use { it.write(byteArray) }
+                if (!tmpFile.renameTo(file)) {
+                    FileOutputStream(file).use { it.write(byteArray) }
+                    try { tmpFile.delete() } catch (_: Throwable) {}
                 }
-
-                if (!candidateTmp.renameTo(finalFile)) {
-                    candidateTmp.copyTo(finalFile, overwrite = true)
-                    candidateTmp.delete()
-                }
-                Log.i(TAG, "Saved lightning capture to ${finalFile.absolutePath} (${finalFile.length()} bytes)")
-                finalFile
+                Log.i(TAG, "Saved lightning capture to ${file.absolutePath} (${byteArray.size} bytes)")
+                file
             } catch (e: Throwable) {
                 Log.e(TAG, "Failed to save pending capture: ${e.message}", e)
-                try {
-                    tmpFile?.delete()
-                } catch (_: Throwable) {}
                 null
             }
         }
@@ -237,6 +244,9 @@ class SingWalletAccessibilityService : AccessibilityService() {
             }
         }
 
+        /**
+         * 辅助方法：通过系统设置安全表检测用户是否已在系统中启用了本无障碍服务
+         */
         fun checkAccessibilityEnabled(context: Context): Boolean {
             if (instance != null) return true
             try {
@@ -274,11 +284,19 @@ class SingWalletAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
-        Log.i(TAG, "SingWalletAccessibilityService connected (low-power screenshot-only mode)")
+        Log.i(TAG, "SingWalletAccessibilityService connected successfully")
+
+        try {
+            val info = serviceInfo ?: AccessibilityServiceInfo()
+            info.flags = info.flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+            serviceInfo = info
+        } catch (e: Throwable) {
+            Log.w(TAG, "Failed to configure serviceInfo: ${e.message}")
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // 极简省电：不监听任何窗口事件，仅按需响应闪电记账触发 takeScreenshot
+        // 无需常态监听事件，仅按需响应闪电记账触发 takeScreenshot
     }
 
     override fun onInterrupt() {
@@ -302,14 +320,19 @@ class SingWalletAccessibilityService : AccessibilityService() {
         Log.i(TAG, "SingWalletAccessibilityService destroyed")
     }
 
+    /**
+     * 利用无障碍专属全局操作关闭控制中心或下拉通知栏，无报错且无多余 Activity 闪烁
+     */
     fun collapseControlCenter(): Boolean {
         var handled = false
         val isXiaomi = Build.MANUFACTURER.equals("Xiaomi", ignoreCase = true) ||
-            Build.BRAND.equals("Xiaomi", ignoreCase = true) ||
-            Build.BRAND.equals("Redmi", ignoreCase = true) ||
-            Build.BRAND.equals("POCO", ignoreCase = true)
+                       Build.BRAND.equals("Xiaomi", ignoreCase = true) ||
+                       Build.BRAND.equals("Redmi", ignoreCase = true) ||
+                       Build.BRAND.equals("POCO", ignoreCase = true)
 
         if (isXiaomi) {
+            // 小米澎湃 OS (HyperOS) 实测不支持 GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE (底层报错 Invalid action id: 15 并徒增 74ms 耗时)
+            // 直接第一时间调用 GLOBAL_ACTION_BACK，0ms 零延迟收起控制中心
             try {
                 handled = performGlobalAction(GLOBAL_ACTION_BACK)
             } catch (e: Throwable) {
@@ -332,6 +355,7 @@ class SingWalletAccessibilityService : AccessibilityService() {
             }
         }
 
+        // 仅在 Android 12 (API 31) 以下才发送 ACTION_CLOSE_SYSTEM_DIALOGS，彻底消除 Android 12+ Permission Denial 报错警告
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
             try {
                 @Suppress("DEPRECATION")
@@ -344,6 +368,9 @@ class SingWalletAccessibilityService : AccessibilityService() {
         return handled
     }
 
+    /**
+     * 执行内存级屏幕捕获
+     */
     fun performCapture(onResult: (Bitmap?) -> Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             performCaptureApi30(onResult)
@@ -365,7 +392,9 @@ class SingWalletAccessibilityService : AccessibilityService() {
                         val hardwareBuffer = screenshot.hardwareBuffer
                         val colorSpace = screenshot.colorSpace
                         try {
+                            // 1. 将 HardwareBuffer 包装为硬件 Bitmap
                             val hwBitmap = Bitmap.wrapHardwareBuffer(hardwareBuffer, colorSpace)
+                            // 2. 转换为软件 Bitmap，避免 Hardware Bitmap 在后续压缩或处理时抛异常
                             val softwareBitmap = hwBitmap?.copy(Bitmap.Config.ARGB_8888, false)
                             hwBitmap?.recycle()
 

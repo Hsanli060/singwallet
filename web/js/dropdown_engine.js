@@ -6,19 +6,6 @@
 (function (window) {
   'use strict';
 
-  function _escapeHtml(str) {
-    if (typeof window !== 'undefined' && typeof window.escapeHtml === 'function') {
-      return window.escapeHtml(str);
-    }
-    if (str === null || str === undefined) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
   // ================= 内部渠道与账户规范化辅助函数 =================
   function _normChan(ch) {
     if (window.DomainRegistry && typeof window.DomainRegistry.normalizeChannelName === 'function') {
@@ -142,16 +129,13 @@
     const menu = document.getElementById('menu-' + targetPureId) || document.getElementById('menu-' + pureId);
     if (!menu) return null;
 
-    // 1. 如果当前渠道下已有同名或等价选项，直接复用（避免 CSS 属性选择器因特殊字符抛错）
-    const allOptions = Array.from(menu.querySelectorAll('.custom-dropdown-option'));
-    const exactMatch = allOptions.find(opt =>
-      opt.getAttribute('data-channel') === normChan && opt.getAttribute('data-value') === cleanAcc
-    );
+    // 1. 如果当前渠道下已有同名或等价选项，直接复用
+    const exactMatch = menu.querySelector(`.custom-dropdown-option[data-channel="${normChan}"][data-value="${cleanAcc}"]`);
     if (exactMatch) {
       return exactMatch;
     }
 
-    const existing = allOptions.find(opt => {
+    const existing = Array.from(menu.querySelectorAll('.custom-dropdown-option')).find(opt => {
       const c = opt.getAttribute('data-channel');
       const v = opt.getAttribute('data-value');
       return (!c || _normChan(c) === normChan) && (v === cleanAcc || _matchOption(pureId, v, cleanAcc));
@@ -164,30 +148,24 @@
     // 2. 如果该账户是微信/支付宝/现金内置专属钱包类账户 (钱包/零钱/零钱通/余额/余额宝/花呗/现金钱包)，绝不跨渠道重复创建
     const isBuiltinExclusive = ['钱包', '零钱', '零钱通', '余额', '余额宝', '花呗', '现金', '现金钱包'].includes(cleanAcc);
     if (isBuiltinExclusive) {
-      const anyExisting = allOptions.find(opt => {
+      const anyExisting = Array.from(menu.querySelectorAll('.custom-dropdown-option')).find(opt => {
         const v = opt.getAttribute('data-value');
         return v === cleanAcc || _matchOption(pureId, v, cleanAcc);
       });
       if (anyExisting) return anyExisting;
     }
 
-    // 3. 动态创建该选项并插入到菜单中（事件绑定 + HTML 转义防 XSS）
+    // 3. 动态创建该选项并插入到菜单中
     const optDiv = document.createElement('div');
     optDiv.className = 'custom-dropdown-option rounded-xl';
     optDiv.tabIndex = 0;
     optDiv.setAttribute('data-channel', normChan);
     optDiv.setAttribute('data-value', cleanAcc);
-    optDiv.onclick = function (event) {
-      selectCustomDropdownOption(targetPureId, cleanAcc, event);
-    };
-    optDiv.onkeydown = function (event) {
-      if (event.key === 'Enter' || event.key === ' ') {
-        selectCustomDropdownOption(targetPureId, cleanAcc, event);
-        event.preventDefault();
-      }
-    };
+    const escapedAcc = cleanAcc.replace(/'/g, "\\'");
+    optDiv.setAttribute('onclick', `selectCustomDropdownOption('${targetPureId}', '${escapedAcc}', event)`);
+    optDiv.setAttribute('onkeydown', `if(event.key==='Enter'||event.key===' '){selectCustomDropdownOption('${targetPureId}', '${escapedAcc}', event);event.preventDefault();}`);
 
-    optDiv.innerHTML = `<span class="truncate">${_escapeHtml(cleanAcc)}</span><span class="opt-check">✓</span>`;
+    optDiv.innerHTML = `<span class="truncate">${cleanAcc}</span><span class="opt-check">✓</span>`;
 
     // 检查当前选定渠道，若与选项渠道一致则显示，否则隐藏
     let channelInputId = 'select-channel';

@@ -9,127 +9,17 @@
 (function (window) {
   'use strict';
 
-  // 安全转义、图片白名单与整数“分”运算核心辅助（优先委托 storage_crypto_engine.js，保留内联兜底）
-  function _escapeHtml(str) {
-    if (typeof window !== 'undefined' && typeof window.escapeHtml === 'function') {
-      return window.escapeHtml(str);
+  // Global DOM element alias shim for view-rules <-> view-rules-accounts
+  const origGetElementById = document.getElementById.bind(document);
+  document.getElementById = function(id) {
+    if (id === 'view-rules') {
+      return origGetElementById('view-rules-accounts') || origGetElementById('view-rules');
     }
-    if (str === null || str === undefined) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
-  function _escapeJsAttr(str) {
-    const jsEscaped = String(str ?? '')
-      .replace(/\\/g, '\\\\')
-      .replace(/'/g, "\\'")
-      .replace(/"/g, '\\"')
-      .replace(/\r/g, '\\r')
-      .replace(/\n/g, '\\n')
-      .replace(/</g, '\\x3c')
-      .replace(/>/g, '\\x3e');
-    return _escapeHtml(jsEscaped);
-  }
-
-  function _isSafeImageUrl(url) {
-    if (!url || typeof url !== 'string') return false;
-    const trimmed = url.trim();
-    return (
-      trimmed.startsWith('data:image/') ||
-      trimmed.startsWith('blob:') ||
-      trimmed.startsWith('https://appassets.androidplatform.net/') ||
-      trimmed.startsWith('http://127.0.0.1') ||
-      trimmed.startsWith('http://localhost')
-    );
-  }
-
-  function _renderSafeIconAndText(msg) {
-    const str = String(msg ?? '');
-    if (typeof window !== 'undefined' && window.IconRegistry && window.IconRegistry.uiStatusEmojis) {
-      const trimmed = str.trimStart();
-      for (const iconHtml of Object.values(window.IconRegistry.uiStatusEmojis)) {
-        if (iconHtml && trimmed.startsWith(iconHtml)) {
-          return iconHtml + _escapeHtml(trimmed.slice(iconHtml.length));
-        }
-      }
+    if (id === 'view-rules-accounts') {
+      return origGetElementById('view-rules-accounts') || origGetElementById('view-rules');
     }
-    return _escapeHtml(str);
-  }
-
-  function _toCents(val) {
-    if (typeof window !== 'undefined' && window.MoneyMath && typeof window.MoneyMath.toCents === 'function') {
-      return window.MoneyMath.toCents(val);
-    }
-    if (typeof val === 'number') {
-      return Number.isFinite(val) ? Math.round(val * 100) : 0;
-    }
-    const num = parseFloat(String(val ?? '').replace(/[¥￥$€£,\s]/g, ''));
-    return Number.isFinite(num) ? Math.round(num * 100) : 0;
-  }
-
-  function _formatCents(cents) {
-    if (typeof window !== 'undefined' && window.MoneyMath) {
-      if (typeof window.MoneyMath.centsToYuan === 'function') {
-        return window.MoneyMath.centsToYuan(cents);
-      }
-      if (typeof window.MoneyMath.formatCents === 'function') {
-        return window.MoneyMath.formatCents(cents);
-      }
-    }
-    return ((Math.round(Number(cents) || 0)) / 100).toFixed(2);
-  }
-
-  function formatDaySubtotalText(netCents) {
-    if (netCents > 0) {
-      return `小计: +¥ ${_formatCents(netCents)}`;
-    }
-    return `小计: -¥ ${_formatCents(Math.abs(netCents))}`;
-  }
-
-  function computeDomDayGroupNetCents(dayGroup, onlyVisible = false) {
-    if (!dayGroup) return 0;
-    const selector = onlyVisible ? '.tx-item:not(.soft-deleted)' : '.tx-item:not(.soft-deleted)';
-    const items = Array.from(dayGroup.querySelectorAll(selector)).filter(el => !onlyVisible || el.style.display !== 'none');
-    let netCents = 0;
-    items.forEach(el => {
-      const amtAttr = el.getAttribute('data-amount') || el.dataset?.amount;
-      const amtText = el.querySelector('.font-bold.text-base')?.innerText || '';
-      const amtCents = Math.abs(_toCents(amtAttr !== null && amtAttr !== '' ? amtAttr : amtText));
-      const elType = el.getAttribute('data-type') || el.dataset?.type || '';
-      const isIncome = (elType === 'income' || elType === 'refund' || amtText.trim().startsWith('+'));
-      if (isIncome) {
-        netCents += amtCents;
-      } else {
-        netCents -= amtCents;
-      }
-    });
-    return netCents;
-  }
-
-  // 单一全局 DOM 元素别名适配层 (合并 view-rules <-> view-rules-accounts 与 add-record-modal)
-  if (typeof document !== 'undefined') {
-    const origGetElementById = document.getElementById.bind(document);
-    document.getElementById = function(id) {
-      if (id === 'view-rules' || id === 'view-rules-accounts') {
-        return origGetElementById('view-rules-accounts') || origGetElementById('view-rules');
-      }
-      if (id === 'add-record-modal') {
-        return origGetElementById('manual-add-modal') || origGetElementById('category-modal');
-      }
-      return origGetElementById(id);
-    };
-    const origQuerySelector = document.querySelector.bind(document);
-    document.querySelector = function(selector) {
-      if (selector === '#add-record-modal') {
-        return origQuerySelector('#manual-add-modal') || origQuerySelector('#category-modal');
-      }
-      return origQuerySelector(selector);
-    };
-  }
+    return origGetElementById(id);
+  };
 
   // Safe Icon Resolution Helpers using SSOT IconRegistry
   function getAppCatIcon(cat, fallback = '') {
@@ -311,6 +201,24 @@
   window.formatTxPaymentDisplay = formatTxPaymentDisplay;
   window.syncAccountToAllDropdowns = syncAccountToAllDropdowns;
 
+  // Polyfill / alias for add-record-modal selector
+  if (typeof document !== 'undefined') {
+    const origGetElementById = document.getElementById.bind(document);
+    document.getElementById = function(id) {
+      if (id === 'add-record-modal') {
+        return origGetElementById('manual-add-modal') || origGetElementById('category-modal');
+      }
+      return origGetElementById(id);
+    };
+    const origQuerySelector = document.querySelector.bind(document);
+    document.querySelector = function(selector) {
+      if (selector === '#add-record-modal') {
+        return origQuerySelector('#manual-add-modal') || origQuerySelector('#category-modal');
+      }
+      return origQuerySelector(selector);
+    };
+  }
+
   // Tab Switching
   function switchTab(tabId) {
     if (typeof closeDedupTopToast === 'function') closeDedupTopToast();
@@ -400,8 +308,6 @@
   }
   window.isUserEditingDraft = isUserEditingDraft;
 
-  const IDB_IMG_PREFIX = '__IDB_IMG__:';
-
   function loadStoredDrafts() {
     try {
       const raw = localStorage.getItem('singwallet_user_drafts');
@@ -410,37 +316,17 @@
         if (Array.isArray(list)) {
           // 清理由于应用被强杀残留的 isParsing: true 孤儿状态，避免重新启动后永久转圈
           return list.map(d => {
-            if (!d || typeof d !== 'object') return d;
-            const item = { ...d };
-            if (typeof item.imageData === 'string' && item.imageData.startsWith(IDB_IMG_PREFIX)) {
-              const imgKey = item.imageData.slice(IDB_IMG_PREFIX.length);
-              item.imageData = '';
-              const getImgFn = window.LedgerStorage && (window.LedgerStorage.getDraftImage || window.LedgerStorage.loadDraftImage);
-              if (imgKey && typeof getImgFn === 'function') {
-                Promise.resolve(getImgFn.call(window.LedgerStorage, imgKey)).then(loadedUrl => {
-                  if (loadedUrl && _isSafeImageUrl(loadedUrl)) {
-                    const target = (draftQueue || []).find(q => q && q.id === item.id);
-                    if (target) {
-                      target.imageData = loadedUrl;
-                      if (draftQueue[currentDraftIndex] && draftQueue[currentDraftIndex].id === item.id && typeof loadDraftData === 'function') {
-                        loadDraftData(target);
-                      }
-                    }
-                  }
-                }).catch(err => console.warn('[SingWallet] getDraftImage error:', err));
-              }
-            }
-            if (item.isParsing) {
+            if (d && d.isParsing) {
               return {
-                ...item,
+                ...d,
                 isParsing: false,
                 parseError: true,
                 parseErrorReason: '上次解析中断，请重试或手动编辑',
-                merchant: item.merchant === '大模型解析中...' ? '闪电抓屏 (待解析)' : item.merchant,
+                merchant: d.merchant === '大模型解析中...' ? '闪电抓屏 (待解析)' : d.merchant,
                 tag: '待重试'
               };
             }
-            return item;
+            return d;
           });
         }
       }
@@ -451,30 +337,19 @@
 
   function saveStoredDrafts() {
     try {
-      // 避免将临时的 isParsing: true 存入持久化存储，并将超过 4KB 的草稿大图分离至 IndexedDB
-      const hasIdbDraftStore = Boolean(window.LedgerStorage && typeof window.LedgerStorage.saveDraftImage === 'function');
+      // 避免将临时的 isParsing: true 存入持久化存储
       const safePersistQueue = (draftQueue || []).map(d => {
-        if (!d || typeof d !== 'object') return d;
-        const copy = { ...d };
-        delete copy.rawFile;
-        if (typeof copy.imageData === 'string' && copy.imageData.length > 4096 && !copy.imageData.startsWith(IDB_IMG_PREFIX) && hasIdbDraftStore && copy.id) {
-          const fullImg = copy.imageData;
-          copy.imageData = IDB_IMG_PREFIX + copy.id;
-          Promise.resolve(window.LedgerStorage.saveDraftImage(copy.id, fullImg)).catch(err => {
-            console.warn('[SingWallet] saveDraftImage async warning:', err);
-          });
-        }
-        if (copy.isParsing) {
+        if (d && d.isParsing) {
           return {
-            ...copy,
+            ...d,
             isParsing: false,
             parseError: true,
             parseErrorReason: '后台解析中...',
-            merchant: copy.merchant === '大模型解析中...' ? '闪电抓屏 (待解析)' : copy.merchant,
+            merchant: d.merchant === '大模型解析中...' ? '闪电抓屏 (待解析)' : d.merchant,
             tag: '待重试'
           };
         }
-        return copy;
+        return d;
       });
       localStorage.setItem('singwallet_user_drafts', JSON.stringify(safePersistQueue));
     } catch (e) {
@@ -500,7 +375,6 @@
         localStorage.setItem('singwallet_user_drafts', JSON.stringify(minimalQueue));
       } catch (finalErr) {
         console.error('[SingWallet] Failed to persist drafts to localStorage:', finalErr);
-        showToast('草稿箱本地存储已满，请尽快确认或清理旧草稿', 'error');
       }
     }
   }
@@ -527,37 +401,35 @@
     }
   } catch (e) {}
 
-  const syncAiConfigToNativeBridge = (typeof window.syncAiConfigToNativeBridge === 'function')
-    ? window.syncAiConfigToNativeBridge
-    : function syncAiConfigToNativeBridgeFallback() {
-        try {
-          if (window.AndroidBridge && typeof window.AndroidBridge.syncAiConfigToNative === 'function') {
-            const rawCfg = localStorage.getItem('singwallet_vlm_config');
-            const cfg = rawCfg ? JSON.parse(rawCfg) : {};
-            const eng = localStorage.getItem('singwallet_ocr_engine') || 'llm';
-            const cats = (window.DomainRegistry && typeof window.DomainRegistry.getParentCategories === 'function')
-              ? window.DomainRegistry.getParentCategories()
-              : (window.CORE_PARENT_CATEGORIES || ['餐饮美食', '交通出行', '日常购物', '休闲娱乐', '生活缴费', '医疗健康', '其他支出', '工资收入']);
-            window.AndroidBridge.syncAiConfigToNative(JSON.stringify({
-              provider: cfg.provider || 'openai_chat',
-              apiKey: cfg.apiKey || '',
-              endpoint: cfg.endpoint || '',
-              model: cfg.model || '',
-              ocrEngine: eng,
-              categories: cats,
-              autoCommitEnabled: Boolean(autoCommitEnabled),
-              autoCommitThreshold: Number(autoCommitThreshold || 95)
-            }));
-            return true;
-          }
-        } catch (e) {
-          console.warn('[SingWallet] syncAiConfigToNativeBridge error:', e);
-        }
-        return false;
-      };
+  function syncAiConfigToNativeBridge() {
+    try {
+      if (window.AndroidBridge && typeof window.AndroidBridge.syncAiConfigToNative === 'function') {
+        const rawCfg = localStorage.getItem('singwallet_vlm_config');
+        const cfg = rawCfg ? JSON.parse(rawCfg) : {};
+        const eng = localStorage.getItem('singwallet_ocr_engine') || 'llm';
+        const cats = (window.DomainRegistry && typeof window.DomainRegistry.getParentCategories === 'function')
+          ? window.DomainRegistry.getParentCategories()
+          : (window.CORE_PARENT_CATEGORIES || ['餐饮美食', '交通出行', '日常购物', '休闲娱乐', '生活缴费', '医疗健康', '其他支出', '工资收入']);
+        window.AndroidBridge.syncAiConfigToNative(JSON.stringify({
+          provider: cfg.provider || 'openai_chat',
+          apiKey: cfg.apiKey || '',
+          endpoint: cfg.endpoint || '',
+          model: cfg.model || '',
+          ocrEngine: eng,
+          categories: cats,
+          autoCommitEnabled: Boolean(autoCommitEnabled),
+          autoCommitThreshold: Number(autoCommitThreshold || 95)
+        }));
+        return true;
+      }
+    } catch (e) {
+      console.warn('[SingWallet] syncAiConfigToNativeBridge error:', e);
+    }
+    return false;
+  }
   window.syncAiConfigToNativeBridge = syncAiConfigToNativeBridge;
 
-  // 主动从原生宿主拉取所有已在后台异步解析就绪的结果并直接消费渲染（两阶段 ACK）
+  // 主动从原生宿主拉取所有已在后台异步解析就绪的结果并直接消费渲染
   function pullAndIngestReadyLightningCaptures() {
     try {
       if (window.AndroidBridge && typeof window.AndroidBridge.consumeReadyLightningCaptures === 'function') {
@@ -566,19 +438,11 @@
           const list = JSON.parse(rawJson);
           if (Array.isArray(list) && list.length > 0) {
             console.info('[SingWallet] Consuming ready lightning captures from native bridge:', list.length);
-            const ackedFiles = [];
             list.forEach(item => {
               if (item && item.parsedJson && typeof window.onNativeLightningParsed === 'function') {
-                const ok = window.onNativeLightningParsed(item.parsedJson, item.dataUrl || '', item.fileName || '');
-                if (ok && item.fileName) {
-                  ackedFiles.push(item.fileName);
-                }
+                window.onNativeLightningParsed(item.parsedJson, item.dataUrl || '', item.fileName || '');
               }
             });
-            saveStoredDrafts();
-            if (ackedFiles.length > 0 && typeof window.AndroidBridge.ackConsumedLightningCaptures === 'function') {
-              window.AndroidBridge.ackConsumedLightningCaptures(JSON.stringify(ackedFiles));
-            }
             return true;
           }
         }
@@ -896,7 +760,7 @@
                 </div>
               </div>
               <div class="w-full bg-slate-700/50 h-1 rounded-full overflow-hidden mt-1.5">
-                <div id="draft-task-prog-${_escapeHtml(draft.id)}" class="bg-indigo-400 h-full rounded-full transition-all duration-300" style="width: ${Number(draft.progress) || 15}%;"></div>
+                <div id="draft-task-prog-${draft.id}" class="bg-indigo-400 h-full rounded-full transition-all duration-300" style="width: ${draft.progress || 15}%;"></div>
               </div>
             </div>
           `;
@@ -909,7 +773,7 @@
           const cat = draft.categoryName || draft.category || '日常购物';
           const catIcon = getAppCatIcon(cat);
           draft.categoryIcon = catIcon;
-          const displayMerchant = _escapeHtml((draft.merchant || '抓屏待解析').split('（')[0]);
+          const displayMerchant = (draft.merchant || '抓屏待解析').split('（')[0];
           const displayAmt = (typeof draft.amount === 'number' && !isNaN(draft.amount) && draft.amount > 0)
             ? `¥${draft.amount.toFixed(2)}`
             : '待解析';
@@ -931,19 +795,16 @@
         const cat = draft.categoryName || draft.category || '日常购物';
         const catIcon = getAppCatIcon(cat);
         draft.categoryIcon = catIcon;
-        const safeDraftMerchant = _escapeHtml((draft.merchant || '待确认商户').split('（')[0]);
-        const safeConf = Number(draft.confidence) || 0;
-        const safeDraftAmt = (Number(draft.amount) || 0).toFixed(2);
 
         return `
           <button onclick="switchDraft(${idx})" class="flex-shrink-0 px-3 py-1.5 rounded-xl ${borderClass} text-left transition-all tap-highlight flex items-center space-x-2">
-            <span class="w-4 h-4 inline-flex items-center justify-center shrink-0" data-cat-icon="${_escapeHtml(cat)}">${catIcon}</span>
+            <span class="w-4 h-4 inline-flex items-center justify-center shrink-0" data-cat-icon="${cat}">${catIcon}</span>
             <div class="text-xs leading-tight">
               <div class="flex items-center space-x-1">
-                <span class="font-semibold text-white truncate max-w-[85px]">${safeDraftMerchant}</span>
-                <span class="text-[9px] font-mono px-1 py-0.2 rounded border ${confColor}">${safeConf}%</span>
+                <span class="font-semibold text-white truncate max-w-[85px]">${draft.merchant.split('（')[0]}</span>
+                <span class="text-[9px] font-mono px-1 py-0.2 rounded border ${confColor}">${draft.confidence}%</span>
               </div>
-              <span class="text-[11px] font-bold text-slate-300">¥${safeDraftAmt}</span>
+              <span class="text-[11px] font-bold text-slate-300">¥${draft.amount.toFixed(2)}</span>
             </div>
           </button>
         `;
@@ -1077,9 +938,9 @@
       }
       if (retryCard) {
         retryCard.classList.remove('hidden');
-        const reason = _escapeHtml(draft.parseErrorReason || '未完成大模型解析');
+        const reason = draft.parseErrorReason || '未完成大模型解析';
         const refreshIcon = (typeof getAppStatusIcon === 'function') ? getAppStatusIcon('refresh') : '';
-        const imgThumb = _isSafeImageUrl(draft.imageData) ? `<img src="${_escapeHtml(draft.imageData)}" class="w-10 h-10 object-cover rounded-lg border border-amber-500/40 shrink-0" alt="截屏预览" />` : '';
+        const imgThumb = draft.imageData ? `<img src="${draft.imageData}" class="w-10 h-10 object-cover rounded-lg border border-amber-500/40 shrink-0" alt="截屏预览" />` : '';
         retryCard.innerHTML = `
           <div class="flex items-center space-x-2.5 overflow-hidden">
             ${imgThumb}
@@ -1175,7 +1036,7 @@
     }
     if (sugRule) {
       const bulbSvg = (typeof IconRegistry !== 'undefined' && typeof IconRegistry.getStatusIcon === 'function') ? IconRegistry.getStatusIcon('bulb') : '';
-      sugRule.innerHTML = `<span class="w-3.5 h-3.5 inline-flex items-center justify-center align-text-bottom mr-1" data-ui-icon="bulb">${bulbSvg}</span>匹配规则：${_escapeHtml(draft.rule)}`;
+      sugRule.innerHTML = `<span class="w-3.5 h-3.5 inline-flex items-center justify-center align-text-bottom mr-1" data-ui-icon="bulb">${bulbSvg}</span>匹配规则：${draft.rule}`;
     }
 
     if (typeof bindDraftFormInputEvents === 'function') {
@@ -1774,7 +1635,7 @@
     if (hasDay) {
       html += `
         <span class="flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-indigo-600/90 text-white border border-indigo-500 shrink-0 shadow-sm">
-          <span class="flex items-center space-x-1"><span class="w-3.5 h-3.5 inline-block text-indigo-400" id="day-focus-cal-icon"></span><span>${_escapeHtml(activeDayLabel || activeDayFilter)}</span></span>
+          <span class="flex items-center space-x-1"><span class="w-3.5 h-3.5 inline-block text-indigo-400" id="day-focus-cal-icon"></span><span>${activeDayLabel || activeDayFilter}</span></span>
           <button onclick="clearDayFocus()" class="hover:text-red-300 ml-1 font-bold text-xs" title="取消日聚焦">✕</button>
         </span>
       `;
@@ -1794,7 +1655,7 @@
       const s = document.getElementById('filter-date-summary')?.innerText || selectedDatePreset;
       html += `
         <span class="flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-indigo-900/80 text-indigo-200 border border-indigo-600/60 shrink-0">
-          <span>日期: ${_escapeHtml(s)}</span>
+          <span>日期: ${s}</span>
           <button onclick="removeDateFilter()" class="hover:text-red-300 ml-1 font-bold text-xs" title="清除日期范围">✕</button>
         </span>
       `;
@@ -1805,9 +1666,9 @@
         const icon = getAppCatIcon(cat, `<span data-ui-icon="ruleTag">${getAppStatusIcon('ruleTag')}</span>`);
         html += `
           <span class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-indigo-900/80 text-indigo-200 border border-indigo-600/60 shrink-0">
-            <span class="w-3.5 h-3.5 inline-flex items-center justify-center shrink-0" data-cat-icon="${_escapeHtml(cat)}">${icon}</span>
-            <span>${_escapeHtml(cat)}</span>
-            <button onclick="removeCatFilter('${_escapeJsAttr(cat)}')" class="hover:text-red-300 ml-1 font-bold text-xs" title="移除该分类">✕</button>
+            <span class="w-3.5 h-3.5 inline-flex items-center justify-center shrink-0" data-cat-icon="${cat}">${icon}</span>
+            <span>${cat}</span>
+            <button onclick="removeCatFilter('${cat}')" class="hover:text-red-300 ml-1 font-bold text-xs" title="移除该分类">✕</button>
           </span>
         `;
       });
@@ -1816,7 +1677,7 @@
     if (hasAccount) {
       html += `
         <span class="flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-indigo-900/80 text-indigo-200 border border-indigo-600/60 shrink-0">
-          <span>账户: ${_escapeHtml(selectedFilterAccount)}</span>
+          <span>账户: ${selectedFilterAccount}</span>
           <button onclick="removeAccountFilter()" class="hover:text-red-300 ml-1 font-bold text-xs" title="清除账户筛选">✕</button>
         </span>
       `;
@@ -1914,9 +1775,9 @@
       const icon = getAppCatIcon(parentCat, `<span data-ui-icon="ruleTag">${getAppStatusIcon('ruleTag')}</span>`);
       const isSelected = (currentFilterKey === parentCat || selectedFilterCats.has(parentCat));
       html += `
-        <span onclick="filterTransactions('${_escapeJsAttr(parentCat)}', this)" class="chip-item inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl ${isSelected ? 'bg-indigo-600 text-white font-medium' : 'bg-slate-800 border border-slate-700 text-slate-300'} shrink-0 cursor-pointer tap-highlight hover:text-white transition-all text-xs">
-          <span class="w-3.5 h-3.5 inline-flex items-center justify-center shrink-0" data-cat-icon="${_escapeHtml(parentCat)}">${icon}</span>
-          <span>${_escapeHtml(parentCat)}</span>
+        <span onclick="filterTransactions('${parentCat}', this)" class="chip-item inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl ${isSelected ? 'bg-indigo-600 text-white font-medium' : 'bg-slate-800 border border-slate-700 text-slate-300'} shrink-0 cursor-pointer tap-highlight hover:text-white transition-all text-xs">
+          <span class="w-3.5 h-3.5 inline-flex items-center justify-center shrink-0" data-cat-icon="${parentCat}">${icon}</span>
+          <span>${parentCat}</span>
           <span class="opacity-70 text-[10px]">(${count})</span>
         </span>
       `;
@@ -2105,10 +1966,27 @@
         group.style.display = 'none';
       } else {
         group.style.display = 'block';
-        const netCents = computeDomDayGroupNetCents(group, true);
+        let netVal = 0;
+        let visibleDayTotal = 0;
+        groupItems.forEach(el => {
+          const rawAmount = el.querySelector('.font-bold.text-base')?.innerText || '';
+          const num = parseFloat(rawAmount.replace(/[^0-9.]/g, '') || '0');
+          const elType = el.getAttribute('data-type') || el.dataset.type || '';
+          const isIncome = (elType === 'income' || elType === 'refund' || rawAmount.trim().startsWith('+'));
+          if (isIncome) {
+            netVal += num;
+          } else {
+            netVal -= num;
+            visibleDayTotal += num;
+          }
+        });
         const subtotalEl = group.querySelector('.day-subtotal');
         if (subtotalEl) {
-          subtotalEl.innerText = formatDaySubtotalText(netCents);
+          if (netVal > 0) {
+            subtotalEl.innerText = `小计: +¥ ${netVal.toFixed(2)}`;
+          } else {
+            subtotalEl.innerText = `小计: -¥ ${Math.abs(netVal).toFixed(2)}`;
+          }
         }
 
         // Update header active state
@@ -2208,7 +2086,8 @@
       const activeClasses = isSelected
         ? 'active-tag bg-indigo-600/20 border border-indigo-500/40 text-indigo-300 font-medium'
         : 'bg-slate-800/80 border border-slate-700/80 text-slate-300';
-      return `<button onclick="selectModalAccount(this, '${_escapeJsAttr(item.value)}')" class="modal-acc-btn px-2.5 py-1.5 rounded-xl tap-highlight ${activeClasses}">${_escapeHtml(item.label)}</button>`;
+      const safeVal = String(item.value).replace(/'/g, "\\'");
+      return `<button onclick="selectModalAccount(this, '${safeVal}')" class="modal-acc-btn px-2.5 py-1.5 rounded-xl tap-highlight ${activeClasses}">${item.label}</button>`;
     }).join('');
 
     const badge = document.getElementById('filter-acc-badge');
@@ -2503,17 +2382,14 @@
     return existingOrders;
   }
 
-  function isOrderIdDuplicate(orderId, existingTransactions) {
+  function isOrderIdDuplicate(orderId) {
     const cleanOrder = typeof normalizeOrderId === 'function' ? normalizeOrderId(orderId) : String(orderId || '').trim();
     if (!cleanOrder) return false;
-    const existingOrders = (existingTransactions !== undefined) ? existingTransactions : collectAllExistingTransactions();
+    const existingOrders = collectAllExistingTransactions();
     if (typeof SingWalletDomain !== 'undefined' && typeof SingWalletDomain.isOrderIdDuplicate === 'function') {
       return SingWalletDomain.isOrderIdDuplicate(cleanOrder, existingOrders);
     }
-    if (existingOrders instanceof Set) {
-      return existingOrders.has(cleanOrder);
-    }
-    return false;
+    return existingOrders.has(cleanOrder);
   }
 
   function populateDedupModalDetails(orderId) {
@@ -2703,8 +2579,7 @@
     if (txDate === getDynamicTodayStr()) groupName += ' 今天';
     else if (txDate === getDynamicYesterdayStr()) groupName += ' 昨天';
 
-    const numAmtCents = Math.abs(_toCents(txData.amount !== undefined ? txData.amount : (txData.amountInCents ? txData.amountInCents / 100 : 0)));
-    const numAmt = numAmtCents / 100;
+    const numAmt = Math.round((Number(txData.amount) || 0) * 100) / 100;
     txData.amount = numAmt;
     const merchantName = txData.merchant || txData.name || '日常消费';
     txData.merchant = merchantName;
@@ -2723,7 +2598,7 @@
       if (emptyState) emptyState.classList.add('hidden');
 
       // Find or create day group
-      let dayGroup = Array.from(document.querySelectorAll('.day-group')).find(g => g.getAttribute('data-date') === txDate) || null;
+      let dayGroup = document.querySelector(`.day-group[data-date="${txDate}"]`);
       const listContainer = document.getElementById('transactions-list');
       if (!dayGroup && listContainer) {
         dayGroup = document.createElement('div');
@@ -2731,9 +2606,9 @@
         dayGroup.setAttribute('data-date', txDate);
         dayGroup.setAttribute('data-group-date', txDate);
         dayGroup.innerHTML = `
-          <div onclick="toggleDayFilter('${_escapeJsAttr(txDate)}', '${_escapeJsAttr(groupName)}')" class="day-header flex items-center justify-between text-xs text-slate-400 px-2 py-1.5 rounded-xl hover:bg-slate-800/80 cursor-pointer tap-highlight font-mono group transition-all" title="点击日标题或小计，即可按日筛选">
+          <div onclick="toggleDayFilter('${txDate}', '${groupName}')" class="day-header flex items-center justify-between text-xs text-slate-400 px-2 py-1.5 rounded-xl hover:bg-slate-800/80 cursor-pointer tap-highlight font-mono group transition-all" title="点击日标题或小计，即可按日筛选">
             <div class="flex items-center space-x-2">
-              <span class="font-bold text-slate-200 group-hover:text-indigo-300 transition-colors">${_escapeHtml(groupName)}</span>
+              <span class="font-bold text-slate-200 group-hover:text-indigo-300 transition-colors">${groupName}</span>
               <span class="day-filter-btn text-[10px] bg-slate-800 group-hover:bg-indigo-600 text-indigo-300 group-hover:text-white px-2 py-0.5 rounded-lg border border-slate-700/80 transition-all flex items-center space-x-1">
                 <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
                 <span class="day-filter-btn-text">仅看此日</span>
@@ -2776,10 +2651,10 @@
       
       let iconSquircle = window.renderSquircleIcon 
         ? window.renderSquircleIcon(parentCat, 'w-10 h-10') 
-        : `<div class="w-10 h-10 rounded-2xl bg-slate-700/50 flex items-center justify-center text-lg shrink-0 border border-slate-600/40 shadow-sm" data-cat-icon="${_escapeHtml(parentCat)}">${icon}</div>`;
+        : `<div class="w-10 h-10 rounded-2xl bg-slate-700/50 flex items-center justify-center text-lg shrink-0 border border-slate-600/40 shadow-sm" data-cat-icon="${parentCat}">${icon}</div>`;
       
       if (!iconSquircle.includes('data-cat-icon')) {
-        iconSquircle = iconSquircle.replace('class="', `data-cat-icon="${_escapeHtml(parentCat)}" class="`);
+        iconSquircle = iconSquircle.replace('class="', `data-cat-icon="${parentCat}" class="`);
       }
 
       newTx.innerHTML = `
@@ -2787,17 +2662,17 @@
           ${iconSquircle}
           <div class="min-w-0 flex-1">
             <div class="flex items-center">
-              <span class="font-semibold text-sm text-slate-100 truncate">${_escapeHtml(merchantName)}</span>
+              <span class="font-semibold text-sm text-slate-100 truncate">${merchantName}</span>
             </div>
             <div class="text-xs text-slate-400 mt-1 flex items-center space-x-1.5 truncate">
-              <span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 shrink-0">${_escapeHtml(catName)}</span>
-              <span class="text-slate-400 font-mono text-[11px] shrink-0">${_escapeHtml(timeOnly)}</span>
+              <span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 shrink-0">${catName}</span>
+              <span class="text-slate-400 font-mono text-[11px] shrink-0">${timeOnly}</span>
             </div>
           </div>
         </div>
         <div class="text-right shrink-0 flex flex-col items-end justify-center ml-2">
           <div class="font-bold text-base text-white font-mono tracking-tight whitespace-nowrap">${isIncomeOrRefund ? '+' : '-'}¥ ${numAmt.toFixed(2)}</div>
-          <span class="tx-source-tag text-[11px] text-slate-400 font-normal mt-1 block text-right whitespace-nowrap">${_escapeHtml(paymentDisplay)}</span>
+          <span class="tx-source-tag text-[11px] text-slate-400 font-normal mt-1 block text-right whitespace-nowrap">${paymentDisplay}</span>
         </div>
         <div role="button" class="tx-swipe-delete-btn" onclick="openTxDeleteConfirmModal(this.closest('.tx-item'), event)">
           <svg class="w-4 h-4 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
@@ -2820,9 +2695,15 @@
           dayGroup.appendChild(newTx);
         }
 
-        // Recalculate day subtotal with integer cents & income/expense sign
+        // Recalculate day subtotal with IEEE 754 precision rounding
+        const items = dayGroup.querySelectorAll('.tx-item:not(.soft-deleted)');
+        let dayTotal = 0;
+        items.forEach(el => {
+          const amtStr = el.querySelector('.text-base')?.innerText?.replace(/[^\d.]/g, '') || '0';
+          dayTotal = Math.round((dayTotal + parseFloat(amtStr)) * 100) / 100;
+        });
         const subEl = dayGroup.querySelector('.day-subtotal');
-        if (subEl) subEl.innerText = formatDaySubtotalText(computeDomDayGroupNetCents(dayGroup, false));
+        if (subEl) subEl.innerText = `小计: -¥ ${dayTotal.toFixed(2)}`;
       }
     }
 
@@ -2849,7 +2730,7 @@
       account: storedAccount,
       payment: txData.payment || { channel: parsedChan, sub_type: parsedSub, display_name: paymentDisplay },
       amount: numAmt,
-      amountInCents: txData.amountInCents || numAmtCents,
+      amountInCents: txData.amountInCents || Math.round(numAmt * 100),
       date: txDate,
       txDate: txDate,
       dateGroup: groupName,
@@ -2873,7 +2754,7 @@
 
     // 若外部直接调用 insertTransactionToList 插入非当前激活月份的跨月账单且尚未调整该月统计，自动同步目标月统计
     if (!isTargetActiveMonth && !txData._totalsAdjusted) {
-      adjustMonthlyTotals(numAmt, !isIncomeOrRefund, 1, targetMonthKey);
+      adjustMonthlyTotals(numAmt, true, 1, targetMonthKey);
     }
 
     saveUserTransactionsToStorage();
@@ -2942,9 +2823,8 @@
     }
 
     const isIncomeOrRefund = Boolean((curDraft && (curDraft.refund || curDraft.type === 'income')) || catName === '工资收入' || parentCat === '工资收入');
-    const fuzzyHint = getFuzzyDuplicateHint({ merchant, amount, orderId: inputOrder || '', txTime });
 
-    showToast(`${getAppStatusIcon('success')} 入账成功: ${merchant} ¥${amount.toFixed(2)}${fuzzyHint}`);
+    showToast(`${getAppStatusIcon('success')} 入账成功: ${merchant} ¥${amount.toFixed(2)}`);
     
     const activeMonthKey = `${currentActiveYear}-${String(currentActiveMonth).padStart(2, '0')}`;
     const targetMonthKey = (/^\d{4}-\d{2}/.test(txDate)) ? txDate.slice(0, 7) : activeMonthKey;
@@ -2993,7 +2873,7 @@
     return true;
   }
 
-  // Helper: Adjust monthly expense & net expense (动态月份键 + 整数“分”精确计算)
+  // Helper: Adjust monthly expense & net expense (Bug 2 & Bug 6 修复：动态月份键 + 消除 IEEE 754 浮点尾差)
   function adjustMonthlyTotals(deltaAmount, isExpense = true, deltaCount = 0, targetMonthKey = null) {
     const activeMonthKey = `${currentActiveYear}-${String(currentActiveMonth).padStart(2, '0')}`;
     const monthKey = (targetMonthKey && /^\d{4}-\d{2}$/.test(targetMonthKey)) ? targetMonthKey : activeMonthKey;
@@ -3003,15 +2883,15 @@
       allMonthlyData[monthKey] = { net: '0.00', exp: '0.00', ref: '0.00', inc: '0.00', count: '0 笔', avg: '¥0.00', txs: [] };
     }
     const mData = allMonthlyData[monthKey];
-    const deltaCents = _toCents(deltaAmount);
+    const delta = Number(deltaAmount) || 0;
 
     if (isExpense === false) {
-      const baseIncCents = _toCents(mData.inc || '0');
-      const nextIncCents = Math.max(0, baseIncCents + deltaCents);
-      mData.inc = _formatCents(nextIncCents);
+      const baseInc = parseFloat(String(mData.inc || '0').replace(/[¥\s,]/g, '') || 0);
+      const nextInc = Math.max(0, Math.round((baseInc + delta) * 100) / 100);
+      mData.inc = nextInc.toFixed(2);
       if (isTargetActive) {
         const incEl = document.getElementById('total-income');
-        if (incEl) incEl.innerText = `¥ ${mData.inc}`;
+        if (incEl) incEl.innerText = `¥ ${nextInc.toFixed(2)}`;
       }
       return;
     }
@@ -3021,26 +2901,26 @@
     const monthlyNetEl = document.getElementById('monthly-net-expense');
     const homeExpEl = document.getElementById('home-total-expense');
 
-    const baseExpCents = isTargetActive && curExpEl
-      ? _toCents(curExpEl.innerText)
-      : _toCents(mData.exp || '0');
-    const baseNetCents = isTargetActive && (curNetEl || monthlyNetEl)
-      ? _toCents(curNetEl ? curNetEl.innerText : monthlyNetEl.innerText)
-      : _toCents(mData.net || mData.exp || '0');
+    const baseExp = isTargetActive && curExpEl
+      ? parseFloat(curExpEl.innerText.replace(/[¥\s,]/g, '') || 0)
+      : parseFloat(String(mData.exp || '0').replace(/[¥\s,]/g, '') || 0);
+    const baseNet = isTargetActive && (curNetEl || monthlyNetEl)
+      ? parseFloat((curNetEl ? curNetEl.innerText : monthlyNetEl.innerText).replace(/[¥\s,]/g, '') || 0)
+      : parseFloat(String(mData.net || mData.exp || '0').replace(/[¥\s,]/g, '') || 0);
 
-    const curExpenseCents = Math.max(0, baseExpCents + deltaCents);
-    const curNetCents = Math.max(0, baseNetCents + deltaCents);
+    const curExpense = Math.max(0, Math.round((baseExp + delta) * 100) / 100);
+    const curNet = Math.max(0, Math.round((baseNet + delta) * 100) / 100);
 
-    mData.exp = _formatCents(curExpenseCents);
-    mData.net = _formatCents(curNetCents);
+    mData.exp = curExpense.toFixed(2);
+    mData.net = curNet.toFixed(2);
     const activeTxCount = Array.isArray(mData.txs) ? mData.txs.filter(t => t && !t.softDeleted).length : Math.max(0, deltaCount);
     mData.count = `${activeTxCount} 笔`;
 
     if (isTargetActive) {
-      if (curExpEl) curExpEl.innerText = `¥ ${mData.exp}`;
-      if (curNetEl) curNetEl.innerText = `¥ ${mData.net}`;
-      if (monthlyNetEl) monthlyNetEl.innerText = `¥ ${mData.net}`;
-      if (homeExpEl) homeExpEl.innerText = `¥ ${mData.exp}`;
+      if (curExpEl) curExpEl.innerText = `¥ ${curExpense.toFixed(2)}`;
+      if (curNetEl) curNetEl.innerText = `¥ ${curNet.toFixed(2)}`;
+      if (monthlyNetEl) monthlyNetEl.innerText = `¥ ${curNet.toFixed(2)}`;
+      if (homeExpEl) homeExpEl.innerText = `¥ ${curExpense.toFixed(2)}`;
       if (typeof renderMonthlyCategoryChart === 'function') {
         renderMonthlyCategoryChart();
       }
@@ -3052,57 +2932,19 @@
     if (!itemEl) return;
     const dayGroup = itemEl.closest('.day-group');
     if (dayGroup) {
+      const items = dayGroup.querySelectorAll('.tx-item:not(.soft-deleted)');
+      let dayTotal = 0;
+      items.forEach(el => {
+        const amtStr = el.querySelector('.text-base')?.innerText?.replace(/[^\d.]/g, '') || '0';
+        dayTotal = Math.round((dayTotal + parseFloat(amtStr)) * 100) / 100;
+      });
       const subEl = dayGroup.querySelector('.day-subtotal');
-      if (subEl) subEl.innerText = formatDaySubtotalText(computeDomDayGroupNetCents(dayGroup, false));
+      if (subEl) subEl.innerText = `小计: -¥ ${dayTotal.toFixed(2)}`;
     }
   }
 
-  const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
   let lastDeletedId = null;
   let deletedItems = [];
-
-  function saveTrashItemsToStorage() {
-    if (window.LedgerStorage && typeof window.LedgerStorage.saveTrashItems === 'function') {
-      try {
-        window.LedgerStorage.saveTrashItems(deletedItems || []);
-        return;
-      } catch (e) {
-        console.warn('[SingWallet] LedgerStorage.saveTrashItems error:', e);
-      }
-    }
-    try {
-      localStorage.setItem('singwallet_trash_items', JSON.stringify(deletedItems || []));
-    } catch (e) {
-      console.warn('[SingWallet] saveTrashItemsToStorage error:', e);
-    }
-  }
-
-  function loadTrashItemsFromStorage() {
-    let list = [];
-    try {
-      if (window.LedgerStorage && typeof window.LedgerStorage.loadTrashItems === 'function') {
-        const loaded = window.LedgerStorage.loadTrashItems();
-        if (Array.isArray(loaded)) list = loaded;
-      } else {
-        const raw = localStorage.getItem('singwallet_trash_items');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) list = parsed;
-        }
-      }
-    } catch (e) {
-      console.warn('[SingWallet] loadTrashItemsFromStorage error:', e);
-      list = [];
-    }
-    const nowMs = Date.now();
-    const valid = list.filter(it => it && it.id && (!it.deletedAt || (nowMs - Number(it.deletedAt) <= TRASH_RETENTION_MS)));
-    if (valid.length !== list.length) {
-      deletedItems = valid;
-      saveTrashItemsToStorage();
-    }
-    return valid;
-  }
-
   function updateTrashBadge() {
     const trashBadge = document.getElementById('trash-badge');
     const trashDot = document.getElementById('trash-dot');
@@ -3175,24 +3017,7 @@
       deletedItems = deletedItems.filter(i => i.id !== itemId);
       const isIncomeOrRefund = Boolean((foundTx && (foundTx.refund || foundTx.type === 'income' || foundTx.cat === '工资收入' || foundTx.parentCat === '工资收入')) || (item && (item.dataset.type === 'income' || item.dataset.type === 'refund')));
       const paymentDisplay = foundTx ? formatTxPaymentDisplay(foundTx.channel, foundTx.account, foundTx.payment) : (item ? (item.getAttribute('data-account') || '') : '');
-      const txSnapshot = foundTx ? { ...foundTx, softDeleted: true } : {
-        id: itemId,
-        name: resolvedName,
-        merchant: resolvedName,
-        amount: resolvedAmount,
-        amountInCents: _toCents(resolvedAmount),
-        cat: (item && item.getAttribute('data-cat')) || '其他支出',
-        catName: (item && item.getAttribute('data-cat')) || '其他支出',
-        parentCat: (item && item.getAttribute('data-parent')) || '其他支出',
-        channel: (item && item.getAttribute('data-channel')) || '微信',
-        account: paymentDisplay,
-        txDate: (item && item.getAttribute('data-date')) || getDynamicTodayStr(),
-        txTime: (item && item.getAttribute('data-time')) || formatCurrentDateTime(),
-        orderId: orderToClean,
-        type: isIncomeOrRefund ? 'income' : 'expense',
-        softDeleted: true
-      };
-      deletedItems.push({ id: itemId, name: resolvedName, amount: resolvedAmount, monthKey: foundMonthKey, isIncomeOrRefund: isIncomeOrRefund, paymentDisplay: paymentDisplay, orderId: orderToClean, deletedAt: Date.now(), txSnapshot: txSnapshot });
+      deletedItems.push({ id: itemId, name: resolvedName, amount: resolvedAmount, monthKey: foundMonthKey, isIncomeOrRefund: isIncomeOrRefund, paymentDisplay: paymentDisplay, orderId: orderToClean });
 
       // Deduct from monthly totals & recalculate day subtotal
       adjustMonthlyTotals(-resolvedAmount, !isIncomeOrRefund, -1, foundMonthKey);
@@ -3209,7 +3034,6 @@
       if (bar) bar.classList.remove('hidden');
 
       updateTrashBadge();
-      saveTrashItemsToStorage();
       saveUserTransactionsToStorage();
       applyActiveFilters();
       updateDynamicCategoryChips();
@@ -3293,15 +3117,12 @@
         : (restoredTx ? Number(restoredTx.amount) || 0 : 0);
       const targetKey = (lastItem && lastItem.monthKey) || foundMonthKey;
 
-      if (!restoredTx && !item && lastItem && lastItem.txSnapshot) {
-        insertTransactionToList({ ...lastItem.txSnapshot, softDeleted: false, _totalsAdjusted: true });
-      }
       if (item) {
         item.classList.remove('soft-deleted');
         item.style.display = 'flex';
         updateDaySubtotalForElement(item);
       }
-      if (item || restoredTx || (lastItem && lastItem.txSnapshot)) {
+      if (item || restoredTx) {
         const isInc = Boolean(
           (lastItem && lastItem.isIncomeOrRefund) ||
           (restoredTx && (restoredTx.refund || restoredTx.type === 'income' || restoredTx.cat === '工资收入' || restoredTx.parentCat === '工资收入')) ||
@@ -3326,7 +3147,6 @@
       deletedItems.pop();
       lastDeletedId = deletedItems.length > 0 ? deletedItems[deletedItems.length - 1].id : null;
       updateTrashBadge();
-      saveTrashItemsToStorage();
       saveUserTransactionsToStorage();
       applyActiveFilters();
       updateDynamicCategoryChips();
@@ -3355,21 +3175,16 @@
         container.innerHTML = deletedItems.map(item => {
           const sign = item.isIncomeOrRefund ? '+' : '-';
           const amtFormatted = `${sign}¥${Number(item.amount || 0).toFixed(2)}`;
-          const safeName = _escapeHtml(item.name);
-          const safePay = _escapeHtml(item.paymentDisplay);
-          const safeIdHtml = _escapeHtml(item.id);
-          const safeIdJs = _escapeJsAttr(item.id);
-          const payStr = item.paymentDisplay ? ` <span class="text-slate-400 text-[11px] font-normal">(${safePay})</span>` : '';
-          const titleStr = `${safeName}${item.paymentDisplay ? ' (' + safePay + ')' : ''}`;
+          const payStr = item.paymentDisplay ? ` <span class="text-slate-400 text-[11px] font-normal">(${item.paymentDisplay})</span>` : '';
           return `
           <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-800 border border-slate-700">
-            <label class="flex items-center space-x-2 cursor-pointer select-none truncate flex-1 mr-2" title="${titleStr}">
-              <input type="checkbox" class="trash-item-checkbox rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-0 shrink-0" value="${safeIdHtml}" onchange="onTrashSelectionChange()">
-              <span class="truncate text-xs">${safeName} (${amtFormatted})${payStr}</span>
+            <label class="flex items-center space-x-2 cursor-pointer select-none truncate flex-1 mr-2" title="${item.name}${item.paymentDisplay ? ' (' + item.paymentDisplay + ')' : ''}">
+              <input type="checkbox" class="trash-item-checkbox rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-0 shrink-0" value="${item.id}" onchange="onTrashSelectionChange()">
+              <span class="truncate text-xs">${item.name} (${amtFormatted})${payStr}</span>
             </label>
             <div class="flex items-center space-x-2 shrink-0">
-              <span class="text-emerald-400 font-semibold cursor-pointer hover:underline text-xs" onclick="restoreTrash('${safeIdJs}')">恢复</span>
-              <button type="button" class="text-[11px] px-2 py-0.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 transition font-medium tap-highlight" onclick="openTrashDeleteConfirmModal('${safeIdJs}')">删除</button>
+              <span class="text-emerald-400 font-semibold cursor-pointer hover:underline text-xs" onclick="restoreTrash('${item.id}')">恢复</span>
+              <button type="button" class="text-[11px] px-2 py-0.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 transition font-medium tap-highlight" onclick="openTrashDeleteConfirmModal('${item.id}')">删除</button>
             </div>
           </div>
         `;
@@ -3470,7 +3285,6 @@
 
     // 5. 更新状态与存储并刷新列表
     updateTrashBadge();
-    saveTrashItemsToStorage();
     saveUserTransactionsToStorage();
     openTrashDialog();
     closeTrashDeleteConfirmModal();
@@ -3546,15 +3360,12 @@
       : (restoredTx ? Number(restoredTx.amount) || 0 : 0);
     const targetKey = (found && found.monthKey) || foundMonthKey;
 
-    if (!restoredTx && !item && found && found.txSnapshot) {
-      insertTransactionToList({ ...found.txSnapshot, softDeleted: false, _totalsAdjusted: true });
-    }
     if (item) {
       item.classList.remove('soft-deleted');
       item.style.display = 'flex';
       updateDaySubtotalForElement(item);
     }
-    if (item || restoredTx || (found && found.txSnapshot)) {
+    if (item || restoredTx) {
       const isInc = Boolean(
         (found && found.isIncomeOrRefund) ||
         (restoredTx && (restoredTx.refund || restoredTx.type === 'income' || restoredTx.cat === '工资收入' || restoredTx.parentCat === '工资收入')) ||
@@ -3579,7 +3390,6 @@
       lastDeletedId = deletedItems.length > 0 ? deletedItems[deletedItems.length - 1].id : null;
     }
     updateTrashBadge();
-    saveTrashItemsToStorage();
     saveUserTransactionsToStorage();
     openTrashDialog();
     applyActiveFilters();
@@ -3609,9 +3419,7 @@
       imgPreview.classList.add('hidden');
     }
     if (fileInput) fileInput.value = '';
-    if (typeof window.__clearOcrInternalUploadState === 'function') {
-      window.__clearOcrInternalUploadState();
-    } else if (typeof lastUploadedData !== 'undefined') {
+    if (typeof lastUploadedData !== 'undefined') {
       window.lastUploadedData = null;
     }
   }
@@ -3733,9 +3541,8 @@
     const parentCat = (typeof resolveParentCategory === 'function' ? resolveParentCategory(cat) : cat) || '其他支出';
     const isIncome = (cat === '工资收入' || parentCat === '工资收入');
     const icon = getAppCatIcon(parentCat);
-    const fuzzyHint = getFuzzyDuplicateHint({ merchant, amount, orderId: ordInput?.value?.trim() || '', txTime });
 
-    showToast(`记账成功: ${merchant} ${isIncome ? '+' : '-'}¥${amount.toFixed(2)}${fuzzyHint}`);
+    showToast(`记账成功: ${merchant} ${isIncome ? '+' : '-'}¥${amount.toFixed(2)}`);
 
     const txDate = txTime.split(' ')[0] || getDynamicTodayStr();
     const timeOnly = txTime.includes(' ') ? txTime.split(' ')[1] : (formatCurrentDateTime().split(' ')[1] || '12:00:00');
@@ -3776,52 +3583,28 @@
   let currentDetailTxId = null;
   let isTxDetailEditing = false;
 
-  function getFuzzyDuplicateHint(txCandidate) {
-    try {
-      if (!txCandidate) return '';
-      const ord = String(txCandidate.orderId || '').trim();
-      const hasRealOrder = Boolean(ord && !ord.startsWith('MANUAL_') && !ord.startsWith('VLM_') && !ord.endsWith('_ORDER'));
-      if (hasRealOrder) return '';
-      if (window.LedgerStorage && typeof window.LedgerStorage.findFuzzyDuplicate === 'function') {
-        const allActive = [];
-        Object.keys(allMonthlyData || {}).forEach(k => {
-          const m = allMonthlyData[k];
-          if (m && Array.isArray(m.txs)) {
-            m.txs.forEach(t => { if (t && !t.softDeleted) allActive.push(t); });
-          }
-        });
-        const dup = window.LedgerStorage.findFuzzyDuplicate(txCandidate, allActive);
-        if (dup) {
-          return '（提示：24h内有同商户同金额流水）';
-        }
-      }
-    } catch (_) {}
-    return '';
-  }
-
   function recalculateMonthTotalsFromTxs(monthKey) {
     if (!allMonthlyData || !allMonthlyData[monthKey]) return;
     const m = allMonthlyData[monthKey];
     const validTxs = (m.txs || []).filter(tx => tx && !tx.softDeleted);
-    let expCents = 0;
-    let incCents = 0;
-    let refCents = 0;
+    let expTotal = 0;
+    let incTotal = 0;
+    let refTotal = 0;
     validTxs.forEach(tx => {
-      const amtCents = Math.abs(_toCents(tx.amount !== undefined ? tx.amount : (tx.amountInCents ? tx.amountInCents / 100 : 0)));
-      const isInc = !tx.refund && (tx.type === 'income' || tx.cat === '工资收入' || tx.parentCat === '工资收入' || tx.catName === '工资收入');
+      const amt = Number(tx.amount) || 0;
       if (tx.refund) {
-        refCents += amtCents;
-      } else if (isInc) {
-        incCents += amtCents;
+        refTotal = Math.round((refTotal + amt) * 100) / 100;
+      } else if (tx.type === 'income') {
+        incTotal = Math.round((incTotal + amt) * 100) / 100;
       } else {
-        expCents += amtCents;
+        expTotal = Math.round((expTotal + amt) * 100) / 100;
       }
     });
-    const netCents = Math.max(0, expCents - refCents);
-    m.exp = _formatCents(expCents);
-    m.ref = _formatCents(refCents);
-    m.net = _formatCents(netCents);
-    m.inc = _formatCents(incCents);
+    const netTotal = Math.max(0, Math.round((expTotal - refTotal) * 100) / 100);
+    m.exp = expTotal.toFixed(2);
+    m.ref = refTotal.toFixed(2);
+    m.net = netTotal.toFixed(2);
+    m.inc = incTotal.toFixed(2);
     m.count = `${validTxs.length} 笔`;
 
     const activeMonthKey = `${currentActiveYear}-${String(currentActiveMonth).padStart(2, '0')}`;
@@ -3844,7 +3627,6 @@
       }
     }
   }
-  window.recalculateMonthTotalsFromTxs = recalculateMonthTotalsFromTxs;
 
   function setTxDetailEditMode(isEditing) {
     isTxDetailEditing = !!isEditing;
@@ -4087,19 +3869,14 @@
 
     // 若详情弹窗分类菜单不含该分类选项，动态补充
     const catMenu = document.getElementById('menu-detail-edit-category');
-    if (catMenu && targetCat) {
-      const hasCatOpt = Array.from(catMenu.querySelectorAll('[data-value]')).some(el => el.getAttribute('data-value') === targetCat);
-      if (!hasCatOpt) {
-        const optDiv = document.createElement('div');
-        optDiv.className = 'custom-dropdown-option rounded-xl';
-        optDiv.setAttribute('data-value', targetCat);
-        optDiv.setAttribute('tabindex', '0');
-        optDiv.onclick = function (event) {
-          selectCustomDropdownOption('detail-edit-category', targetCat, event);
-        };
-        optDiv.innerHTML = `<span class="truncate">${_escapeHtml(targetCat)}</span>`;
-        catMenu.appendChild(optDiv);
-      }
+    if (catMenu && targetCat && !catMenu.querySelector(`[data-value="${targetCat}"]`)) {
+      const optDiv = document.createElement('div');
+      optDiv.className = 'custom-dropdown-option rounded-xl';
+      optDiv.setAttribute('data-value', targetCat);
+      optDiv.setAttribute('tabindex', '0');
+      optDiv.setAttribute('onclick', `selectCustomDropdownOption('detail-edit-category', '${targetCat}', event)`);
+      optDiv.innerHTML = `<span class="truncate">${targetCat}</span>`;
+      catMenu.appendChild(optDiv);
     }
 
     const isRefund = Boolean(foundTx && foundTx.refund);
@@ -4458,55 +4235,25 @@
   });
 
   function saveUserTransactionsToStorage() {
-    const allTx = [];
-    Object.keys(allMonthlyData).forEach(mKey => {
-      const m = allMonthlyData[mKey];
-      if (m && Array.isArray(m.txs)) {
-        m.txs.forEach(t => {
-          if (t && !t.softDeleted) allTx.push(t);
-        });
-      }
-    });
-    if (window.LedgerStorage && typeof window.LedgerStorage.saveTransactions === 'function') {
-      try {
-        const res = window.LedgerStorage.saveTransactions(allTx);
-        if (res && res.quotaExceeded) {
-          showToast('本地存储空间已满，部分交易保存受限，请及时导出备份并清理历史数据', 'error');
-        }
-        return res;
-      } catch (e) {
-        console.error('[SingWallet] LedgerStorage.saveTransactions error:', e);
-        showToast('本地保存账单异常：' + (e && e.message ? e.message : '存储错误'), 'error');
-        return { ok: false, quotaExceeded: false, error: e };
-      }
-    }
     try {
+      const allTx = [];
+      Object.keys(allMonthlyData).forEach(mKey => {
+        const m = allMonthlyData[mKey];
+        if (m && Array.isArray(m.txs)) {
+          m.txs.forEach(t => {
+            if (!t.softDeleted) allTx.push(t);
+          });
+        }
+      });
       localStorage.setItem('singwallet_user_transactions', JSON.stringify(allTx));
-      return { ok: true, quotaExceeded: false };
-    } catch (e) {
-      console.error('[SingWallet] saveUserTransactionsToStorage error:', e);
-      const isQuota = Boolean(e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014));
-      if (isQuota) {
-        showToast('本地存储空间已满，无法保存新账单，请及时导出备份并清理空间', 'error');
-      } else {
-        showToast('保存账单数据失败：' + (e && e.message ? e.message : '未知错误'), 'error');
-      }
-      return { ok: false, quotaExceeded: isQuota, error: e };
-    }
+    } catch (e) {}
   }
 
   function loadUserTransactionsFromStorage() {
     try {
-      let list = null;
-      if (window.LedgerStorage && typeof window.LedgerStorage.loadTransactions === 'function') {
-        const loaded = window.LedgerStorage.loadTransactions();
-        if (Array.isArray(loaded)) list = loaded;
-      }
-      if (!list) {
-        const raw = localStorage.getItem('singwallet_user_transactions');
-        if (!raw) return [];
-        list = JSON.parse(raw);
-      }
+      const raw = localStorage.getItem('singwallet_user_transactions');
+      if (!raw) return [];
+      const list = JSON.parse(raw);
       if (!Array.isArray(list)) return [];
       let needsResave = false;
       const repaired = list.map(item => {
@@ -4522,11 +4269,7 @@
         return item;
       });
       if (needsResave) {
-        if (window.LedgerStorage && typeof window.LedgerStorage.saveTransactions === 'function') {
-          window.LedgerStorage.saveTransactions(repaired);
-        } else {
-          localStorage.setItem('singwallet_user_transactions', JSON.stringify(repaired));
-        }
+        localStorage.setItem('singwallet_user_transactions', JSON.stringify(repaired));
       }
       repaired.forEach(item => {
         if (!item) return;
@@ -4538,7 +4281,6 @@
       });
       return repaired;
     } catch (e) {
-      console.warn('[SingWallet] loadUserTransactionsFromStorage error:', e);
       return [];
     }
   }
@@ -4776,25 +4518,18 @@
     let html = '';
     for (const group of sortedGroups) {
       const { groupDate, groupName, items } = group;
-      let dayNetCents = 0;
-      items.forEach(cur => {
-        const curNorm = normalizeTxCategory(cur);
-        const isInc = Boolean(cur.refund || cur.type === 'income' || curNorm.catName === '工资收入' || curNorm.parentCat === '工资收入');
-        const amtCents = Math.abs(_toCents(cur.amount !== undefined ? cur.amount : (cur.amountInCents ? cur.amountInCents / 100 : 0)));
-        dayNetCents += isInc ? amtCents : -amtCents;
-      });
-      const daySubtotalLabel = formatDaySubtotalText(dayNetCents);
+      const subtotal = items.reduce((acc, cur) => Math.round((acc + (Number(cur.amount) || 0)) * 100) / 100, 0);
       html += `
-        <div class="space-y-2 day-group" data-date="${_escapeHtml(groupDate)}" data-group-date="${_escapeHtml(groupDate)}">
-          <div onclick="toggleDayFilter('${_escapeJsAttr(groupDate)}', '${_escapeJsAttr(groupName)}')" class="day-header flex items-center justify-between text-xs text-slate-400 px-2 py-1.5 rounded-xl hover:bg-slate-800/80 cursor-pointer tap-highlight font-mono group transition-all" title="点击日标题或小计，即可按日筛选">
+        <div class="space-y-2 day-group" data-date="${groupDate}" data-group-date="${groupDate}">
+          <div onclick="toggleDayFilter('${groupDate}', '${groupName}')" class="day-header flex items-center justify-between text-xs text-slate-400 px-2 py-1.5 rounded-xl hover:bg-slate-800/80 cursor-pointer tap-highlight font-mono group transition-all" title="点击日标题或小计，即可按日筛选">
             <div class="flex items-center space-x-2">
-              <span class="font-bold text-slate-200 group-hover:text-indigo-300 transition-colors">${_escapeHtml(groupName)}</span>
+              <span class="font-bold text-slate-200 group-hover:text-indigo-300 transition-colors">${groupName}</span>
               <span class="day-filter-btn text-[10px] bg-slate-800 group-hover:bg-indigo-600 text-indigo-300 group-hover:text-white px-2 py-0.5 rounded-lg border border-slate-700/80 transition-all flex items-center space-x-1">
                 <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
                 <span class="day-filter-btn-text">仅看此日</span>
               </span>
             </div>
-            <span class="day-subtotal group-hover:text-indigo-300 font-semibold transition-colors">${daySubtotalLabel}</span>
+            <span class="day-subtotal group-hover:text-indigo-300 font-semibold transition-colors">小计: -¥ ${subtotal.toFixed(2)}</span>
           </div>
       `;
       items.forEach(tx => {
@@ -4804,10 +4539,10 @@
           const icon = getAppCatIcon(parentCat, tx.icon || getAppStatusIcon('fallbackCategory'));
           let iconSquircle = window.renderSquircleIcon 
             ? window.renderSquircleIcon(parentCat, 'w-10 h-10') 
-            : `<div class="w-10 h-10 rounded-2xl bg-slate-700/50 flex items-center justify-center text-lg shrink-0 border border-slate-600/40 shadow-sm" data-cat-icon="${_escapeHtml(parentCat)}">${icon}</div>`;
+            : `<div class="w-10 h-10 rounded-2xl bg-slate-700/50 flex items-center justify-center text-lg shrink-0 border border-slate-600/40 shadow-sm" data-cat-icon="${parentCat}">${icon}</div>`;
           
           if (!iconSquircle.includes('data-cat-icon')) {
-            iconSquircle = iconSquircle.replace('class="', `data-cat-icon="${_escapeHtml(parentCat)}" class="`);
+            iconSquircle = iconSquircle.replace('class="', `data-cat-icon="${parentCat}" class="`);
           }
 
           const displayTime = tx.timeOnly || tx.time || (tx.txTime && tx.txTime.includes(' ') ? tx.txTime.split(' ')[1] : '') || '';
@@ -4820,23 +4555,23 @@
           const isIncomeOrRefund = Boolean(tx.refund || tx.type === 'income' || catName === '工资收入' || parentCat === '工资收入');
 
           html += `
-          <div data-cat="${_escapeHtml(catName)}" data-parent="${_escapeHtml(parentCat)}" data-category="${_escapeHtml(parentCat)}" data-type="${isIncomeOrRefund ? 'income' : 'expense'}" data-date="${_escapeHtml(tx.date || tx.txDate || groupDate)}" data-time="${_escapeHtml(fullTxTime)}" data-account="${_escapeHtml(paymentDisplay)}" data-channel="${_escapeHtml(parsedChan)}" data-order="${_escapeHtml(txOrd)}" data-amount="${numAmt}" class="tx-item flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 shadow-md hover:border-indigo-500 transition-all cursor-pointer tap-highlight animate-fadeIn" id="${_escapeHtml(tx.id)}" onclick="viewTransactionDetail('${_escapeJsAttr(txTitle)}', '${numAmt.toFixed(2)}', '${_escapeJsAttr(parentCat)}（${_escapeJsAttr(catName)}）', '${_escapeJsAttr(paymentDisplay)}', '${_escapeJsAttr(fullTxTime)}', '${_escapeJsAttr(txOrd)}', '${_escapeJsAttr(tx.id)}')">
+          <div data-cat="${catName}" data-parent="${parentCat}" data-category="${parentCat}" data-type="${isIncomeOrRefund ? 'income' : 'expense'}" data-date="${tx.date || tx.txDate || groupDate}" data-time="${fullTxTime}" data-account="${paymentDisplay}" data-channel="${parsedChan}" data-order="${txOrd}" data-amount="${numAmt}" class="tx-item flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 shadow-md hover:border-indigo-500 transition-all cursor-pointer tap-highlight animate-fadeIn" id="${tx.id}" onclick="viewTransactionDetail('${txTitle.replace(/'/g, "\\'")}', '${numAmt.toFixed(2)}', '${parentCat}（${catName}）', '${paymentDisplay}', '${fullTxTime}', '${txOrd}', '${tx.id}')">
             <div class="flex items-center space-x-3 min-w-0 flex-1 mr-2.5">
               ${iconSquircle}
               <div class="min-w-0 flex-1">
                 <div class="flex items-center">
-                  <span class="font-semibold text-sm text-slate-100 truncate">${_escapeHtml(txTitle)}</span>
+                  <span class="font-semibold text-sm text-slate-100 truncate">${txTitle}</span>
                 </div>
                 <div class="text-xs text-slate-400 mt-1 flex items-center space-x-1.5 truncate">
-                  <span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 shrink-0">${_escapeHtml(catName)}</span>
-                  <span class="text-slate-400 font-mono text-[11px] shrink-0">${_escapeHtml(displayTime)}</span>
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 shrink-0">${catName}</span>
+                  <span class="text-slate-400 font-mono text-[11px] shrink-0">${displayTime}</span>
                   ${tx.refund ? `<span class="text-slate-600 shrink-0">•</span><span class="text-purple-300 text-[10px] shrink-0 bg-purple-500/20 px-1 rounded">退款</span>` : ''}
                 </div>
               </div>
             </div>
             <div class="text-right shrink-0 flex flex-col items-end justify-center ml-2">
               <div class="font-bold text-base text-white font-mono tracking-tight whitespace-nowrap">${isIncomeOrRefund ? '+' : '-'}¥ ${numAmt.toFixed(2)}</div>
-              <span class="tx-source-tag text-[11px] text-slate-400 font-normal mt-1 block text-right whitespace-nowrap">${_escapeHtml(paymentDisplay)}</span>
+              <span class="tx-source-tag text-[11px] text-slate-400 font-normal mt-1 block text-right whitespace-nowrap">${paymentDisplay}</span>
             </div>
             <div role="button" class="tx-swipe-delete-btn" onclick="openTxDeleteConfirmModal(this.closest('.tx-item'), event)">
               <svg class="w-4 h-4 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
@@ -4871,7 +4606,7 @@
     wrap.className = "singwallet-toast-wrap absolute top-[160px] left-4 right-4 z-50 flex justify-center pointer-events-none";
     const t = document.createElement('div');
     t.className = "bg-slate-800/95 text-white border border-slate-700/90 px-4 py-2 rounded-2xl text-xs shadow-2xl flex items-center space-x-1.5 animate-fadeIn backdrop-blur-md max-w-full text-center pointer-events-auto";
-    t.innerHTML = `<span class="inline-flex items-center space-x-1.5">${_renderSafeIconAndText(msg)}</span>`;
+    t.innerHTML = `<span class="inline-flex items-center space-x-1.5">${msg}</span>`;
     wrap.appendChild(t);
     host.appendChild(wrap);
     setTimeout(() => {
@@ -5054,20 +4789,11 @@
       listEl.className = "grid grid-cols-2 gap-2 py-1";
       listEl.innerHTML = categories.map(cat => {
         const icon = getAppCatIcon(cat);
-        const safeCatAttr = _escapeHtml(cat);
-        const safeCatJs = _escapeJsAttr(cat);
+        const safeCat = String(cat).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         return `
-          <div onclick="handleCategoryPillClick('${safeCatJs}', event)" class="category-pill-item group flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-900/75 hover:bg-slate-900 active:scale-[0.98] border border-slate-700/60 hover:border-indigo-500/50 transition-all min-h-[36px] cursor-pointer select-none tap-highlight" title="单击修改名称，双击或右侧按钮删除">
-            <span class="w-6 h-6 rounded-lg bg-slate-800/90 border border-slate-700/50 inline-flex items-center justify-center p-1 shrink-0 aspect-square text-indigo-300" data-cat-icon="${safeCatAttr}">${icon}</span>
-            <span class="text-xs font-medium text-slate-200 truncate flex-1 min-w-0">${safeCatAttr}</span>
-            <div class="flex items-center gap-0.5 shrink-0">
-              <button type="button" class="cat-item-action-btn text-slate-400 hover:text-indigo-300 hover:bg-indigo-500/20 transition-colors" title="编辑分类" aria-label="编辑分类" onclick="openEditCategoryModal('${safeCatJs}', event)">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-              </button>
-              <button type="button" class="cat-item-action-btn text-slate-400 hover:text-rose-300 hover:bg-rose-500/20 transition-colors" title="删除分类" aria-label="删除分类" onclick="openCategoryDeleteConfirmModal('${safeCatJs}', event)">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-              </button>
-            </div>
+          <div onclick="handleCategoryPillClick('${safeCat}', event)" class="category-pill-item group flex items-center space-x-2 px-2.5 py-1.5 rounded-xl bg-slate-900/75 hover:bg-slate-900 active:scale-[0.98] border border-slate-700/60 hover:border-indigo-500/50 transition-all min-h-[36px] cursor-pointer select-none tap-highlight" title="单击修改名称，双击删除分类">
+            <span class="w-6 h-6 rounded-lg bg-slate-800/90 border border-slate-700/50 inline-flex items-center justify-center p-1 shrink-0 aspect-square text-indigo-300" data-cat-icon="${cat}">${icon}</span>
+            <span class="text-xs font-medium text-slate-200 truncate flex-1">${cat}</span>
           </div>
         `;
       }).join('');
@@ -5080,13 +4806,11 @@
       menuDraft.innerHTML = categories.map(cat => {
         const isSel = cat === curDraftVal ? 'selected' : '';
         const icon = getAppCatIcon(cat);
-        const safeCatAttr = _escapeHtml(cat);
-        const safeCatJs = _escapeJsAttr(cat);
         return `
-          <div class="custom-dropdown-option rounded-xl ${isSel}" tabindex="0" data-value="${safeCatAttr}" onclick="onDraftCategorySelect('', '${safeCatJs}', event)">
+          <div class="custom-dropdown-option rounded-xl ${isSel}" tabindex="0" data-value="${cat}" onclick="onDraftCategorySelect('', '${cat}', event)">
             <div class="flex items-center space-x-2">
-              <span class="w-4 h-4 inline-flex items-center justify-center shrink-0" data-cat-icon="${safeCatAttr}">${icon}</span>
-              <span class="opt-text truncate font-medium">${safeCatAttr}</span>
+              <span class="w-4 h-4 inline-flex items-center justify-center shrink-0" data-cat-icon="${cat}">${icon}</span>
+              <span class="opt-text truncate font-medium">${cat}</span>
             </div>
             <span class="opt-check">✓</span>
           </div>
@@ -5101,13 +4825,11 @@
       menuManual.innerHTML = categories.map(cat => {
         const isSel = cat === curManualVal ? 'selected' : '';
         const icon = getAppCatIcon(cat);
-        const safeCatAttr = _escapeHtml(cat);
-        const safeCatJs = _escapeJsAttr(cat);
         return `
-          <div class="custom-dropdown-option rounded-xl ${isSel}" tabindex="0" data-value="${safeCatAttr}" onclick="selectCustomDropdownOption('manual-category', '${safeCatJs}', event)">
+          <div class="custom-dropdown-option rounded-xl ${isSel}" tabindex="0" data-value="${cat}" onclick="selectCustomDropdownOption('manual-category', '${cat}', event)">
             <div class="flex items-center space-x-1.5">
-              <span data-cat-icon="${safeCatAttr}" class="w-4 h-4 mr-1.5 flex items-center justify-center shrink-0">${icon}</span>
-              <span class="truncate">${safeCatAttr}</span>
+              <span data-cat-icon="${cat}" class="w-4 h-4 mr-1.5 flex items-center justify-center shrink-0">${icon}</span>
+              <span class="truncate">${cat}</span>
             </div>
             <span class="opt-check">✓</span>
           </div>
@@ -5122,13 +4844,11 @@
       menuDetailCat.innerHTML = categories.map(cat => {
         const isSel = cat === curDetailCatVal ? 'selected' : '';
         const icon = getAppCatIcon(cat);
-        const safeCatAttr = _escapeHtml(cat);
-        const safeCatJs = _escapeJsAttr(cat);
         return `
-          <div class="custom-dropdown-option rounded-xl ${isSel}" tabindex="0" data-value="${safeCatAttr}" onclick="selectCustomDropdownOption('detail-edit-category', '${safeCatJs}', event)">
+          <div class="custom-dropdown-option rounded-xl ${isSel}" tabindex="0" data-value="${cat}" onclick="selectCustomDropdownOption('detail-edit-category', '${cat}', event)">
             <div class="flex items-center space-x-1.5">
-              <span data-cat-icon="${safeCatAttr}" class="w-4 h-4 mr-1.5 flex items-center justify-center shrink-0">${icon}</span>
-              <span class="truncate">${safeCatAttr}</span>
+              <span data-cat-icon="${cat}" class="w-4 h-4 mr-1.5 flex items-center justify-center shrink-0">${icon}</span>
+              <span class="truncate">${cat}</span>
             </div>
             <span class="opt-check">✓</span>
           </div>
@@ -5152,20 +4872,18 @@
 
       grid.innerHTML = categories.map(cat => {
         const subtitle = defaultSubtitles[cat] || '自定义分类标签';
-        const safeCatAttr = _escapeHtml(cat);
-        const safeCatJs = _escapeJsAttr(cat);
-        const safeSubAttr = _escapeHtml(subtitle);
-        const safeSubJs = _escapeJsAttr(subtitle);
+        const safeCat = String(cat).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const safeSubtitle = String(subtitle).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         const icon = getAppCatIcon(cat);
         const squircleHtml = (typeof renderSquircleIcon === 'function')
           ? renderSquircleIcon(cat, 'md')
-          : (window.renderSquircleIcon ? window.renderSquircleIcon(cat, 'md') : `<div class="md rounded-2xl bg-slate-700/50 flex items-center justify-center text-lg shrink-0 border border-slate-600/40 shadow-sm" data-cat-icon="${safeCatAttr}">${icon}</div>`);
+          : (window.renderSquircleIcon ? window.renderSquircleIcon(cat, 'md') : `<div class="md rounded-2xl bg-slate-700/50 flex items-center justify-center text-lg shrink-0 border border-slate-600/40 shadow-sm" data-cat-icon="${cat}">${icon}</div>`);
 
         return `
-          <div data-category-name="${safeCatAttr}" onclick="selectCategory('', '${safeCatJs}', '${safeSubJs}')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
+          <div data-category-name="${cat}" onclick="selectCategory('', '${safeCat}', '${safeSubtitle}')" class="p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 text-center cursor-pointer hover:border-indigo-500/60 tap-highlight transition-all active:scale-95 flex flex-col items-center justify-center">
             ${squircleHtml}
-            <span class="font-medium text-slate-200 text-[11px] block whitespace-nowrap mt-1">${safeCatAttr}</span>
-            <span class="text-[9px] text-slate-400 block whitespace-nowrap truncate max-w-full">${safeSubAttr}</span>
+            <span class="font-medium text-slate-200 text-[11px] block whitespace-nowrap mt-1">${cat}</span>
+            <span class="text-[9px] text-slate-400 block whitespace-nowrap truncate max-w-full">${subtitle}</span>
           </div>
         `;
       }).join('');
@@ -5180,12 +4898,10 @@
       categories.forEach(cat => {
         const icon = getAppCatIcon(cat);
         const isActive = (!isAllActive && activeCatSet && activeCatSet.has(cat)) ? 'active-tag' : '';
-        const safeCatAttr = _escapeHtml(cat);
-        const safeCatJs = _escapeJsAttr(cat);
         html += `
-          <span onclick="toggleModalCat(this, '${safeCatJs}')" class="modal-cat-tag ${isActive} px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1">
-            <span class="w-4 h-4 inline-flex items-center justify-center shrink-0" data-cat-icon="${safeCatAttr}">${icon}</span>
-            <span>${safeCatAttr}</span>
+          <span onclick="toggleModalCat(this, '${cat}')" class="modal-cat-tag ${isActive} px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 cursor-pointer tap-highlight flex items-center space-x-1">
+            <span class="w-4 h-4 inline-flex items-center justify-center shrink-0" data-cat-icon="${cat}">${icon}</span>
+            <span>${cat}</span>
           </span>
         `;
       });
@@ -5727,7 +5443,7 @@
     return Number(num.toFixed(2)).toString();
   }
 
-  // Fallback calculation for category breakdown (integer cents)
+  // Fallback calculation for category breakdown
   function computeCategoryBreakdownFallback(transactions = [], activeCategories = null) {
     const activeList = (Array.isArray(activeCategories) && activeCategories.length > 0)
       ? activeCategories
@@ -5738,7 +5454,7 @@
       '#06b6d4', '#ef4444', '#14b8a6', '#f97316', '#84cc16'
     ];
 
-    const totalsCents = {};
+    const totals = {};
     if (Array.isArray(transactions)) {
       transactions.forEach(tx => {
         if (!tx || tx.isIncome || tx.isRefund || tx.type === 'income' || tx.type === 'refund') return;
@@ -5748,24 +5464,24 @@
           ? resolveParentCategory(rawCat, tx.merchant || tx.name || '')
           : (rawCat || '其他支出');
         if (!activeSet.has(resolvedCat)) return;
-        const amtCents = Math.abs(_toCents(tx.amount));
-        if (amtCents <= 0) return;
-        totalsCents[resolvedCat] = (totalsCents[resolvedCat] || 0) + amtCents;
+        const amt = Math.abs(parseFloat(tx.amount) || 0);
+        if (amt <= 0) return;
+        totals[resolvedCat] = (totals[resolvedCat] || 0) + amt;
       });
     }
 
-    const totalCents = Object.values(totalsCents).reduce((a, b) => a + b, 0);
-    if (totalCents <= 0) {
+    const total = Object.values(totals).reduce((a, b) => a + b, 0);
+    if (total <= 0) {
       return { totalExpense: 0, totalExpenseText: '0', items: [] };
     }
 
-    const sortedCats = Object.keys(totalsCents).sort((a, b) => totalsCents[b] - totalsCents[a]);
+    const sortedCats = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
     const rawItems = sortedCats.map((cat, idx) => {
-      const catCents = totalsCents[cat];
-      const ratio = catCents / totalCents;
+      const catTotal = totals[cat];
+      const ratio = catTotal / total;
       const exact = ratio * 100;
       const floor = Math.floor(exact);
-      return { cat, catTotal: catCents / 100, ratio, floor, remainder: exact - floor, origIdx: idx };
+      return { cat, catTotal, ratio, floor, remainder: exact - floor, origIdx: idx };
     });
 
     const diff = 100 - rawItems.reduce((acc, it) => acc + it.floor, 0);
@@ -5788,10 +5504,9 @@
       };
     });
 
-    const totalYuan = totalCents / 100;
     return {
-      totalExpense: Number(totalYuan.toFixed(2)),
-      totalExpenseText: formatCompactAmount(totalYuan),
+      totalExpense: Number(total.toFixed(2)),
+      totalExpenseText: formatCompactAmount(total),
       items: items
     };
   }
@@ -5894,7 +5609,7 @@
       const dash = itemRatio * C;
       const offset = currentOffset;
       currentOffset += dash;
-      return `<circle class="pie-slice" data-category="${_escapeHtml(item.category)}" cx="32" cy="32" r="22" fill="none" stroke="${_escapeHtml(item.color)}" stroke-width="10" stroke-dasharray="${dash.toFixed(2)} ${C.toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 32 32)" />`;
+      return `<circle class="pie-slice" data-category="${item.category}" cx="32" cy="32" r="22" fill="none" stroke="${item.color}" stroke-width="10" stroke-dasharray="${dash.toFixed(2)} ${C.toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 32 32)" />`;
     }).join('');
 
     chartContainer.innerHTML = `
@@ -5904,7 +5619,7 @@
       </svg>
     `;
 
-    legendContainer.innerHTML = items.map(item => `<div class="monthly-pie-legend-item flex items-center gap-1.5 leading-tight truncate text-slate-100 shrink-0" data-category="${_escapeHtml(item.category)}" title="${_escapeHtml(item.label)}"><span class="w-1.5 h-1.5 rounded-full shrink-0" style="background-color: ${_escapeHtml(item.color)}"></span><span class="truncate">${_escapeHtml(item.label)}</span></div>`).join('');
+    legendContainer.innerHTML = items.map(item => `<div class="monthly-pie-legend-item flex items-center gap-1.5 leading-tight truncate text-slate-100 shrink-0" data-category="${item.category}" title="${item.label}"><span class="w-1.5 h-1.5 rounded-full shrink-0" style="background-color: ${item.color}"></span><span class="truncate">${item.label}</span></div>`).join('');
 
     legendContainer.scrollTop = 0;
     const updateLegendScrollMask = () => {
@@ -6235,10 +5950,7 @@
   window.committedOrderIds = committedOrderIds;
   Object.defineProperty(window, 'deletedItems', {
     get: () => deletedItems,
-    set: (val) => {
-      deletedItems = Array.isArray(val) ? val : [];
-      saveTrashItemsToStorage();
-    },
+    set: (val) => { deletedItems = val; },
     configurable: true
   });
   Object.defineProperty(window, 'lastDeletedId', {
@@ -6383,7 +6095,7 @@
     }
   }
 
-  function buildSanitizedBackupSnapshot() {
+  function exportFullBackupSnapshot() {
     const rawCategories = (window.DomainRegistry && typeof window.DomainRegistry.getParentCategories === 'function')
       ? window.DomainRegistry.getParentCategories()
       : (window.CORE_PARENT_CATEGORIES || ['餐饮美食', '交通出行', '日常购物', '休闲娱乐', '生活缴费', '医疗健康', '其他支出', '工资收入']);
@@ -6401,37 +6113,28 @@
     if (txList.length === 0) {
       const items = Array.from(document.querySelectorAll('#transactions-list .tx-item, #tx-list-container .tx-item, .tx-item'))
         .filter(el => !el.classList.contains('soft-deleted'));
-      txList = items.map(el => {
-        const amt = parseFloat(el.dataset.amount) || 0;
-        return {
-          id: el.id,
-          merchant: el.querySelector('.truncate')?.innerText || '账单',
-          amount: amt,
-          amountInCents: _toCents(amt),
-          catName: el.dataset.cat || el.dataset.category || '其他支出',
-          category: el.dataset.category || '其他支出',
-          parentCat: el.dataset.parent || el.dataset.category || '其他支出',
-          channel: el.dataset.channel || el.dataset.account || '微信',
-          account: el.dataset.account || '钱包',
-          txDate: el.dataset.date || getDynamicTodayStr(),
-          txTime: el.dataset.date ? (el.dataset.date + ' 12:00:00') : formatCurrentDateTime(),
-          orderId: el.id + '_ORDER',
-          badge: '自动识别'
-        };
-      });
+      txList = items.map(el => ({
+        id: el.id,
+        merchant: el.querySelector('.truncate')?.innerText || '账单',
+        amount: parseFloat(el.dataset.amount) || 0,
+        amountInCents: Math.round((parseFloat(el.dataset.amount) || 0) * 100),
+        catName: el.dataset.cat || el.dataset.category || '其他支出',
+        category: el.dataset.category || '其他支出',
+        parentCat: el.dataset.parent || el.dataset.category || '其他支出',
+        channel: el.dataset.channel || el.dataset.account || '微信',
+        account: el.dataset.account || '钱包',
+        txDate: el.dataset.date || getDynamicTodayStr(),
+        txTime: el.dataset.date ? (el.dataset.date + ' 12:00:00') : formatCurrentDateTime(),
+        orderId: el.id + '_ORDER',
+        badge: '自动识别'
+      }));
     }
 
-    // 脱敏处理：导出的 vlmConfig 副本强制清空 apiKey，且绝不包含 github_token
     const vlm = window.vlmConfig ? JSON.parse(JSON.stringify(window.vlmConfig)) : {};
-    if (vlm && typeof vlm === 'object') {
-      vlm.apiKey = '';
-      delete vlm.githubToken;
-      delete vlm.token;
-    }
     const orders = window.committedOrderIds ? Array.from(window.committedOrderIds) : [];
     const currentVer = localStorage.getItem('singwallet_app_version') || '1.0.0';
 
-    return {
+    const snapshot = {
       format: "singwallet_backup",
       version: "2.0",
       schemaVersion: 2,
@@ -6452,13 +6155,13 @@
         transactions: txList
       }
     };
-  }
-
-  function exportFullBackupSnapshot() {
-    const snapshot = buildSanitizedBackupSnapshot();
 
     window.__lastExportedBackupJson = snapshot;
     window.__lastExportedBackupJsonStr = JSON.stringify(snapshot, null, 2);
+
+    try {
+      localStorage.setItem('singwallet_latest_backup', JSON.stringify(snapshot));
+    } catch (e) {}
 
     // Trigger backup file export: AndroidBridge native file save or browser file download
     try {
@@ -6492,300 +6195,11 @@
       console.warn('Backup file download skipped or failed:', e);
     }
 
-    showToast('已导出脱敏全量备份 (含账单与分类配置)');
+    showToast('已导出全量备份 (含账单与分类配置)');
     updateBackupStatsLabel();
 
     return snapshot;
   }
-
-  function _uint8ToBase64(u8) {
-    let bin = '';
-    const chunk = 0x8000;
-    for (let i = 0; i < u8.length; i += chunk) {
-      bin += String.fromCharCode.apply(null, u8.subarray(i, i + chunk));
-    }
-    return btoa(bin);
-  }
-
-  function _base64ToUint8(b64) {
-    const bin = atob(String(b64 || '').trim());
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) {
-      out[i] = bin.charCodeAt(i);
-    }
-    return out;
-  }
-
-  let _swbkModalMode = 'export';
-  let _swbkModalCallback = null;
-
-  function openSwbkPasswordModal(mode, onSubmit) {
-    _swbkModalMode = mode === 'import' ? 'import' : 'export';
-    _swbkModalCallback = typeof onSubmit === 'function' ? onSubmit : null;
-
-    const modal = document.getElementById('swbk-password-modal');
-    const titleEl = document.getElementById('swbk-modal-title');
-    const descEl = document.getElementById('swbk-modal-desc');
-    const pwdInput = document.getElementById('swbk-password-input');
-    const confirmWrap = document.getElementById('swbk-password-confirm-wrap');
-    const confirmInput = document.getElementById('swbk-password-confirm-input');
-    const errEl = document.getElementById('swbk-password-error');
-    const confirmBtn = document.getElementById('btn-swbk-confirm');
-
-    if (titleEl) {
-      titleEl.innerText = _swbkModalMode === 'export' ? '加密导出备份 (.swbk)' : '解密恢复备份 (.swbk)';
-    }
-    if (descEl) {
-      descEl.innerText = _swbkModalMode === 'export'
-        ? '请设置备份加密口令（AES-GCM 加密，请妥善牢记，忘记无法找回）'
-        : '请输入该 .swbk 加密备份文件的解密口令';
-    }
-    if (confirmWrap) {
-      if (_swbkModalMode === 'export') confirmWrap.classList.remove('hidden');
-      else confirmWrap.classList.add('hidden');
-    }
-    if (confirmBtn) {
-      confirmBtn.innerText = _swbkModalMode === 'export' ? '加密导出' : '解密导入';
-    }
-    if (pwdInput) pwdInput.value = '';
-    if (confirmInput) confirmInput.value = '';
-    if (errEl) {
-      errEl.innerText = '';
-      errEl.classList.add('hidden');
-    }
-    if (modal) modal.classList.remove('hidden');
-    setTimeout(() => {
-      if (pwdInput) pwdInput.focus();
-    }, 30);
-  }
-
-  function closeSwbkPasswordModal() {
-    const modal = document.getElementById('swbk-password-modal');
-    if (modal) modal.classList.add('hidden');
-    _swbkModalCallback = null;
-  }
-
-  async function submitSwbkPasswordModal() {
-    const pwdInput = document.getElementById('swbk-password-input');
-    const confirmInput = document.getElementById('swbk-password-confirm-input');
-    const errEl = document.getElementById('swbk-password-error');
-
-    const pwd = pwdInput ? pwdInput.value : '';
-    const showErr = (msg) => {
-      if (errEl) {
-        errEl.innerText = msg;
-        errEl.classList.remove('hidden');
-      }
-    };
-
-    if (!pwd || pwd.length < 4) {
-      showErr('请输入至少 4 位加密口令');
-      return;
-    }
-    if (_swbkModalMode === 'export') {
-      const confirmPwd = confirmInput ? confirmInput.value : '';
-      if (pwd !== confirmPwd) {
-        showErr('两次输入的口令不一致');
-        return;
-      }
-    }
-
-    const cb = _swbkModalCallback;
-    closeSwbkPasswordModal();
-    if (cb) {
-      await cb(pwd);
-    }
-  }
-
-  async function exportEncryptedSwbkBackup(password) {
-    if (typeof password !== 'string' || !password) {
-      openSwbkPasswordModal('export', (pwd) => exportEncryptedSwbkBackup(pwd));
-      return;
-    }
-
-    try {
-      const snapshot = buildSanitizedBackupSnapshot();
-      const now = new Date();
-      const yyyy = now.getFullYear();
-      const mm = String(now.getMonth() + 1).padStart(2, '0');
-      const dd = String(now.getDate()).padStart(2, '0');
-      const filename = `singwallet_backup_${yyyy}${mm}${dd}.swbk`;
-
-      if (window.SwbkCrypto && typeof window.SwbkCrypto.packSwbkV1 === 'function') {
-        const packed = await window.SwbkCrypto.packSwbkV1(snapshot, password);
-        const bytes = packed instanceof Uint8Array ? packed : new Uint8Array(packed);
-        if (window.AndroidBridge && typeof window.AndroidBridge.saveSwbkBackupFile === 'function') {
-          window.AndroidBridge.saveSwbkBackupFile(_uint8ToBase64(bytes), filename);
-        } else {
-          const blob = new Blob([bytes], { type: 'application/octet-stream' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
-          setTimeout(() => {
-            if (a.parentNode) a.parentNode.removeChild(a);
-            URL.revokeObjectURL(url);
-          }, 150);
-        }
-        showToast('已导出 AES 加密备份 (.swbk)');
-        return true;
-      } else if (window.AndroidBridge && typeof window.AndroidBridge.saveSwbkBackupFile === 'function') {
-        showToast('未加载浏览器加密模块，请升级或检查脚本加载', 'error');
-        return false;
-      } else {
-        showToast('加密引擎未就绪，无法导出 .swbk 文件', 'error');
-        return false;
-      }
-    } catch (e) {
-      console.error('[SingWallet] exportEncryptedSwbkBackup error:', e);
-      showToast('加密导出失败: ' + (e && e.message ? e.message : '未知错误'), 'error');
-      return false;
-    }
-  }
-
-  function exportLedgerToCsv() {
-    try {
-      const allTx = [];
-      if (window.allMonthlyData) {
-        Object.keys(window.allMonthlyData).forEach(mKey => {
-          const m = window.allMonthlyData[mKey];
-          if (m && Array.isArray(m.txs)) {
-            m.txs.forEach(t => {
-              if (t && !t.softDeleted) allTx.push(t);
-            });
-          }
-        });
-      }
-      allTx.sort((a, b) => {
-        const aTime = a.txTime || a.orderTime || a.fullTime || `${a.date || a.txDate || ''} ${a.time || ''}`.trim();
-        const bTime = b.txTime || b.orderTime || b.fullTime || `${b.date || b.txDate || ''} ${b.time || ''}`.trim();
-        return bTime.localeCompare(aTime);
-      });
-
-      const now = new Date();
-      const yyyy = now.getFullYear();
-      const mm = String(now.getMonth() + 1).padStart(2, '0');
-      const dd = String(now.getDate()).padStart(2, '0');
-      const filename = `singwallet_ledger_${yyyy}${mm}${dd}.csv`;
-
-      if (window.CsvExporter && typeof window.CsvExporter.exportCsvFile === 'function') {
-        const res = window.CsvExporter.exportCsvFile(window.allMonthlyData || allTx, filename);
-        const exportedCount = (res && typeof res.count === 'number') ? res.count : allTx.length;
-        showToast(`已导出 ${exportedCount} 条流水明细 CSV`);
-        return true;
-      }
-
-      const escapeCsvCell = (val) => {
-        let s = String(val ?? '');
-        if (/^[=+\-@\t\r]/.test(s)) {
-          s = "'" + s;
-        }
-        if (/[",\r\n]/.test(s)) {
-          s = '"' + s.replace(/"/g, '""') + '"';
-        }
-        return s;
-      };
-      const header = ['时间', '类型', '商户', '金额', '分类', '支付方式', '平台单号'];
-      const rows = allTx.map(tx => {
-        const norm = normalizeTxCategory(tx);
-        const isInc = Boolean(tx.refund || tx.type === 'income' || norm.catName === '工资收入' || norm.parentCat === '工资收入');
-        const typeLabel = tx.refund ? '退款' : (isInc ? '收入' : '支出');
-        const amt = (Math.abs(_toCents(tx.amount)) / 100).toFixed(2);
-        const payDisp = formatTxPaymentDisplay(tx.channel, tx.account, tx.payment);
-        const timeStr = tx.txTime || tx.orderTime || tx.fullTime || `${tx.txDate || tx.date || ''} ${tx.timeOnly || tx.time || ''}`.trim();
-        return [
-          timeStr,
-          typeLabel,
-          tx.merchant || tx.name || '',
-          amt,
-          norm.catName,
-          payDisp,
-          tx.orderId || ''
-        ].map(escapeCsvCell).join(',');
-      });
-      const csvContent = '\uFEFF' + [header.join(','), ...rows].join('\r\n');
-
-      if (window.AndroidBridge && typeof window.AndroidBridge.saveBackupFile === 'function') {
-        window.AndroidBridge.saveBackupFile(csvContent, filename);
-      } else {
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => {
-          if (a.parentNode) a.parentNode.removeChild(a);
-          URL.revokeObjectURL(url);
-        }, 150);
-      }
-      showToast(`已导出 ${allTx.length} 条流水明细 CSV`);
-      return true;
-    } catch (e) {
-      console.error('[SingWallet] exportLedgerToCsv error:', e);
-      showToast('导出 CSV 失败: ' + (e && e.message ? e.message : '未知错误'), 'error');
-      return false;
-    }
-  }
-
-  function _validateParsedBackupSnapshot(parsed) {
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return { valid: false, error: '导入失败：备份数据为空或格式无效' };
-    }
-    const validBackupKeys = [
-      'version', 'schemaVersion', 'dbSchemaVersion', 'backupMagic', 'format',
-      'transactions', 'user_transactions', 'allMonthlyData', 'monthlyData',
-      'categories', 'custom_categories', 'customCategories',
-      'budget', 'monthly_budget', 'vlm_configs', 'vlmConfig', 'data'
-    ];
-    const hasValidTopKey = validBackupKeys.some(k => Object.prototype.hasOwnProperty.call(parsed, k));
-    if (!hasValidTopKey) {
-      return { valid: false, error: '导入失败：未检测到有效备份结构字段' };
-    }
-    const rawData = (parsed.data && typeof parsed.data === 'object' && !Array.isArray(parsed.data))
-      ? parsed.data
-      : parsed;
-    if (!rawData || typeof rawData !== 'object' || Object.keys(rawData).length === 0) {
-      return { valid: false, error: '导入失败：备份内容为空对象' };
-    }
-    return { valid: true };
-  }
-
-  window.onNativeSwbkBackupSelected = function(base64Str, fileName) {
-    if (!base64Str) {
-      showToast('未读取到 .swbk 备份文件内容', 'error');
-      return false;
-    }
-    openSwbkPasswordModal('import', async (password) => {
-      try {
-        let decryptedObj = null;
-        if (window.AndroidBridge && typeof window.AndroidBridge.decryptSwbkBase64 === 'function') {
-          const jsonStr = window.AndroidBridge.decryptSwbkBase64(base64Str, password);
-          decryptedObj = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
-        } else if (window.SwbkCrypto && typeof window.SwbkCrypto.unpackSwbkV1 === 'function') {
-          const bytes = _base64ToUint8(base64Str);
-          decryptedObj = await window.SwbkCrypto.unpackSwbkV1(bytes, password);
-        } else {
-          showToast('解密引擎未就绪，无法解析 .swbk 文件', 'error');
-          return false;
-        }
-        const check = _validateParsedBackupSnapshot(decryptedObj);
-        if (!check.valid) {
-          showToast(check.error, 'error');
-          return false;
-        }
-        return importBackupFromJson(decryptedObj);
-      } catch (e) {
-        console.warn('[SingWallet] onNativeSwbkBackupSelected decrypt error:', e);
-        showToast('解密失败：口令错误或备份文件已损坏', 'error');
-        return false;
-      }
-    });
-    return true;
-  };
 
   function importBackupFromJson(jsonStrOrObj) {
     let snapshot = null;
@@ -6800,15 +6214,32 @@
       return false;
     }
 
-    const check = _validateParsedBackupSnapshot(snapshot);
-    if (!check.valid) {
-      showToast(check.error, 'error');
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+      showToast('导入失败：备份数据为空或格式无效');
+      return false;
+    }
+
+    // Bug 6 修复：校验解析后的 JSON 必须是非空对象且包含合法备份字段，禁止空对象 {} 静默导入成功
+    const validBackupKeys = [
+      'version', 'schemaVersion', 'dbSchemaVersion', 'backupMagic', 'format',
+      'transactions', 'user_transactions', 'allMonthlyData', 'monthlyData',
+      'categories', 'custom_categories', 'customCategories',
+      'budget', 'monthly_budget', 'vlm_configs', 'vlmConfig', 'data'
+    ];
+    const hasValidTopKey = validBackupKeys.some(k => Object.prototype.hasOwnProperty.call(snapshot, k));
+    if (!hasValidTopKey) {
+      showToast('导入失败：未检测到有效备份结构字段');
       return false;
     }
 
     const rawData = (snapshot.data && typeof snapshot.data === 'object' && !Array.isArray(snapshot.data))
       ? snapshot.data
       : snapshot;
+    const rawDataKeys = Object.keys(rawData);
+    if (rawDataKeys.length === 0) {
+      showToast('导入失败：备份内容为空对象');
+      return false;
+    }
 
     // 1. SQLite v1 -> v2 无损迁移与数据解构 (兼容 snake_case 与 camelCase 备份字段)
     const categories = rawData.categories || rawData.custom_categories || rawData.customCategories || [];
@@ -6837,30 +6268,22 @@
       }
     }
 
-    // 3. 还原 VLM 配置（保留当前设备已填 API Key 若导入备份为脱敏空键）
+    // 3. 还原 VLM 配置
     if (incomingVlm && typeof incomingVlm === 'object') {
-      const mergedIncoming = { ...incomingVlm };
-      if (!mergedIncoming.apiKey && window.vlmConfig && window.vlmConfig.apiKey) {
-        mergedIncoming.apiKey = window.vlmConfig.apiKey;
+      if (window.vlmConfig) {
+        window.vlmConfig = { ...window.vlmConfig, ...incomingVlm };
       }
-      const nextVlm = window.vlmConfig ? { ...window.vlmConfig, ...mergedIncoming } : mergedIncoming;
-      window.vlmConfig = nextVlm;
       try {
-        localStorage.setItem('singwallet_vlm_config', JSON.stringify(nextVlm));
+        localStorage.setItem('singwallet_vlm_config', JSON.stringify(incomingVlm));
       } catch (e) {}
       if (typeof syncVlmConfigToUI === 'function') {
         syncVlmConfigToUI();
       }
     }
 
-    // 4. 重建 committedOrderIds（先合并备份订单号，再由恢复后的活跃流水重算补齐）
-    if (window.committedOrderIds) {
-      window.committedOrderIds.clear();
-      if (Array.isArray(incomingOrders)) {
-        incomingOrders.forEach(ord => {
-          if (ord) window.committedOrderIds.add(String(ord).trim());
-        });
-      }
+    // 4. 还原 committedOrderIds
+    if (Array.isArray(incomingOrders) && window.committedOrderIds) {
+      incomingOrders.forEach(ord => window.committedOrderIds.add(ord));
     }
 
     // 5. 还原草稿队列
@@ -6872,66 +6295,27 @@
       }
     }
 
-    // 6. 还原 allMonthlyData & 账单流水 (无损字段填充 + 重算每月收支统计与单号索引)
+    // 6. 还原 allMonthlyData & 账单流水 (无损字段填充)
     if (incomingMonthlyData && typeof incomingMonthlyData === 'object' && window.allMonthlyData) {
       Object.keys(incomingMonthlyData).forEach(m => {
         const mObj = incomingMonthlyData[m];
         if (mObj && Array.isArray(mObj.txs)) {
           mObj.txs.forEach(t => {
-            if (!t) return;
             if (!t.orderId) t.orderId = 'ORD_' + t.id;
             if (t.amountInCents === undefined && t.amount !== undefined) {
-              t.amountInCents = _toCents(t.amount);
+              t.amountInCents = Math.round(t.amount * 100);
             }
             if (!t.badge) t.badge = '自动识别';
-            if (!t.softDeleted && t.orderId && window.committedOrderIds) {
-              const rawOrd = String(t.orderId).trim();
-              if (rawOrd && rawOrd !== '--') {
-                window.committedOrderIds.add(rawOrd);
-                if (typeof normalizeOrderId === 'function') {
-                  const normOrd = normalizeOrderId(rawOrd);
-                  if (normOrd) window.committedOrderIds.add(normOrd);
-                }
-              }
-            }
           });
         }
         window.allMonthlyData[m] = mObj;
       });
     } else if (incomingTransactions.length > 0 && window.allMonthlyData) {
       const activeMonthKey = `${currentActiveYear || '2026'}-${String(currentActiveMonth || '10').padStart(2, '0')}`;
-      incomingTransactions.forEach(t => {
-        if (!t) return;
-        const rawTime = t.txTime || t.orderTime || t.fullTime || '';
-        const txDate = t.txDate || t.date || (rawTime && rawTime.includes(' ') ? rawTime.split(' ')[0] : '') || '';
-        const targetKey = (/^\d{4}-\d{2}/.test(txDate)) ? txDate.slice(0, 7) : activeMonthKey;
-        if (!window.allMonthlyData[targetKey]) {
-          window.allMonthlyData[targetKey] = { net: '0.00', exp: '0.00', ref: '0.00', inc: '0.00', count: '0 笔', avg: '¥0.00', txs: [] };
-        }
-        if (!Array.isArray(window.allMonthlyData[targetKey].txs)) {
-          window.allMonthlyData[targetKey].txs = [];
-        }
-        if (t.amountInCents === undefined && t.amount !== undefined) {
-          t.amountInCents = _toCents(t.amount);
-        }
-        window.allMonthlyData[targetKey].txs.push(t);
-        if (!t.softDeleted && t.orderId && window.committedOrderIds) {
-          const rawOrd = String(t.orderId).trim();
-          if (rawOrd && rawOrd !== '--') {
-            window.committedOrderIds.add(rawOrd);
-            if (typeof normalizeOrderId === 'function') {
-              const normOrd = normalizeOrderId(rawOrd);
-              if (normOrd) window.committedOrderIds.add(normOrd);
-            }
-          }
-        }
-      });
-    }
-
-    if (window.allMonthlyData && typeof recalculateMonthTotalsFromTxs === 'function') {
-      Object.keys(window.allMonthlyData).forEach(mKey => {
-        recalculateMonthTotalsFromTxs(mKey);
-      });
+      if (!window.allMonthlyData[activeMonthKey]) {
+        window.allMonthlyData[activeMonthKey] = { net: '0.00', exp: '0.00', ref: '0.00', inc: '0.00', txs: [] };
+      }
+      window.allMonthlyData[activeMonthKey].txs = incomingTransactions;
     }
 
     saveUserTransactionsToStorage();
@@ -6972,45 +6356,6 @@
   function handleBackupFileUpload(event) {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
-    const isSwbk = file.name && file.name.toLowerCase().endsWith('.swbk');
-    if (isSwbk) {
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const buf = e.target.result;
-        event.target.value = '';
-        if (!buf) {
-          showToast('读取 .swbk 文件失败', 'error');
-          return;
-        }
-        const bytes = new Uint8Array(buf);
-        openSwbkPasswordModal('import', async (password) => {
-          try {
-            let decryptedObj = null;
-            if (window.SwbkCrypto && typeof window.SwbkCrypto.unpackSwbkV1 === 'function') {
-              decryptedObj = await window.SwbkCrypto.unpackSwbkV1(bytes, password);
-            } else if (window.AndroidBridge && typeof window.AndroidBridge.decryptSwbkBase64 === 'function') {
-              const jsonStr = window.AndroidBridge.decryptSwbkBase64(_uint8ToBase64(bytes), password);
-              decryptedObj = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
-            } else {
-              showToast('解密引擎未就绪，无法解析 .swbk 文件', 'error');
-              return;
-            }
-            const check = _validateParsedBackupSnapshot(decryptedObj);
-            if (!check.valid) {
-              showToast(check.error, 'error');
-              return;
-            }
-            importBackupFromJson(decryptedObj);
-          } catch (err) {
-            console.warn('[SingWallet] .swbk decrypt failed:', err);
-            showToast('解密失败：口令错误或文件已损坏', 'error');
-          }
-        });
-      };
-      reader.readAsArrayBuffer(file);
-      return;
-    }
-
     const reader = new FileReader();
     reader.onload = function(e) {
       const text = e.target.result;
@@ -7316,27 +6661,6 @@
           if (apkAsset) {
             apkDownloadUrl = apkAsset.browser_download_url || apkAsset.url || '';
           }
-          const verAsset = releaseData.assets.find(a => a && a.name === 'version.json');
-          if (verAsset) {
-            const verUrl = verAsset.browser_download_url || verAsset.url || '';
-            if (verUrl) {
-              try {
-                const verRes = await fetch(verUrl, { headers });
-                if (verRes && verRes.ok) {
-                  const verJson = await verRes.json();
-                  if (verJson && typeof verJson.sha256 === 'string' && /^[a-fA-F0-9]{64}$/.test(verJson.sha256.trim())) {
-                    sha256 = verJson.sha256.trim().toLowerCase();
-                  }
-                }
-              } catch (_) {}
-            }
-          }
-        }
-        if (!sha256 && releaseData.body) {
-          const shaMatch = String(releaseData.body).match(/(?:sha256|SHA-256)\s*[:：=]?\s*([a-fA-F0-9]{64})/i);
-          if (shaMatch && shaMatch[1]) {
-            sha256 = shaMatch[1].toLowerCase();
-          }
         }
       }
 
@@ -7404,7 +6728,7 @@
 
         const changelogEl = document.getElementById('ota-changelog-list');
         if (changelogEl) {
-          changelogEl.innerHTML = changelogLines.map(line => `<li>${_escapeHtml(line)}</li>`).join('');
+          changelogEl.innerHTML = changelogLines.map(line => `<li>${line}</li>`).join('');
         }
 
         const btnTrigger = document.getElementById('btn-trigger-ota-upgrade');
@@ -7414,7 +6738,7 @@
           btnTrigger.classList.add('bg-indigo-600', 'hover:bg-indigo-500');
           btnTrigger.innerHTML = `
             <span class="w-4 h-4 shrink-0" data-ui-icon="otaDownload"></span>
-            <span>${_escapeHtml(triggerBtnText)}</span>
+            <span>${triggerBtnText}</span>
           `;
           if (typeof IconRegistry !== 'undefined' && typeof IconRegistry.refreshAllIcons === 'function') {
             IconRegistry.refreshAllIcons();
@@ -7473,7 +6797,7 @@
         if (vTitle) vTitle.innerText = `发现新版本 ${displayVer}`;
         const changelogEl = document.getElementById('ota-changelog-list');
         if (changelogEl && Array.isArray(releaseInfo.changelog) && releaseInfo.changelog.length > 0) {
-          changelogEl.innerHTML = releaseInfo.changelog.map(item => `<li>${_escapeHtml(item)}</li>`).join('');
+          changelogEl.innerHTML = releaseInfo.changelog.map(item => `<li>${item}</li>`).join('');
         }
         const btnCheckText = document.getElementById('btn-check-ota-text');
         if (btnCheckText) btnCheckText.innerText = '检查更新';
@@ -7628,11 +6952,6 @@
   window.getEffectiveAppVersion = getEffectiveAppVersion;
   window.resolveGithubToken = resolveGithubToken;
   window.exportFullBackupSnapshot = exportFullBackupSnapshot;
-  window.exportEncryptedSwbkBackup = exportEncryptedSwbkBackup;
-  window.exportLedgerToCsv = exportLedgerToCsv;
-  window.openSwbkPasswordModal = openSwbkPasswordModal;
-  window.closeSwbkPasswordModal = closeSwbkPasswordModal;
-  window.submitSwbkPasswordModal = submitSwbkPasswordModal;
   window.importBackupFromJson = importBackupFromJson;
   window.handleBackupFileUpload = handleBackupFileUpload;
   window.checkOtaUpdate = checkOtaUpdate;
@@ -7755,67 +7074,24 @@
       }
     });
 
-    // 7. Restore persisted trash items (< 30 days) and load stored user transactions in O(N log N) batch
-    deletedItems = loadTrashItemsFromStorage();
-    lastDeletedId = deletedItems.length > 0 ? deletedItems[deletedItems.length - 1].id : null;
-    updateTrashBadge();
-
+    // 7. Load stored user transactions from localStorage if any
     initActiveMonth();
 
     const storedTxs = loadUserTransactionsFromStorage().filter(t => t && !t.softDeleted);
     if (Array.isArray(storedTxs) && storedTxs.length > 0) {
-      const paddedActiveMonth = String(currentActiveMonth).padStart(2, '0');
-      const activeMonthKey = `${currentActiveYear}-${paddedActiveMonth}`;
-      const touchedMonthKeys = new Set();
-
+      // 预先将历史流水按从新到旧（降序）排序，倒序推入流水列表
+      storedTxs.sort((a, b) => {
+        const aFull = a.txTime || a.orderTime || a.fullTime || `${a.date || a.txDate || ''} ${a.time || ''}`.trim();
+        const bFull = b.txTime || b.orderTime || b.fullTime || `${b.date || b.txDate || ''} ${b.time || ''}`.trim();
+        return bFull.localeCompare(aFull);
+      });
+      const activeMonthKey = `${currentActiveYear}-${String(currentActiveMonth).padStart(2, '0')}`;
+      const monthSums = {};
       storedTxs.forEach(tx => {
-        const norm = normalizeTxCategory(tx);
-        tx.catName = norm.catName;
-        tx.parentCat = norm.parentCat;
-        tx.category = norm.catName;
-        tx.cat = norm.catName;
-
         const rawTime = tx.txTime || tx.orderTime || tx.fullTime || '';
         const txDate = tx.txDate || tx.date || (rawTime && rawTime.includes(' ') ? rawTime.split(' ')[0] : '') || getDynamicTodayStr();
         const mKey = (/^\d{4}-\d{2}/.test(txDate)) ? txDate.slice(0, 7) : activeMonthKey;
-        const mParts = mKey.split('-');
-        const mObj = getMonthlyData(mParts[0], mParts[1]);
-        if (!Array.isArray(mObj.txs)) mObj.txs = [];
-
-        const paymentDisplay = formatTxPaymentDisplay(tx.channel, tx.account, tx.payment);
-        const parsedChan = paymentDisplay.includes(' · ') ? paymentDisplay.split(' · ')[0] : (tx.channel || '微信');
-        const parsedSub = paymentDisplay.includes(' · ') ? paymentDisplay.split(' · ')[1] : (tx.account || '钱包');
-        syncAccountToAllDropdowns(parsedChan, parsedSub);
-
-        const numAmtCents = Math.abs(_toCents(tx.amount !== undefined ? tx.amount : (tx.amountInCents ? tx.amountInCents / 100 : 0)));
-        const numAmt = numAmtCents / 100;
-        const isIncomeOrRefund = Boolean(tx.refund || tx.type === 'income' || norm.catName === '工资收入' || norm.parentCat === '工资收入');
-        const txTime = rawTime || ((txDate === getDynamicTodayStr()) ? formatCurrentDateTime() : (txDate + ' 12:00:00'));
-        const timeOnly = tx.timeOnly || tx.time || (txTime.includes(' ') ? txTime.split(' ')[1] : txTime);
-        const merchantName = tx.merchant || tx.name || '日常消费';
-
-        mObj.txs.push({
-          ...tx,
-          id: tx.id || ('item-tx-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)),
-          name: merchantName,
-          merchant: merchantName,
-          channel: parsedChan,
-          account: tx.account || parsedSub,
-          payment: tx.payment || { channel: parsedChan, sub_type: parsedSub, display_name: paymentDisplay },
-          amount: numAmt,
-          amountInCents: numAmtCents,
-          date: txDate,
-          txDate: txDate,
-          time: timeOnly,
-          timeOnly: timeOnly,
-          txTime: txTime,
-          fullTime: txTime,
-          orderTime: tx.orderTime || txTime,
-          softDeleted: false,
-          type: isIncomeOrRefund ? 'income' : 'expense'
-        });
-        touchedMonthKeys.add(mKey);
-
+        monthSums[mKey] = Math.round(((monthSums[mKey] || 0) + (Number(tx.amount) || 0)) * 100) / 100;
         const ord = String(tx.orderId || tx.order || '').trim();
         if (ord && ord !== '--' && !tx.trashed && !tx.softDeleted) {
           committedOrderIds.add(ord);
@@ -7824,25 +7100,13 @@
             if (normOrd) committedOrderIds.add(normOrd);
           }
         }
+        insertTransactionToList({ ...tx, txDate, _totalsAdjusted: true });
       });
-
-      touchedMonthKeys.forEach(mKey => {
-        const mObj = allMonthlyData[mKey];
-        if (mObj && Array.isArray(mObj.txs)) {
-          mObj.txs.sort((a, b) => {
-            const aFull = a.txTime || a.orderTime || a.fullTime || `${a.date || a.txDate || ''} ${a.time || ''}`.trim();
-            const bFull = b.txTime || b.orderTime || b.fullTime || `${b.date || b.txDate || ''} ${b.time || ''}`.trim();
-            return bFull.localeCompare(aFull);
-          });
-        }
-        if (typeof recalculateMonthTotalsFromTxs === 'function') {
-          recalculateMonthTotalsFromTxs(mKey);
-        }
+      Object.keys(monthSums).forEach(mKey => {
+        adjustMonthlyTotals(monthSums[mKey], true, 0, mKey);
       });
-
-      renderMonthTransactions(currentActiveYear, paddedActiveMonth);
-      if (typeof renderMonthlyCategoryChart === 'function') {
-        renderMonthlyCategoryChart();
+      if (typeof recalculateMonthTotalsFromTxs === 'function') {
+        recalculateMonthTotalsFromTxs(`${currentActiveYear}-${currentActiveMonth}`);
       }
     } else {
       // Clean initial state: 0 bills
@@ -7858,12 +7122,17 @@
       if (totalExp) totalExp.innerText = '¥ 0.00';
       if (totalRef) totalRef.innerText = '-¥ 0.00';
       if (totalInc) totalInc.innerText = '¥ 0.00';
-      if (typeof updateDynamicCategoryChips === 'function') {
-        updateDynamicCategoryChips();
-      }
-      if (typeof renderMonthlyCategoryChart === 'function') {
-        renderMonthlyCategoryChart();
-      }
+    }
+
+    if (typeof updateDynamicCategoryChips === 'function') {
+      updateDynamicCategoryChips();
+    }
+    if (typeof renderMonthlyCategoryChart === 'function') {
+      renderMonthlyCategoryChart();
+    }
+
+    if (typeof renderMonthlyCategoryChart === 'function') {
+      renderMonthlyCategoryChart();
     }
 
     // 8. Call initSvgUI if present
@@ -8065,25 +7334,17 @@
 
   // 原生 Android 返回手势拦截：优先关闭上层模态框
   window.handleAndroidBackPress = function() {
-    const modalCloseMap = {
-      'swbk-password-modal': 'closeSwbkPasswordModal',
-      'trash-delete-confirm-modal': 'closeTrashDeleteConfirmModal',
-      'category-modal': 'closeCategoryModal',
-      'category-edit-modal': 'closeEditCategoryModal',
-      'category-delete-confirm-modal': 'closeCategoryDeleteConfirmModal',
-      'tx-detail-modal': 'closeTxDetailModal',
-      'manual-add-modal': 'closeManualAddModal',
-      'filter-modal': 'closeFilterModal',
-      'trash-modal': 'closeTrashModal',
-      'dedup-modal': 'closeDedupModal',
-      'order-security-modal': 'closeOrderSecurityModal',
-      'confidence-modal': 'closeConfidenceModal',
-      'month-modal': 'closeMonthModal',
-      'tx-delete-confirm-modal': 'closeTxDeleteConfirmModal'
-    };
-    for (const [id, closeFnName] of Object.entries(modalCloseMap)) {
+    const modalIds = [
+      'trash-delete-confirm-modal',
+      'category-modal', 'edit-category-modal', 'category-delete-confirm-modal',
+      'tx-detail-modal', 'manual-add-modal', 'filter-modal',
+      'trash-modal', 'dedup-modal', 'order-security-modal', 'confidence-modal',
+      'month-modal', 'tx-delete-confirm-modal'
+    ];
+    for (const id of modalIds) {
       const el = document.getElementById(id);
       if (el && !el.classList.contains('hidden') && el.style.display !== 'none') {
+        const closeFnName = 'close' + id.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('');
         if (typeof window[closeFnName] === 'function') {
           window[closeFnName]();
           return true;
@@ -8228,9 +7489,8 @@
         const isDuplicate = (finishedDraft.orderId && typeof isOrderIdDuplicate === 'function')
           ? isOrderIdDuplicate(finishedDraft.orderId)
           : Boolean(finishedDraft.orderId && committedOrderIds && committedOrderIds.has(finishedDraft.orderId.trim()));
-        const hasValidCoreFields = Number(finishedDraft.amount) > 0 && Boolean(finishedDraft.merchant && String(finishedDraft.merchant).trim());
         const meetsThreshold = finishedDraft.confidence >= (autoCommitThreshold || 95);
-        const canAutoCommit = Boolean(autoCommitEnabled) && hasValidCoreFields && meetsThreshold && !isDuplicate;
+        const canAutoCommit = Boolean(autoCommitEnabled) && meetsThreshold && !isDuplicate;
 
         if (canAutoCommit) {
           if (existingIdx !== -1) {
@@ -8251,8 +7511,7 @@
           const activeMonthKey = `${currentActiveYear}-${String(currentActiveMonth).padStart(2, '0')}`;
           const targetMonthKey = (/^\d{4}-\d{2}/.test(txDate)) ? txDate.slice(0, 7) : activeMonthKey;
 
-          const isIncomeOrRefund = Boolean(normCat === '工资收入');
-          adjustMonthlyTotals(finishedDraft.amount, !isIncomeOrRefund, 1, targetMonthKey);
+          adjustMonthlyTotals(finishedDraft.amount, true, 1, targetMonthKey);
           insertTransactionToList({
             id: 'item-tx-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
             merchant: finishedDraft.merchant,
@@ -8273,9 +7532,6 @@
             badge: '后台自动入账',
             _totalsAdjusted: true
           });
-          if (typeof recalculateMonthTotalsFromTxs === 'function') {
-            recalculateMonthTotalsFromTxs(targetMonthKey);
-          }
           saveStoredDrafts();
           renderDraftQueue();
           updateDraftBadge();

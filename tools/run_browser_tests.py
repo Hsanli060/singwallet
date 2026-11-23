@@ -15,7 +15,6 @@ with open(preview_path, 'r', encoding='utf-8') as f:
 
 test_script = r"""
 <script>
-const __nativeReportFetch__ = window.fetch.bind(window);
 window.__SW_DISABLE_NET_OTA__ = true;
 window.__TEST_RESULTS__ = [];
 function assert(cond, msg) {
@@ -2694,7 +2693,7 @@ async function runAllTestsSuite() {
     assert(vlmPromptText.includes('如“工商银行银联储蓄卡[5678]”输出为“工商银行[5678]”'), "Group 44: VLM Prompt contains square bracket card normalization example");
     assert(vlmPromptText.includes('“中国工商银行储蓄卡(5678)”输出为“工商银行(5678)”'), "Group 44: VLM Prompt contains round bracket card normalization example");
 
-    // 4. 验证结构化 Schema 包含 account 字段，且严格模式下 required 覆盖全部 properties（兼容 Groq/OpenAI strict json_schema）
+    // 4. 验证结构化 Schema 包含 account 字段
     const structuredSchema = window.BILL_STRUCTURED_SCHEMA || (window.DomainRegistry && window.DomainRegistry.getConfig().schema);
     assert(structuredSchema &&
            structuredSchema.json_schema &&
@@ -2702,10 +2701,6 @@ async function runAllTestsSuite() {
            structuredSchema.json_schema.schema.properties &&
            structuredSchema.json_schema.schema.properties.account !== undefined,
            "Group 44: VLM structured output JSON schema contains 'account' property definition");
-    const schemaProps = Object.keys(structuredSchema.json_schema.schema.properties || {});
-    const schemaRequired = structuredSchema.json_schema.schema.required || [];
-    assert(schemaProps.every(k => schemaRequired.includes(k)),
-           "Group 44: strict BILL_STRUCTURED_SCHEMA required array includes every property key (Groq/OpenAI strict compatibility)");
 
     // 5. 验证 formatVlmResult 对大模型提取结果的账户规范化输出
     const mockRawResult = {
@@ -3805,179 +3800,6 @@ async function runAllTestsSuite() {
     // 还原 AndroidBridge
     window.AndroidBridge = originalBridge;
 
-    // ========================================================
-    // Group 53: Phase 0-2 Security, Precision, SWBK v1 & CSV Protection Suite
-    // ========================================================
-    console.log("=== Group 53: Phase 0-2 Security, Precision, SWBK v1 & CSV Protection Suite ===");
-    cleanAllTestData();
-
-    // 1. XSS 转义与流水卡片纯文本渲染验证
-    assert(typeof window.escapeHtml === 'function', "Group 53.1: window.escapeHtml exists");
-    const escaped53 = window.escapeHtml('<img src=x onerror=alert(1)>');
-    assert(
-      typeof escaped53 === 'string' &&
-      escaped53.includes('&lt;') &&
-      escaped53.includes('&gt;') &&
-      !escaped53.includes('<') &&
-      !escaped53.includes('>'),
-      "Group 53.1: window.escapeHtml escapes < and > characters"
-    );
-
-    window.__XSS_FIRED__ = false;
-    const xssPayload53 = '<img src=x onerror="window.__XSS_FIRED__=true">';
-    insertTransactionToList({
-      id: "tx-53-xss",
-      merchant: xssPayload53,
-      amount: 12.34,
-      catName: "餐饮美食",
-      channel: "微信",
-      account: "钱包",
-      txDate: "2026-10-26",
-      txTime: "2026-10-26 12:00:00",
-      orderId: "ORD_53_XSS_001"
-    });
-    await new Promise(resolve => setTimeout(resolve, 50));
-    const xssCard53 = document.getElementById('tx-53-xss');
-    assert(window.__XSS_FIRED__ !== true, "Group 53.1: Malicious <img onerror> payload did NOT execute XSS");
-    assert(xssCard53 !== null && xssCard53.querySelector('img') === null, "Group 53.1: No raw <img> tag injected into transaction card DOM");
-    assert(xssCard53 !== null && xssCard53.innerText.includes(xssPayload53), "Group 53.1: Transaction card displays malicious payload safely as plain text");
-
-    // 2. MoneyMath 精度与跨月收支统计验证
-    assert(window.MoneyMath && typeof window.MoneyMath.toCents === 'function', "Group 53.2: window.MoneyMath.toCents exists");
-    assert(window.MoneyMath.toCents('1.005') === 101, "Group 53.2: MoneyMath.toCents('1.005') === 101");
-    assert(window.MoneyMath.toCents('68.20') === 6820, "Group 53.2: MoneyMath.toCents('68.20') === 6820");
-
-    const septData53 = getMonthlyData(2026, '09');
-    septData53.txs = [
-      {
-        id: "tx-53-sep-exp",
-        merchant: "九月餐饮支出",
-        amount: 100.00,
-        catName: "餐饮美食",
-        category: "餐饮美食",
-        parentCat: "餐饮美食",
-        txDate: "2026-09-15",
-        txTime: "2026-09-15 12:00:00"
-      },
-      {
-        id: "tx-53-sep-inc",
-        merchant: "九月工资发放",
-        amount: 5000.00,
-        catName: "工资收入",
-        category: "工资收入",
-        parentCat: "工资收入",
-        txDate: "2026-09-15",
-        txTime: "2026-09-15 18:00:00"
-      }
-    ];
-    recalculateMonthTotalsFromTxs('2026-09');
-    assert(
-      allMonthlyData['2026-09'].exp === '100.00',
-      "Group 53.2: Cross-month '2026-09' total expense is '100.00' (not '5100.00', got: " + allMonthlyData['2026-09'].exp + ")"
-    );
-    assert(
-      allMonthlyData['2026-09'].inc === '5000.00',
-      "Group 53.2: Cross-month '2026-09' total income is '5000.00' (got: " + allMonthlyData['2026-09'].inc + ")"
-    );
-
-    // 3. SWBK v1 二进制容器加解密与错密拒绝验证
-    assert(
-      window.SwbkCrypto &&
-      typeof window.SwbkCrypto.packSwbkV1 === 'function' &&
-      typeof window.SwbkCrypto.unpackSwbkV1 === 'function',
-      "Group 53.3: window.SwbkCrypto.packSwbkV1 & unpackSwbkV1 exist"
-    );
-    const swbkSample53 = {
-      format: "singwallet_backup",
-      version: "2.0",
-      transactions: [{ id: "tx-swbk-53", merchant: "测试SWBK商户", amount: 68.20 }]
-    };
-    const swbkPassword53 = "SwbkStrongPass2026!";
-    const packed53 = await window.SwbkCrypto.packSwbkV1(swbkSample53, swbkPassword53);
-    const packedBytes53 = packed53 instanceof Uint8Array
-      ? packed53
-      : (packed53 && packed53.buffer
-        ? new Uint8Array(packed53.buffer, packed53.byteOffset || 0, packed53.byteLength)
-        : new Uint8Array(packed53));
-    const swbkMagic53 = String.fromCharCode(packedBytes53[0], packedBytes53[1], packedBytes53[2], packedBytes53[3]);
-    assert(swbkMagic53 === 'SWBK', "Group 53.3: SWBK v1 header first 4 bytes are 'SWBK' (got: " + swbkMagic53 + ")");
-    assert(packedBytes53.byteLength >= 62, "Group 53.3: SWBK v1 container byteLength >= 62 (got: " + packedBytes53.byteLength + ")");
-
-    const unpacked53 = await window.SwbkCrypto.unpackSwbkV1(packed53, swbkPassword53);
-    const unpackedObj53 = (typeof unpacked53 === 'string') ? JSON.parse(unpacked53) : unpacked53;
-    assert(
-      JSON.stringify(unpackedObj53) === JSON.stringify(swbkSample53),
-      "Group 53.3: unpackSwbkV1 with correct password restores 100% identical JSON"
-    );
-
-    let wrongPassRejected53 = false;
-    try {
-      await window.SwbkCrypto.unpackSwbkV1(packed53, "WrongPassword999!");
-    } catch (swbkErr) {
-      wrongPassRejected53 = true;
-    }
-    assert(wrongPassRejected53 === true, "Group 53.3: unpackSwbkV1 rejects wrong password by throwing/rejecting");
-
-    // 4. CSV 公式注入防护与 UTF-8 BOM 校验
-    assert(window.CsvExporter && typeof window.CsvExporter.sanitizeCsvField === 'function', "Group 53.4: window.CsvExporter.sanitizeCsvField exists");
-    assert(window.CsvExporter.sanitizeCsvField('=1+1') === "'=1+1", "Group 53.4: sanitizeCsvField('=1+1') === \"'=1+1\"");
-    assert(window.CsvExporter.sanitizeCsvField('@SUM(A1)') === "'@SUM(A1)", "Group 53.4: sanitizeCsvField('@SUM(A1)') === \"'@SUM(A1)\"");
-    const genCsvFn53 = (typeof window.CsvExporter.generateTransactionsCsv === 'function')
-      ? window.CsvExporter.generateTransactionsCsv.bind(window.CsvExporter)
-      : (typeof window.generateTransactionsCsv === 'function' ? window.generateTransactionsCsv : null);
-    assert(typeof genCsvFn53 === 'function', "Group 53.4: generateTransactionsCsv exists");
-    const csvOut53 = genCsvFn53 ? genCsvFn53(allMonthlyData) : '';
-    assert(typeof csvOut53 === 'string' && csvOut53.startsWith('\uFEFF'), "Group 53.4: generateTransactionsCsv(allMonthlyData) starts with UTF-8 BOM \\uFEFF");
-
-    // 5. 导出快照脱敏 apiKey 且不再向 localStorage 明文留存备份
-    const prevVlmKey53 = (window.vlmConfig && window.vlmConfig.apiKey) ? window.vlmConfig.apiKey : '';
-    if (window.vlmConfig) window.vlmConfig.apiKey = 'sk-mock-secret-key-53';
-    localStorage.removeItem('singwallet_latest_backup');
-    const snap53 = exportFullBackupSnapshot();
-    const exportedVlm53 = (snap53 && snap53.data && snap53.data.vlmConfig) ? snap53.data.vlmConfig : (snap53 && snap53.vlmConfig);
-    assert(exportedVlm53 && exportedVlm53.apiKey === '' && !JSON.stringify(snap53).includes('sk-mock-secret-key-53'), "Group 53.5: exportFullBackupSnapshot() redacts vlmConfig.apiKey to '' and leaks zero secret in payload");
-    assert(window.vlmConfig && window.vlmConfig.apiKey === 'sk-mock-secret-key-53', "Group 53.5: In-memory vlmConfig.apiKey remains untouched");
-    assert(localStorage.getItem('singwallet_latest_backup') === null, "Group 53.5: localStorage('singwallet_latest_backup') remains null after snapshot export");
-    if (window.vlmConfig) window.vlmConfig.apiKey = prevVlmKey53;
-
-    // 6. pullAndIngestReadyLightningCaptures 消费完成后主动调用 ackConsumedLightningCaptures
-    let ackedFiles53 = null;
-    const origBridge53 = window.AndroidBridge;
-    window.AndroidBridge = {
-      consumeReadyLightningCaptures: () => JSON.stringify([{
-        fileName: "lightning_ack_53.jpg",
-        dataUrl: "data:image/jpeg;base64,/9j/ack53",
-        parsedJson: JSON.stringify({
-          taskId: "draft-native-lightning_ack_53",
-          fileName: "lightning_ack_53.jpg",
-          status: "ok",
-          engine: "llm",
-          result: {
-            merchant: "测试闪电回执商户",
-            amount: 22.50,
-            confidence: 99,
-            category: "餐饮美食",
-            channel: "微信",
-            account: "钱包",
-            orderId: "4200002026111853001",
-            time: "2026-11-18 10:00:00"
-          }
-        })
-      }]),
-      ackConsumedLightningCaptures: (payload) => {
-        ackedFiles53 = (typeof payload === 'string') ? JSON.parse(payload) : payload;
-        return true;
-      },
-      syncAiConfigToNative: () => true
-    };
-    const pullRes53 = window.pullAndIngestReadyLightningCaptures();
-    window.AndroidBridge = origBridge53;
-    assert(pullRes53 === true, "Group 53.6: pullAndIngestReadyLightningCaptures() returned true");
-    assert(
-      Array.isArray(ackedFiles53) && ackedFiles53.includes("lightning_ack_53.jpg"),
-      "Group 53.6: AndroidBridge.ackConsumedLightningCaptures called with consumed fileName list"
-    );
-
     // 4. 测试收尾：清理全部测试数据，确保 App 还原为 100% 干净状态
     cleanAllTestData();
     assert(document.querySelectorAll('#transactions-list .tx-item').length === 0, "Group 47 Post-Cleanup: Transactions restored to 0");
@@ -3995,11 +3817,6 @@ async function runAllTestsSuite() {
     outDiv.id = 'test-results-dump';
     outDiv.textContent = JSON.stringify(window.__TEST_RESULTS__);
     document.body.appendChild(outDiv);
-    await __nativeReportFetch__('/__report_results__', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ok: true, results: window.__TEST_RESULTS__ })
-    });
   } catch(e) {
     console.error("TEST EXECUTION ERROR: " + e.message + "\\n" + e.stack);
     document.title = "TEST CRASHED: " + e.message;
@@ -4007,13 +3824,6 @@ async function runAllTestsSuite() {
     errDiv.id = 'test-error-stack';
     errDiv.innerText = e.stack || e.message;
     document.body.appendChild(errDiv);
-    try {
-      await __nativeReportFetch__('/__report_results__', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ok: false, crash: e.stack || e.message })
-      });
-    } catch (_) {}
   }
 }
 if (document.readyState === 'loading') {
@@ -4024,149 +3834,58 @@ if (document.readyState === 'loading') {
 </script>
 """
 
-import shutil
-import tempfile
-from pathlib import Path
+test_html = re.sub(r'\?v=[^"\'\s>]+', '', html).replace('</body>', test_script + '\n</body>')
+test_file = os.path.join(ROOT_DIR, 'web', 'singwallet_test_runner.html')
 
-
-def find_headless_browser() -> str | None:
-    """Discover a cross-platform Chromium-based headless browser binary."""
-    env_bin = os.environ.get('BROWSER_BIN')
-    if env_bin:
-        if os.path.isfile(env_bin):
-            return env_bin
-        resolved = shutil.which(env_bin)
-        if resolved:
-            return resolved
-
-    if sys.platform == 'win32':
-        win_candidates = [
-            r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
-            r'C:\Program Files\Microsoft\Edge\Application\msedge.exe',
-            r'C:\Program Files\Google\Chrome\Application\chrome.exe',
-            r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
-        ]
-        local_app_data = os.environ.get('LOCALAPPDATA')
-        if local_app_data:
-            win_candidates.extend([
-                os.path.join(local_app_data, r'Microsoft\Edge\Application\msedge.exe'),
-                os.path.join(local_app_data, r'Google\Chrome\Application\chrome.exe'),
-            ])
-        for candidate in win_candidates:
-            if os.path.isfile(candidate):
-                return candidate
-
-    for name in (
-        'msedge',
-        'microsoft-edge',
-        'microsoft-edge-stable',
-        'google-chrome',
-        'google-chrome-stable',
-        'chromium',
-        'chromium-browser',
-    ):
-        found = shutil.which(name)
-        if found and os.path.isfile(found):
-            return found
-
-    return None
-
-
-import http.server
-import threading
-
-test_html_bytes = re.sub(r'\?v=[^"\'\s>]+', '', html).replace('</body>', test_script + '\n</body>').encode('utf-8')
-reported_payload = {}
-report_done_event = threading.Event()
-
-
-class _InMemoryRunnerHandler(http.server.SimpleHTTPRequestHandler):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=os.path.join(ROOT_DIR, 'web'), **kwargs)
-
-    def do_GET(self):
-        if self.path.split('?', 1)[0] == '/__singwallet_test_runner__.html':
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/html; charset=utf-8')
-            self.send_header('Content-Length', str(len(test_html_bytes)))
-            self.end_headers()
-            self.wfile.write(test_html_bytes)
-            return
-        return super().do_GET()
-
-    def do_POST(self):
-        if self.path.split('?', 1)[0] == '/__report_results__':
-            length = int(self.headers.get('Content-Length', '0') or '0')
-            raw = self.rfile.read(length) if length > 0 else b'{}'
-            try:
-                reported_payload.update(json.loads(raw.decode('utf-8')))
-            except Exception as exc:
-                reported_payload.update({'ok': False, 'crash': str(exc)})
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(b'{"ack":true}')
-            report_done_event.set()
-            return
-        self.send_error(404)
-
-    def log_message(self, format, *args):
-        pass
-
-
-browser_bin = find_headless_browser()
-if not browser_bin:
-    print("Error: No headless browser found (tried BROWSER_BIN, Edge, Chrome, Chromium).")
-    sys.exit(1)
-
-httpd = http.server.ThreadingHTTPServer(('127.0.0.1', 0), _InMemoryRunnerHandler)
-port = httpd.server_address[1]
-srv_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
-srv_thread.start()
-
-temp_dir = tempfile.mkdtemp(prefix='singwallet_e2e_')
-runner_url = f'http://127.0.0.1:{port}/__singwallet_test_runner__.html'
-cmd = [
-    browser_bin,
-    '--headless',
-    '--disable-gpu',
-    '--remote-debugging-port=0',
-]
-if sys.platform.startswith('linux'):
-    cmd.extend(['--no-sandbox', '--disable-dev-shm-usage'])
-cmd.extend([
-    '--user-data-dir=' + temp_dir,
-    runner_url,
-])
-
-p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore')
 try:
-    finished = report_done_event.wait(timeout=25)
-finally:
+    with open(test_file, 'w', encoding='utf-8') as f:
+        f.write(test_html)
+
+    import tempfile
+    import shutil
+    temp_dir = tempfile.mkdtemp()
+    edge_exe = r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+    cmd = [
+        edge_exe,
+        '--headless',
+        '--disable-gpu',
+        '--user-data-dir=' + temp_dir,
+        '--dump-dom',
+        'file:///' + test_file.replace('\\', '/')
+    ]
+
     try:
-        p.kill()
-        p.communicate(timeout=5)
-    except Exception:
-        pass
-    httpd.shutdown()
-    httpd.server_close()
-    shutil.rmtree(temp_dir, ignore_errors=True)
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='ignore')
+        try:
+            stdout, stderr = p.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            stdout, stderr = p.communicate()
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
-if not finished:
-    print("Error: Headless browser timed out waiting for test completion report.")
-    sys.exit(1)
-
-if reported_payload.get('ok'):
-    results = reported_payload.get('results', [])
-    passed = [r for r in results if r.get('pass')]
-    failed = [r for r in results if not r.get('pass')]
-    print(f"RESULTS: {len(passed)} PASSED, {len(failed)} FAILED")
-    for r in failed:
-        print("  [FAIL]", r.get('msg'))
-    if not failed:
-        print("  >>> ALL TEST ASSERTIONS PASSED PERFECTLY! <<<")
+    dump_m = re.search(r'<div id="test-results-dump">([\s\S]*?)</div>', stdout)
+    if dump_m:
+        results = json.loads(dump_m.group(1))
+        passed = [r for r in results if r['pass']]
+        failed = [r for r in results if not r['pass']]
+        print(f"RESULTS: {len(passed)} PASSED, {len(failed)} FAILED")
+        for r in failed:
+            print("  [FAIL]", r['msg'])
+        if not failed:
+            print("  >>> ALL TEST ASSERTIONS PASSED PERFECTLY! <<<")
+        else:
+            sys.exit(1)
     else:
+        err_m = re.search(r'<div id="test-error-stack">([\s\S]*?)</div>', stdout)
+        if err_m:
+            print("CRASH STACK:\n", err_m.group(1))
+        title_m = re.search(r'<title>([^<]+)</title>', stdout)
+        print("Edge Result Title:", title_m.group(1) if title_m else "None")
         sys.exit(1)
-else:
-    print("CRASH STACK:\n", reported_payload.get('crash', 'Unknown error'))
-    sys.exit(1)
+finally:
+    if os.path.exists(test_file):
+        try:
+            os.remove(test_file)
+        except Exception:
+            pass

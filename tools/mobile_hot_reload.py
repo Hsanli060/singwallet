@@ -9,28 +9,24 @@ SingWallet Mobile Live Hot Reload Server (零外部依赖真机 UI 极速热重�
    - 仅 CSS 变动时：触发 0.1 秒无闪烁局部样式热替换（完全保留手机当前 Tab/弹窗/输入/滚动条状态）；
    - JS / HTML 变动时：触发页面整页热重载。
 3. 动态内存注入热重载客户端脚本，100% 杜绝污染磁盘源码。
-4. 竞态安全：先启动 HTTP 监听并自检确认 100% 就绪后，再触发 ADB reverse 与 App 唤醒。
+4. 竞态安全：先启动 HTTP 监听并自检确认 100% 就绪后，再触发 ADB reverse 与 App 唤醒，杜绝小米 14 ERR_CONNECTION_REFUSED！
 5. 零噪音：内置 /favicon.ico 204 支持，静默日志。
 6. 支持 `--offline` 一键安全切回内置离线版。
 """
 
-import argparse
-import ipaddress
-import json
-import mimetypes
 import os
-import re
-import shutil
-import socket
-import ssl
-import subprocess
 import sys
-import threading
+import json
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
+import shutil
+import argparse
+import mimetypes
+import threading
+import subprocess
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+import ssl
+import urllib.request
+import urllib.error
 from urllib.parse import urlparse
 
 # 确保标准输出与错误流在 Windows 终端下使用 UTF-8
@@ -47,10 +43,6 @@ mimetypes.add_type('application/json', '.json')
 mimetypes.add_type('image/png', '.png')
 mimetypes.add_type('image/jpeg', '.jpg')
 mimetypes.add_type('image/svg+xml', '.svg')
-
-MAX_PROXY_BODY_BYTES = 15 * 1024 * 1024
-ALLOWED_METHODS = {'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'}
-LOCAL_ORIGIN_RE = re.compile(r'^http://(127\.0\.0\.1|localhost)(:\d{1,5})?$')
 
 # 客户端热重载轻量注入脚本（纯 JS，无任何 Emoji）
 LIVE_RELOAD_CLIENT_SCRIPT = """
@@ -117,124 +109,20 @@ LIVE_RELOAD_CLIENT_SCRIPT = """
 """
 
 
-def resolve_allowed_cors_origin(origin: str | None) -> str | None:
-    """Return the validated Origin if it belongs to trusted local/WebView origins."""
-    if not origin:
-        return None
-    origin = origin.strip()
-    if origin == 'null' or origin == 'https://appassets.androidplatform.net':
-        return origin
-    if LOCAL_ORIGIN_RE.fullmatch(origin):
-        return origin
-    return None
-
-
-def _is_disallowed_ip(ip_obj: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
-    """Check whether an IP address is loopback, private, link-local, multicast, reserved, or unspecified."""
-    candidates = [ip_obj]
-    mapped = getattr(ip_obj, 'ipv4_mapped', None)
-    if mapped is not None:
-        candidates.append(mapped)
-    for addr in candidates:
-        if (
-            addr.is_loopback
-            or addr.is_private
-            or addr.is_link_local
-            or addr.is_multicast
-            or addr.is_reserved
-            or addr.is_unspecified
-        ):
-            return True
-    return False
-
-
-def validate_proxy_target_url(target_url: str, allow_local_http: bool = False) -> tuple[bool, str]:
-    """Validate proxy target URL against SSRF and scheme restrictions."""
-    try:
-        parsed = urllib.parse.urlparse(target_url)
-    except Exception as exc:
-        return False, f'Invalid URL: {exc}'
-
-    scheme = (parsed.scheme or '').lower()
-    if allow_local_http:
-        if scheme not in ('http', 'https'):
-            return False, f'Unsupported URL scheme: {scheme or "<empty>"}'
-    else:
-        if scheme != 'https':
-            return False, 'Only HTTPS proxy targets are allowed (pass --allow-local-http for local HTTP models)'
-
-    hostname = parsed.hostname
-    if not hostname:
-        return False, 'Missing hostname in target URL'
-
-    try:
-        port = parsed.port or (443 if scheme == 'https' else 80)
-    except ValueError as exc:
-        return False, f'Invalid port in target URL: {exc}'
-
-    if not allow_local_http:
-        try:
-            addr_infos = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
-        except socket.gaierror as exc:
-            return False, f'DNS resolution failed for {hostname}: {exc}'
-
-        if not addr_infos:
-            return False, f'No addresses resolved for {hostname}'
-
-        for info in addr_infos:
-            ip_str = info[4][0].split('%', 1)[0]
-            try:
-                ip_obj = ipaddress.ip_address(ip_str)
-            except ValueError:
-                return False, f'Invalid resolved IP address: {ip_str}'
-            if _is_disallowed_ip(ip_obj):
-                return False, f'Blocked SSRF target address ({ip_str})'
-
-    return True, ''
-
-
-class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
-    """Ensure HTTP redirects are also validated against SSRF policy."""
-
-    def __init__(self, allow_local_http: bool = False):
-        super().__init__()
-        self.allow_local_http = allow_local_http
-
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        ok, err_msg = validate_proxy_target_url(newurl, allow_local_http=self.allow_local_http)
-        if not ok:
-            raise urllib.error.HTTPError(newurl, 403, f'Redirect blocked: {err_msg}', headers, None)
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
-
-
-def find_adb(explicit_adb: str | None = None) -> str | None:
-    """按优先级寻找可用的 adb 绝对路径（支持 --adb / ADB_PATH / ANDROID_HOME / ANDROID_SDK_ROOT / PATH）。"""
-    exe_name = 'adb.exe' if os.name == 'nt' else 'adb'
-    candidates: list[str] = []
-
-    if explicit_adb:
-        candidates.append(explicit_adb)
-    env_adb = os.environ.get('ADB_PATH')
-    if env_adb:
-        candidates.append(env_adb)
-
-    for sdk_env in ('ANDROID_HOME', 'ANDROID_SDK_ROOT'):
-        sdk_root = os.environ.get(sdk_env)
-        if sdk_root:
-            candidates.append(os.path.join(sdk_root, 'platform-tools', exe_name))
-
+def find_adb():
+    """按优先级寻找可用的 adb 绝对路径"""
+    candidates = [
+        r'D:\Dev\platform-tools\adb.exe',
+        r'C:\platform-tools\adb.exe',
+        'adb.exe',
+        'adb'
+    ]
     for c in candidates:
-        if os.path.isfile(c):
-            return os.path.abspath(c)
+        if os.path.isabs(c) and os.path.isfile(c):
+            return c
         w = shutil.which(c)
         if w and os.path.isfile(w):
             return w
-
-    for name in ('adb', 'adb.exe'):
-        w = shutil.which(name)
-        if w and os.path.isfile(w):
-            return w
-
     return None
 
 
@@ -252,27 +140,32 @@ def run_adb(adb_path, args, device_id=None, timeout=6):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=timeout,
-            text=True,
+            text=True
         )
         return res
-    except Exception:
+    except Exception as e:
         return None
 
 
-def detect_adb_device(adb_path: str | None) -> str | None:
-    """探测在线的 ADB 设备列表，返回首个在线设备序列号。"""
+def detect_adb_device(adb_path):
+    """探测在线的 ADB 设备列表，优先返回指定或首个在线设备"""
     res = run_adb(adb_path, ['devices'])
     if not res or res.returncode != 0:
         return None
     lines = res.stdout.splitlines()
+    devices = []
     for line in lines[1:]:
         line = line.strip()
         if not line:
             continue
         parts = line.split()
         if len(parts) >= 2 and parts[1] == 'device':
-            return parts[0]
-    return None
+            devices.append(parts[0])
+    if not devices:
+        return None
+    if '5c2a21cf' in devices:
+        return '5c2a21cf'
+    return devices[0]
 
 
 def scan_latest_mtimes(web_dir):
@@ -304,7 +197,7 @@ def scan_latest_mtimes(web_dir):
     return css_mtime, full_mtime
 
 
-def create_hot_reload_handler(web_dir: str, allow_local_http: bool = False):
+def create_hot_reload_handler(web_dir):
     """创建绑定指定 Web 工作目录的请求处理器类"""
 
     class HotReloadHTTPHandler(SimpleHTTPRequestHandler):
@@ -319,36 +212,14 @@ def create_hot_reload_handler(web_dir: str, allow_local_http: bool = False):
                     return
             super().log_message(format, *args)
 
-        def _send_cors_headers_if_allowed(self):
-            has_cors = False
-            for h in getattr(self, '_headers_buffer', []):
-                try:
-                    line = h.decode('latin1') if isinstance(h, bytes) else str(h)
-                    if line.lower().startswith('access-control-allow-origin'):
-                        has_cors = True
-                        break
-                except Exception:
-                    pass
-            if not has_cors:
-                allowed_origin = resolve_allowed_cors_origin(self.headers.get('Origin'))
-                if allowed_origin is not None:
-                    self.send_header('Access-Control-Allow-Origin', allowed_origin)
-                    self.send_header('Vary', 'Origin')
-
-        def _send_json_error(self, status_code: int, message: str):
-            body = json.dumps({'error': {'message': message}}).encode('utf-8')
-            self.send_response(status_code)
-            self.send_header('Content-Type', 'application/json; charset=utf-8')
-            self.send_header('Content-Length', str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
         def end_headers(self):
-            # 强化热重载：杜绝任何客户端与代理缓存，并严格限制 CORS 来源
+            # 强化热重载：杜绝任何客户端与代理缓存，开启全跨域
             self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
             self.send_header('Pragma', 'no-cache')
             self.send_header('Expires', '0')
-            self._send_cors_headers_if_allowed()
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', '*')
             super().end_headers()
 
         def do_POST(self):
@@ -360,56 +231,27 @@ def create_hot_reload_handler(web_dir: str, allow_local_http: bool = False):
                 super().do_POST()
 
         def handle_proxy(self):
-            origin = self.headers.get('Origin')
-            if origin is not None and resolve_allowed_cors_origin(origin) is None:
-                self._send_json_error(403, 'Origin not allowed by CORS policy')
-                return
-
-            raw_len = self.headers.get('Content-Length', '0')
-            try:
-                content_len = int(raw_len)
-            except (ValueError, TypeError):
-                self._send_json_error(400, 'Invalid Content-Length header')
-                return
-
-            if content_len < 0:
-                self._send_json_error(400, 'Invalid negative Content-Length header')
-                return
-            if content_len > MAX_PROXY_BODY_BYTES:
-                self._send_json_error(413, f'Request body exceeds maximum {MAX_PROXY_BODY_BYTES} bytes')
-                return
-
+            content_len = int(self.headers.get('Content-Length', 0))
             raw_body = self.rfile.read(content_len) if content_len > 0 else b'{}'
             try:
                 payload = json.loads(raw_body.decode('utf-8'))
-            except Exception as exc:
-                self._send_json_error(400, f'Invalid proxy payload: {exc}')
+            except Exception as e:
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': {'message': f'Invalid proxy payload: {e}'}}).encode('utf-8'))
                 return
 
-            if not isinstance(payload, dict):
-                self._send_json_error(400, 'Proxy payload must be a JSON object')
-                return
-
-            target_url = str(payload.get('url', '') or '').strip()
-            target_method = str(payload.get('method', 'GET') or 'GET').upper()
-            target_headers = payload.get('headers', {}) or {}
+            target_url = payload.get('url', '')
+            target_method = payload.get('method', 'GET').upper()
+            target_headers = payload.get('headers', {})
             target_body = payload.get('body', None)
 
             if not target_url:
-                self._send_json_error(400, 'Missing target url')
-                return
-
-            if target_method not in ALLOWED_METHODS:
-                self._send_json_error(400, f'Unsupported HTTP method: {target_method}')
-                return
-
-            if not isinstance(target_headers, dict):
-                self._send_json_error(400, 'headers must be a JSON object')
-                return
-
-            ok, err_msg = validate_proxy_target_url(target_url, allow_local_http=allow_local_http)
-            if not ok:
-                self._send_json_error(403, err_msg)
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(b'{"error": {"message": "Missing target url"}}')
                 return
 
             body_bytes = None
@@ -423,17 +265,15 @@ def create_hot_reload_handler(web_dir: str, allow_local_http: bool = False):
 
             req = urllib.request.Request(target_url, data=body_bytes, method=target_method)
             for k, v in target_headers.items():
-                if str(k).lower() not in {'host', 'content-length', 'accept-encoding'}:
-                    req.add_header(str(k), str(v))
+                if k.lower() not in ['host', 'content-length', 'accept-encoding']:
+                    req.add_header(k, str(v))
 
             ssl_ctx = ssl.create_default_context()
-            opener = urllib.request.build_opener(
-                SafeRedirectHandler(allow_local_http=allow_local_http),
-                urllib.request.HTTPSHandler(context=ssl_ctx),
-            )
+            ssl_ctx.check_hostname = False
+            ssl_ctx.verify_mode = ssl.CERT_NONE
 
             try:
-                with opener.open(req, timeout=30) as upstream_resp:
+                with urllib.request.urlopen(req, context=ssl_ctx, timeout=30) as upstream_resp:
                     status_code = upstream_resp.status
                     resp_data = upstream_resp.read()
                     content_type = upstream_resp.headers.get('Content-Type', 'application/json')
@@ -444,32 +284,22 @@ def create_hot_reload_handler(web_dir: str, allow_local_http: bool = False):
                     self.wfile.write(resp_data)
             except urllib.error.HTTPError as http_err:
                 status_code = http_err.code
-                err_data = http_err.read() if http_err.fp is not None else json.dumps(
-                    {'error': {'message': str(http_err.reason)}}
-                ).encode('utf-8')
-                content_type = http_err.headers.get('Content-Type', 'application/json') if http_err.headers else 'application/json'
+                err_data = http_err.read()
+                content_type = http_err.headers.get('Content-Type', 'application/json')
 
                 self.send_response(status_code)
                 self.send_header('Content-Type', content_type)
                 self.end_headers()
                 self.wfile.write(err_data)
             except Exception as conn_err:
-                self._send_json_error(502, f'Upstream connection failed: {conn_err}')
+                self.send_response(502)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': {'message': f'Upstream connection failed: {conn_err}'}}).encode('utf-8'))
 
         def do_OPTIONS(self):
-            origin = self.headers.get('Origin')
-            allowed_origin = resolve_allowed_cors_origin(origin)
-            if origin is not None and allowed_origin is None:
-                self._send_json_error(403, 'Origin not allowed')
-                return
             self.send_response(204)
-            if allowed_origin is not None:
-                self.send_header('Access-Control-Allow-Origin', allowed_origin)
-                self.send_header('Vary', 'Origin')
-            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-            self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
-            self.send_header('Access-Control-Max-Age', '86400')
-            super().end_headers()
+            self.end_headers()
 
         def do_GET(self):
             parsed = urlparse(self.path)
@@ -480,7 +310,7 @@ def create_hot_reload_handler(web_dir: str, allow_local_http: bool = False):
                 css_mt, full_mt = scan_latest_mtimes(web_dir)
                 payload = json.dumps({
                     'css_mtime': css_mt,
-                    'full_mtime': full_mt,
+                    'full_mtime': full_mt
                 }).encode('utf-8')
 
                 self.send_response(200)
@@ -504,6 +334,7 @@ def create_hot_reload_handler(web_dir: str, allow_local_http: bool = False):
                         with open(html_path, 'r', encoding='utf-8') as f:
                             raw_html = f.read()
 
+                        # 在 </body> 前注入动态客户端脚本
                         target = '</body>'
                         if target in raw_html:
                             injected_html = raw_html.replace(target, LIVE_RELOAD_CLIENT_SCRIPT + '\n' + target, 1)
@@ -517,8 +348,8 @@ def create_hot_reload_handler(web_dir: str, allow_local_http: bool = False):
                         self.end_headers()
                         self.wfile.write(body_bytes)
                         return
-                    except Exception as exc:
-                        self.send_error(500, f'Error reading html: {exc}')
+                    except Exception as e:
+                        self.send_error(500, f'Error reading html: {e}')
                         return
 
             # 4. 向下兼容历史 /preview/ 路径请求 (如 /preview/css/ -> /css/, /preview/js/ -> /js/)
@@ -537,72 +368,73 @@ def main():
     parser.add_argument('--host', type=str, default='127.0.0.1', help='HTTP host (default: 127.0.0.1)')
     parser.add_argument('--no-adb', action='store_true', help='Skip ADB tunneling and App auto-launch')
     parser.add_argument('--offline', action='store_true', help='Reset mobile app to offline built-in assets mode and exit')
-    parser.add_argument('--serial', '--device', dest='serial', type=str, default=None, help='Target ADB device serial')
-    parser.add_argument('--adb', type=str, default=None, help='Path to adb binary (overrides ADB_PATH/ANDROID_HOME/PATH)')
-    parser.add_argument(
-        '--allow-local-http',
-        action='store_true',
-        help='Allow HTTP and private/loopback targets in /api/proxy for local LLM debugging',
-    )
+    parser.add_argument('--device', type=str, default=None, help='Target ADB device serial (e.g. 5c2a21cf)')
 
     args = parser.parse_args()
 
+    # 确定项目根目录（以当前脚本所在 tools 的上一级目录为主）
     script_dir = os.path.dirname(os.path.abspath(__file__))
     root_dir = os.path.abspath(os.path.join(script_dir, '..'))
 
-    adb_path = find_adb(args.adb)
-    device_id = args.serial
+    # 探测 ADB 路径
+    adb_path = find_adb()
+    device_id = args.device
 
     if adb_path and not device_id:
         device_id = detect_adb_device(adb_path)
 
+    # 离线模式命令处理
     if args.offline:
         print('[SingWallet] Switching mobile device back to offline built-in mode...', flush=True)
         if not adb_path:
-            print('[Error] adb binary not found. Pass --adb or set ADB_PATH / ANDROID_HOME / PATH.', flush=True)
+            print('[Error] adb binary not found, please check PATH or D:\\Dev\\platform-tools\\adb.exe', flush=True)
             sys.exit(1)
 
+        # 1. 唤起 App 并重置 dev_url
         res_am = run_adb(adb_path, [
             'shell', 'am', 'start',
             '-n', 'com.singwallet.app/.MainActivity',
-            '--ez', 'reset_dev', 'true',
+            '--ez', 'reset_dev', 'true'
         ], device_id=device_id)
         if res_am and res_am.returncode == 0:
             print('[OK] App dev mode reset signal sent successfully.', flush=True)
         else:
             print('[Warn] Failed to send am start signal:', res_am.stderr if res_am else 'Unknown', flush=True)
 
-        run_adb(adb_path, ['reverse', '--remove', f'tcp:{args.port}'], device_id=device_id)
+        # 2. 移除 reverse 端口映射
+        res_rev = run_adb(adb_path, ['reverse', '--remove', f'tcp:{args.port}'], device_id=device_id)
         print(f'[OK] ADB reverse tunnel for port {args.port} removed.', flush=True)
         print('[SingWallet] Mobile device is now running 100% offline built-in assets.', flush=True)
         sys.exit(0)
 
     web_dir = os.path.join(root_dir, 'web')
 
-    handler_class = create_hot_reload_handler(web_dir, allow_local_http=args.allow_local_http)
+    # 1. 先启动 HTTP 服务，确保端口 100% 绑定就绪
+    handler_class = create_hot_reload_handler(web_dir)
     try:
         httpd = ThreadingHTTPServer((args.host, args.port), handler_class)
-    except OSError as exc:
-        print(f'[Error] Cannot bind to {args.host}:{args.port} ({exc}). Is another server running?', flush=True)
+    except OSError as e:
+        print(f'[Error] Cannot bind to {args.host}:{args.port} ({e}). Is another server running?', flush=True)
         sys.exit(1)
 
     print('==================================================================', flush=True)
-    print(' SingWallet Mobile Live Hot Reload Server is RUNNING', flush=True)
+    print(f' SingWallet Mobile Live Hot Reload Server is RUNNING', flush=True)
     print(f' Local Address:  http://{args.host}:{args.port}/index.html', flush=True)
     print(f' Workspace Root: {root_dir}', flush=True)
-    print(' Features:       CSS Instant Hot-Swap (<0.1s) + Full Reload (<0.3s)', flush=True)
-    if args.allow_local_http:
-        print(' Proxy Mode:     --allow-local-http ENABLED (local HTTP allowed)', flush=True)
+    print(f' Features:       CSS Instant Hot-Swap (<0.1s) + Full Reload (<0.3s)', flush=True)
     print(' Press Ctrl+C to stop.', flush=True)
     print('==================================================================', flush=True)
 
+    # 2. 异步启动 ADB reverse 隧道与唤起 App（时序保障：100% 确认 HTTP 监听准备就绪后再拉起真机，消除小米 14 竞态）
     if not args.no_adb:
         def launch_adb_after_ready():
+            # 延时 80ms 并自测一次本机 HTTP 服务确认就绪
             time.sleep(0.08)
             check_url = f'http://127.0.0.1:{args.port}/__hot_reload_tick'
             ready = False
             for _ in range(15):
                 try:
+                    import urllib.request
                     with urllib.request.urlopen(check_url, timeout=0.3):
                         ready = True
                         break
@@ -616,17 +448,19 @@ def main():
                 print(f'[SingWallet] Found ADB at: {adb_path}', flush=True)
                 print(f'[SingWallet] Targeting device: {device_id}', flush=True)
 
+                # 1. 反向隧道映射
                 rev_res = run_adb(adb_path, ['reverse', f'tcp:{args.port}', f'tcp:{args.port}'], device_id=device_id)
                 if rev_res and rev_res.returncode == 0:
                     print(f'[OK] USB reverse tunnel established: device:tcp:{args.port} <-> host:tcp:{args.port}', flush=True)
                 else:
                     print('[Warn] Failed to set adb reverse:', rev_res.stderr if rev_res else 'timeout', flush=True)
 
+                # 2. 拉起原生 App 并载入热重载 URL (此时 HTTP 监听已 100% 准备就绪，杜绝 ERR_CONNECTION_REFUSED)
                 dev_url = f'http://127.0.0.1:{args.port}/index.html'
                 am_res = run_adb(adb_path, [
                     'shell', 'am', 'start',
                     '-n', 'com.singwallet.app/.MainActivity',
-                    '--es', 'dev_url', dev_url,
+                    '--es', 'dev_url', dev_url
                 ], device_id=device_id)
                 if am_res and am_res.returncode == 0:
                     print(f'[OK] App launched on device in Hot Reload mode: {dev_url}', flush=True)

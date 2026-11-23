@@ -7,9 +7,6 @@ import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ApplicationInfo
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
@@ -19,13 +16,14 @@ import android.os.Handler
 import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
-import android.os.VibratorManager
 import android.provider.MediaStore
-import android.provider.OpenableColumns
 import android.provider.Settings
 import android.util.Base64
 import android.util.Log
+import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsetsController
+import android.view.WindowManager
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
@@ -42,22 +40,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
-import androidx.core.content.IntentCompat
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
-import androidx.webkit.WebViewAssetLoader
-import com.singwallet.app.data.SingWalletDatabaseHelper
-import com.singwallet.app.security.SecureKeyStore
-import com.singwallet.app.security.SwbkCryptoCodec
 import com.singwallet.app.services.LightningAiBackgroundProcessor
-import com.singwallet.app.services.LightningAiForegroundService
+import com.singwallet.app.services.QuickRecordTileService
 import com.singwallet.app.services.SingWalletAccessibilityService
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedOutputStream
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -65,37 +52,27 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
-import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import kotlin.math.roundToInt
 
 /**
  * SingWallet 混合离线主宿主 Activity.
  *
- * 核心安全与架构特性：
- * 1. 通过 WebViewAssetLoader 托管于 `https://appassets.androidplatform.net/assets/index.html`，
- *    全面禁用 file:// 跨源访问与全局明文流量。
- * 2. 硬件级 Keystore 加密密钥存储 + 原生 SWBK v1 加密备份 + 12 核心表 SQLite WAL 持久化。
- * 3. 双阶段 ACK 防丢单闪电队列、ACTION_SEND 系统分享截图直入解析、Android 15 Edge-to-Edge 安全区适配。
- * 4. 严格隔离 GitHub OTA Token 域名范围，强制热更 manifest 与 APK SHA-256 完整性校验。
+ * 核心设计：
+ * 1. 100% 像素级还原浏览器预览效果 (通过 file:///android_asset/index.html 离线渲染).
+ * 2. 硬件加速 + 沉浸式暗黑主题 (#020617)，零闪屏零网络依赖秒级启动.
+ * 3. 严格仅保留两个触发入口：
+ *    - 入口一：下拉控制中心「闪电记账」磁贴 (QuickRecordTileService + SingWalletAccessibilityService).
+ *    - 入口二：App 内「加一笔」按钮手动输入或主动选择一张账单图片上传.
+ *    - 已彻底移除背部轻敲截屏监听与自动读取相册图片逻辑，无需申请任何相册/存储权限.
+ * 4. 双擎 OTA 更新系统：免重装 Web 资源秒级热更新 + 全量 APK 覆盖升级.
  */
 class MainActivity : ComponentActivity() {
 
-    private class SingWalletUncaughtExceptionHandler(
-        private val previousHandler: Thread.UncaughtExceptionHandler?
-    ) : Thread.UncaughtExceptionHandler {
-        override fun uncaughtException(thread: Thread, throwable: Throwable) {
-            Log.e(TAG, "Uncaught exception on thread ${thread.name}: ${throwable.message}", throwable)
-            previousHandler?.uncaughtException(thread, throwable)
-        }
-    }
-
     companion object {
         private const val TAG = "SingWalletActivity"
-        private const val ASSET_ORIGIN = "https://appassets.androidplatform.net"
-        private const val ASSET_ENTRY_URL = "$ASSET_ORIGIN/assets/index.html"
+        private const val ASSET_ENTRY_URL = "file:///android_asset/index.html"
         private const val PREFS_OTA = "singwallet_ota_prefs"
         private const val KEY_SEEDED_APK_VERSION_CODE = "seeded_apk_version_code"
         private const val KEY_HOT_VERSION = "hot_version"
@@ -104,31 +81,27 @@ class MainActivity : ComponentActivity() {
         private const val DEFAULT_REPO = "Hsanli060/singwallet"
         private const val DEFAULT_BRANCH = "master"
 
-        private const val PROCESSING_RECOVERY_MS = 30_000L
-        private const val ACK_PENDING_RECOVERY_MS = 120_000L
-        private const val SHARE_TARGET_MAX_WIDTH = 1080
-
-        private val REPO_REGEX = Regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-        private val REF_REGEX = Regex("^[A-Za-z0-9._/-]{1,100}$")
-        private val SHA256_HEX_REGEX = Regex("^[0-9a-fA-F]{64}$")
-        private val TOKEN_ALLOWED_HOSTS = setOf("api.github.com", "raw.githubusercontent.com")
+        private val WEB_BUNDLE_FILES = listOf(
+            "index.html",
+            "favicon.svg",
+            "css/preview.css",
+            "js/domain_config.js",
+            "js/icon_registry.js",
+            "js/dropdown_engine.js",
+            "js/ocr_vlm_engine.js",
+            "js/app_controller.js",
+            "js/tailwindcss.min.js"
+        )
 
         private val HOT_MUTABLE_FILES = listOf(
             "index.html",
             "favicon.svg",
             "css/preview.css",
-            "css/tailwind.min.css",
             "js/domain_config.js",
             "js/icon_registry.js",
             "js/dropdown_engine.js",
             "js/ocr_vlm_engine.js",
-            "js/storage_crypto_engine.js",
             "js/app_controller.js"
-        )
-
-        private val OPTIONAL_COMPAT_FILES = setOf(
-            "css/tailwind.min.css",
-            "js/storage_crypto_engine.js"
         )
 
         @Volatile
@@ -141,24 +114,37 @@ class MainActivity : ComponentActivity() {
 
         fun isAlive(): Boolean = instance != null && !(instance?.isFinishing ?: true)
 
+        /**
+         * 判断 MainActivity 是否真正处于前台可见交互状态（避免后台 Stopped 状态下向被冻结的 WebView 推送占位胶囊或提前抢占消费 .parsed.json）
+         */
         fun isInForeground(): Boolean = isAlive() && isForeground
 
+        /**
+         * 当原生后台开始解析某张闪电抓屏时，仅当 MainActivity 处于前台且已加载时，通知前端展示进度占位胶囊
+         */
         fun notifyNativeParsingStarted(jpgFile: File, taskId: String) {
             val act = instance ?: return
             if (!isInForeground() || !act.isPageLoaded) return
             act.notifyNativeParsingStartedInternal(jpgFile, taskId)
         }
 
+        /**
+         * 当原生后台完成 AI 解析并写入 .parsed.json 后，若 MainActivity 处于前台则立即消费已解析结果；
+         * 若处于后台则保留在磁盘中，待用户打开 App (onResume) 时秒级直接展示已就绪结果
+         */
         fun onBackgroundParseCompleted(fileName: String) {
             val act = instance ?: return
             if (!isInForeground()) {
-                Log.i(TAG, "Native background parse completed for $fileName while Activity is in background; deferred until onResume")
+                Log.i(TAG, "Native background AI parse completed for $fileName while Activity is in background; deferred until onResume")
                 return
             }
-            Log.i(TAG, "Native background parse completed for $fileName, triggering immediate foreground ingestion")
+            Log.i(TAG, "Native background AI parse completed for $fileName, triggering immediate foreground ingestion")
             act.scanPendingLightningCaptures()
         }
 
+        /**
+         * 供 QuickRecordTileService 在后台捕获屏幕快照后安全派发至 WebView
+         */
         fun dispatchCapturedScreenshot(dataUrl: String, source: String = "lightning-tile") {
             val act = instance
             val fileName = "lightning_${System.currentTimeMillis()}.jpg"
@@ -180,112 +166,25 @@ class MainActivity : ComponentActivity() {
     }
 
     private var webView: WebView? = null
-    private var assetLoader: WebViewAssetLoader? = null
     private var isPageLoaded = false
     private var pendingTileTrigger = false
-    private var safeTopDp = 0
-    private var safeBottomDp = 0
     private val notifiedInFlightTasks = ConcurrentHashMap.newKeySet<String>()
-    private val pendingScreenshots = mutableListOf<Triple<String, String, Boolean>>()
+    private val pendingScreenshots = mutableListOf<Triple<String, String, Boolean>>() // (base64Image, fileName, isQuickTile)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ingestionExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val otaExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private var activeDevUrl: String? = null
-    private val scanLock = Any()
 
-    private fun jsQuote(s: String): String {
-        return JSONObject.quote(s)
-            .replace("\u2028", "\\u2028")
-            .replace("\u2029", "\\u2029")
-    }
-
+    /**
+     * 安全回环开发地址白名单校验：仅放行 127.0.0.1 与 localhost 本地回环地址，严防恶意外部 Intent 注入公网 URL
+     */
     private fun isAllowedLoopbackDevUrl(url: String?): Boolean {
         if (url.isNullOrBlank()) return false
-        return try {
-            val uri = Uri.parse(url.trim())
-            val scheme = uri.scheme?.lowercase(Locale.ROOT)
-            val host = uri.host?.lowercase(Locale.ROOT)
-            scheme == "http" && host in setOf("127.0.0.1", "localhost")
-        } catch (_: Exception) {
-            false
-        }
-    }
-
-    private fun isInternalAssetUrl(uri: Uri?): Boolean {
-        if (uri == null) return false
-        return uri.scheme.equals("https", ignoreCase = true) &&
-            uri.host.equals("appassets.androidplatform.net", ignoreCase = true)
-    }
-
-    private fun guessMimeType(relPath: String): String {
-        return when {
-            relPath.endsWith(".html", ignoreCase = true) -> "text/html"
-            relPath.endsWith(".css", ignoreCase = true) -> "text/css"
-            relPath.endsWith(".js", ignoreCase = true) -> "application/javascript"
-            relPath.endsWith(".json", ignoreCase = true) -> "application/json"
-            relPath.endsWith(".png", ignoreCase = true) -> "image/png"
-            relPath.endsWith(".jpg", ignoreCase = true) || relPath.endsWith(".jpeg", ignoreCase = true) -> "image/jpeg"
-            relPath.endsWith(".webp", ignoreCase = true) -> "image/webp"
-            relPath.endsWith(".svg", ignoreCase = true) -> "image/svg+xml"
-            relPath.endsWith(".woff2", ignoreCase = true) -> "font/woff2"
-            relPath.endsWith(".woff", ignoreCase = true) -> "font/woff"
-            else -> "application/octet-stream"
-        }
-    }
-
-    private fun buildWebViewAssetLoader(): WebViewAssetLoader {
-        val builtInAssetsHandler = WebViewAssetLoader.AssetsPathHandler(this)
-        val hotBundleDir = File(filesDir, "web_hot_bundle")
-        val capturesDir = File(filesDir, "pending_lightning_captures")
-
-        val assetsPathHandler = WebViewAssetLoader.PathHandler { rawPath ->
-            val cleanRelPath = rawPath.substringBefore('?').substringBefore('#').trimStart('/')
-            if (cleanRelPath.isEmpty()) {
-                return@PathHandler builtInAssetsHandler.handle("index.html")
-            }
-            try {
-                val hotRootCanonical = hotBundleDir.canonicalPath
-                val candidate = File(hotBundleDir, cleanRelPath)
-                val candidateCanonical = candidate.canonicalPath
-                if (candidateCanonical.startsWith(hotRootCanonical + File.separator) &&
-                    candidate.exists() && candidate.isFile && candidate.canRead()
-                ) {
-                    val mimeType = guessMimeType(cleanRelPath)
-                    return@PathHandler WebResourceResponse(mimeType, "UTF-8", FileInputStream(candidate))
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Hot bundle asset lookup warning for $cleanRelPath: ${e.message}")
-            }
-            builtInAssetsHandler.handle(cleanRelPath)
-        }
-
-        val pendingCapturesHandler = WebViewAssetLoader.PathHandler { rawPath ->
-            val cleanRelPath = rawPath.substringBefore('?').substringBefore('#').trimStart('/')
-            if (cleanRelPath.isEmpty()) return@PathHandler null
-            val lower = cleanRelPath.lowercase(Locale.ROOT)
-            if (!lower.endsWith(".jpg") && !lower.endsWith(".jpeg") && !lower.endsWith(".png") && !lower.endsWith(".webp")) {
-                return@PathHandler null
-            }
-            try {
-                val capturesCanonical = capturesDir.canonicalPath
-                val candidate = File(capturesDir, cleanRelPath)
-                val candidateCanonical = candidate.canonicalPath
-                if (candidateCanonical.startsWith(capturesCanonical + File.separator) &&
-                    candidate.exists() && candidate.isFile && candidate.canRead()
-                ) {
-                    return@PathHandler WebResourceResponse(guessMimeType(cleanRelPath), null, FileInputStream(candidate))
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Pending capture read warning for $cleanRelPath: ${e.message}")
-            }
-            null
-        }
-
-        return WebViewAssetLoader.Builder()
-            .addPathHandler("/assets/", assetsPathHandler)
-            .addPathHandler("/pending-captures/", pendingCapturesHandler)
-            .build()
+        return url.startsWith("http://127.0.0.1:") ||
+               url.startsWith("http://127.0.0.1/") ||
+               url.startsWith("http://localhost:") ||
+               url.startsWith("http://localhost/")
     }
 
     private val fileChooserLauncher = registerForActivityResult(
@@ -299,12 +198,16 @@ class MainActivity : ComponentActivity() {
                 if (clipData != null) {
                     for (i in 0 until clipData.itemCount) {
                         clipData.getItemAt(i)?.uri?.let { uri ->
-                            if (!uris.contains(uri)) uris.add(uri)
+                            if (!uris.contains(uri)) {
+                                uris.add(uri)
+                            }
                         }
                     }
                 }
                 data.data?.let { uri ->
-                    if (!uris.contains(uri)) uris.add(uri)
+                    if (!uris.contains(uri)) {
+                        uris.add(uri)
+                    }
                 }
             }
             val finalResults = if (uris.isNotEmpty()) {
@@ -322,66 +225,23 @@ class MainActivity : ComponentActivity() {
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
             val uri = result.data?.data ?: result.data?.clipData?.getItemAt(0)?.uri
-            if (uri != null && !ingestionExecutor.isShutdown) {
-                ingestionExecutor.execute {
-                    try {
-                        val rawBytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                        if (rawBytes == null || rawBytes.isEmpty()) {
-                            throw IllegalStateException("所选文件为空")
-                        }
-                        val displayName = resolveDisplayName(uri)
-                        val isSwbk = rawBytes.size >= 6 &&
-                            rawBytes[0] == 'S'.code.toByte() &&
-                            rawBytes[1] == 'W'.code.toByte() &&
-                            rawBytes[2] == 'B'.code.toByte() &&
-                            rawBytes[3] == 'K'.code.toByte() &&
-                            rawBytes[4] == 0x00.toByte() &&
-                            rawBytes[5] == 0x01.toByte()
-
-                        if (isSwbk) {
-                            val base64Str = Base64.encodeToString(rawBytes, Base64.NO_WRAP)
-                            val script = """
-                                if (typeof window.onNativeSwbkBackupSelected === 'function') {
-                                    window.onNativeSwbkBackupSelected(${jsQuote(base64Str)}, ${jsQuote(displayName)});
-                                }
-                            """.trimIndent()
+            if (uri != null) {
+                try {
+                    contentResolver.openInputStream(uri)?.use { stream ->
+                        val jsonContent = stream.readBytes().toString(Charsets.UTF_8)
+                        if (jsonContent.isNotBlank()) {
                             mainHandler.post {
-                                webView?.evaluateJavascript(script, null)
+                                val escaped = JSONObject.quote(jsonContent)
+                                webView?.evaluateJavascript("if (typeof window.importBackupFromJson === 'function') { window.importBackupFromJson($escaped); }", null)
                             }
-                        } else {
-                            val jsonContent = rawBytes.toString(Charsets.UTF_8).removePrefix("\uFEFF")
-                            if (jsonContent.isNotBlank()) {
-                                val script = """
-                                    if (typeof window.importBackupFromJson === 'function') {
-                                        window.importBackupFromJson(${jsQuote(jsonContent)});
-                                    }
-                                """.trimIndent()
-                                mainHandler.post {
-                                    webView?.evaluateJavascript(script, null)
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to read picked backup file: ${e.message}", e)
-                        mainHandler.post {
-                            Toast.makeText(this@MainActivity, "读取备份文件失败: ${e.message}", Toast.LENGTH_SHORT).show()
                         }
                     }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to read picked backup file: ${e.message}", e)
+                    Toast.makeText(this, "读取备份文件失败: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
         }
-    }
-
-    private fun resolveDisplayName(uri: Uri): String {
-        try {
-            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val name = cursor.getString(0)?.trim()
-                    if (!name.isNullOrEmpty()) return name
-                }
-            }
-        } catch (_: Exception) {}
-        return uri.lastPathSegment?.substringAfterLast('/')?.ifBlank { "singwallet_backup" } ?: "singwallet_backup"
     }
 
     fun launchBackupFilePicker() {
@@ -404,23 +264,19 @@ class MainActivity : ComponentActivity() {
         instance = this
         isForeground = true
 
-        // 安装全局未捕获异常处理器：保留系统默认处理器链，记录日志后正常传递，绝不吞掉崩溃
-        val currentDefaultHandler = Thread.getDefaultUncaughtExceptionHandler()
-        if (currentDefaultHandler !is SingWalletUncaughtExceptionHandler) {
-            Thread.setDefaultUncaughtExceptionHandler(SingWalletUncaughtExceptionHandler(currentDefaultHandler))
+        // 注册全局异常捕获，确保即使有任何极端异常也能输出 Logcat，绝不静默闪退
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            Log.e(TAG, "Uncaught exception on thread ${thread.name}: ${throwable.message}", throwable)
         }
 
         try {
-            // 1. Edge-to-Edge 与沉浸式暗黑系统栏样式
+            // 1. 设置沉浸式纯黑底色与状态栏/导航栏
             applyWindowDecorations()
 
-            // 2. APK 升级时清理陈旧热更缓存，冷启动零阻塞直接由 WebViewAssetLoader 读取内置 assets
-            cleanupStaleHotBundleOnUpgrade()
+            // 2. 初始化/种子化离线热更资源目录
+            ensureWebHotBundleInitialized()
 
-            // 3. 构建 WebViewAssetLoader
-            assetLoader = buildWebViewAssetLoader()
-
-            // 4. 创建根容器与硬件加速全屏 WebView
+            // 3. 创建并配置硬件加速全屏 WebView
             val rootLayout = FrameLayout(this).apply {
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -442,11 +298,12 @@ class MainActivity : ComponentActivity() {
             setContentView(rootLayout)
             webView = wv
 
-            setupEdgeToEdgeInsets(rootLayout)
             configureWebView(wv)
+
+            // 4. 注册返回手势/物理按键拦截 (优先关闭 H5 内置弹窗)
             setupBackPressHandler(wv)
 
-            // 5. 处理启动 Intent (dev_url / ACTION_SEND 图片分享)
+            // 5. 处理可能带入的启动 Intent (控制中心闪电记账快捷磁贴 / USB 实时热重载 dev_url)
             handleIntent(intent, isFromCreate = true)
 
             // 6. 扫描未处理的离线闪电抓屏任务
@@ -458,51 +315,27 @@ class MainActivity : ComponentActivity() {
 
     private fun applyWindowDecorations() {
         try {
-            WindowCompat.setDecorFitsSystemWindows(window, false)
             val darkBg = Color.parseColor("#020617")
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+            @Suppress("DEPRECATION")
+            window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS)
             @Suppress("DEPRECATION")
             window.statusBarColor = darkBg
             @Suppress("DEPRECATION")
             window.navigationBarColor = darkBg
-            val controller = WindowInsetsControllerCompat(window, window.decorView)
-            controller.isAppearanceLightStatusBars = false
-            controller.isAppearanceLightNavigationBars = false
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                window.insetsController?.setSystemBarsAppearance(
+                    0, // 0 = light icons on dark background
+                    WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            }
         } catch (e: Throwable) {
             Log.w(TAG, "applyWindowDecorations warning: ${e.message}")
         }
-    }
-
-    private fun setupEdgeToEdgeInsets(rootLayout: FrameLayout) {
-        ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { view, windowInsets ->
-            val bars = windowInsets.getInsets(
-                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
-            )
-            val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
-            view.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
-
-            val density = resources.displayMetrics.density.coerceAtLeast(1f)
-            safeTopDp = (bars.top / density).roundToInt()
-            safeBottomDp = (bars.bottom / density).roundToInt()
-            injectSafeAreaCssVars()
-            WindowInsetsCompat.CONSUMED
-        }
-        ViewCompat.requestApplyInsets(rootLayout)
-    }
-
-    private fun injectSafeAreaCssVars() {
-        val wv = webView ?: return
-        if (!isPageLoaded) return
-        // rootLayout 已应用安全区内边距，--safe-top / --safe-bottom 置 0px 避免重复留白，同时暴露真实 dp 元数据
-        val script = """
-            (function() {
-                try {
-                    document.documentElement.style.setProperty('--safe-top', '0px');
-                    document.documentElement.style.setProperty('--safe-bottom', '0px');
-                    window.__nativeSafeInsetsDp = { top: $safeTopDp, bottom: $safeBottomDp };
-                } catch (e) {}
-            })();
-        """.trimIndent()
-        wv.evaluateJavascript(script, null)
     }
 
     fun getApkVersionCode(): Long {
@@ -528,43 +361,86 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * APK 版本变化时仅清理过期热更目录，直接通过 WebViewAssetLoader 按需读取内置 assets/
+     * 初始化/种子化离线热更资源目录：
+     * 每次 APK 覆盖安装（versionCode 升级）或 web_hot_bundle 缺失时，完整同步 assets 中的最新静态资源作为基线
      */
-    private fun cleanupStaleHotBundleOnUpgrade() {
+    private fun ensureWebHotBundleInitialized() {
         try {
             val prefs = getSharedPreferences(PREFS_OTA, MODE_PRIVATE)
-            val lastSyncedApkVersion = prefs.getLong(KEY_SEEDED_APK_VERSION_CODE, -1L)
+            val seededVersion = prefs.getLong(KEY_SEEDED_APK_VERSION_CODE, -1L)
             val currentVersionCode = getApkVersionCode()
-            if (lastSyncedApkVersion != currentVersionCode) {
-                val hotDir = File(filesDir, "web_hot_bundle")
-                if (hotDir.exists()) {
-                    hotDir.deleteRecursively()
+            val hotEntryFile = File(filesDir, "web_hot_bundle/index.html")
+
+            if (currentVersionCode > seededVersion || !hotEntryFile.exists() || hotEntryFile.length() == 0L) {
+                Log.i(TAG, "Initializing/updating web_hot_bundle from APK assets (seeded=$seededVersion, current=$currentVersionCode)")
+                val copied = copyAssetsToWebHotBundle()
+                if (copied) {
+                    prefs.edit()
+                        .putLong(KEY_SEEDED_APK_VERSION_CODE, currentVersionCode)
+                        .putString(KEY_HOT_COMMIT_SHA, "")
+                        .putString(KEY_HOT_VERSION, "")
+                        .putLong(KEY_HOT_UPDATED_AT, 0L)
+                        .apply()
+                    Log.i(TAG, "web_hot_bundle seeded successfully for versionCode $currentVersionCode")
+                } else {
+                    Log.w(TAG, "Failed to copy built-in assets to web_hot_bundle")
                 }
-                prefs.edit()
-                    .putLong(KEY_SEEDED_APK_VERSION_CODE, currentVersionCode)
-                    .putString(KEY_HOT_COMMIT_SHA, "")
-                    .putString(KEY_HOT_VERSION, "")
-                    .putLong(KEY_HOT_UPDATED_AT, 0L)
-                    .apply()
-                Log.i(TAG, "Cleaned stale web_hot_bundle on APK version change ($lastSyncedApkVersion -> $currentVersionCode)")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "cleanupStaleHotBundleOnUpgrade error: ${e.message}", e)
+            Log.e(TAG, "ensureWebHotBundleInitialized error: ${e.message}", e)
         }
     }
 
+    /**
+     * 将 APK 内置 assets 中的核心前端资源写入 web_hot_bundle 目录
+     */
+    private fun copyAssetsToWebHotBundle(): Boolean {
+        val hotBundleDir = File(filesDir, "web_hot_bundle")
+        if (!hotBundleDir.exists()) {
+            hotBundleDir.mkdirs()
+        }
+        return try {
+            for (relPath in WEB_BUNDLE_FILES) {
+                val destFile = File(hotBundleDir, relPath)
+                destFile.parentFile?.mkdirs()
+                assets.open(relPath).use { input ->
+                    FileOutputStream(destFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "copyAssetsToWebHotBundle failed: ${e.message}", e)
+            false
+        }
+    }
+
+    /**
+     * 计算并解析当前应加载的 WebView 入口 URL：
+     * 1. 优先使用本地网络热重载 dev_url (如 127.0.0.1).
+     * 2. 否则如果 web_hot_bundle/index.html 存在，使用热更资源文件.
+     * 3. 兜底回退至 file:///android_asset/index.html.
+     */
     fun resolveEntryUrl(intent: Intent?): String {
         val devUrlExtra = intent?.getStringExtra("dev_url")
         val resetDev = intent?.getBooleanExtra("reset_dev", false) == true || devUrlExtra.equals("off", ignoreCase = true)
         if (!resetDev && isAllowedLoopbackDevUrl(devUrlExtra)) {
-            return devUrlExtra!!.trim()
+            return devUrlExtra!!
         }
         if (activeDevUrl != null && !resetDev && isAllowedLoopbackDevUrl(activeDevUrl)) {
             return activeDevUrl!!
         }
+        val hotEntryFile = File(filesDir, "web_hot_bundle/index.html")
+        if (hotEntryFile.exists() && hotEntryFile.length() > 0L) {
+            return Uri.fromFile(hotEntryFile).toString()
+        }
         return ASSET_ENTRY_URL
     }
 
+    /**
+     * 向 WebView 派发 OTA 进度回调
+     */
     fun dispatchOtaProgress(
         percent: Int,
         status: String,
@@ -579,7 +455,11 @@ class MainActivity : ComponentActivity() {
                     put("percent", percent)
                     put("status", status)
                     put("done", done)
-                    if (error != null) put("error", error) else put("error", JSONObject.NULL)
+                    if (error != null) {
+                        put("error", error)
+                    } else {
+                        put("error", JSONObject.NULL)
+                    }
                     put("version", version)
                     put("commitSha", commitSha)
                 }.toString()
@@ -596,10 +476,7 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * 安全 HTTPS 下载工具：
-     * - 仅允许 HTTPS 协议
-     * - 关闭自动重定向并手动逐跳校验
-     * - 严格限制仅当目标为 https://api.github.com 或 https://raw.githubusercontent.com 时才携带 Token
+     * 通用 HTTP/HTTPS 下载工具，带 30x 重定向自动跟踪与进度回调
      */
     private fun downloadUrlToFile(
         urlStr: String,
@@ -609,39 +486,30 @@ class MainActivity : ComponentActivity() {
     ) {
         var curUrl = urlStr
         var redirects = 0
-        val cleanToken = authToken?.trim()?.removePrefix("token ")?.removePrefix("Bearer ")?.trim()
-
         while (redirects < 5) {
             val url = URL(curUrl)
-            if (!url.protocol.equals("https", ignoreCase = true)) {
-                throw SecurityException("拒绝非 HTTPS 下载请求: ${url.protocol}")
-            }
-            val host = url.host.lowercase(Locale.ROOT)
-            val allowTokenForHost = !cleanToken.isNullOrEmpty() && host in TOKEN_ALLOWED_HOSTS
-
             val conn = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 10_000
-                readTimeout = 25_000
-                instanceFollowRedirects = false
+                connectTimeout = 10000
+                readTimeout = 25000
+                instanceFollowRedirects = true
                 setRequestProperty("User-Agent", "SingWallet-OTA/${getAppVersion()} Mobile")
-                if (host == "api.github.com") {
+                if (curUrl.contains("api.github.com")) {
                     setRequestProperty("Accept", "application/vnd.github.v3.raw")
                 } else {
                     setRequestProperty("Accept", "*/*")
                 }
-                if (allowTokenForHost) {
+                val isS3Presigned = curUrl.contains("amazonaws.com") || curUrl.contains("X-Amz-")
+                val cleanToken = authToken?.trim()?.removePrefix("token ")?.removePrefix("Bearer ")?.trim()
+                if (!cleanToken.isNullOrEmpty() && !isS3Presigned) {
                     setRequestProperty("Authorization", "token $cleanToken")
                 }
             }
-
-            try {
-                val responseCode = conn.responseCode
-                if (responseCode in 301..308) {
-                    val location = conn.getHeaderField("Location")
-                        ?: throw IOException("Redirect $responseCode missing Location header")
-                    curUrl = if (location.startsWith("http://", ignoreCase = true) ||
-                        location.startsWith("https://", ignoreCase = true)
-                    ) {
+            val responseCode = conn.responseCode
+            if (responseCode in 301..308) {
+                val location = conn.getHeaderField("Location")
+                conn.disconnect()
+                if (location != null) {
+                    curUrl = if (location.startsWith("http://") || location.startsWith("https://")) {
                         location
                     } else {
                         URL(url, location).toString()
@@ -649,47 +517,43 @@ class MainActivity : ComponentActivity() {
                     redirects++
                     continue
                 }
-                if (responseCode !in 200..299) {
-                    throw IOException("HTTP $responseCode from $host")
-                }
-                val totalLength = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    conn.contentLengthLong
-                } else {
-                    conn.contentLength.toLong()
-                }
-                conn.inputStream.use { input ->
-                    destFile.parentFile?.mkdirs()
-                    FileOutputStream(destFile).use { output ->
-                        val buffer = ByteArray(8192)
-                        var bytesRead: Int
-                        var totalBytesRead = 0L
-                        while (input.read(buffer).also { bytesRead = it } != -1) {
-                            output.write(buffer, 0, bytesRead)
-                            totalBytesRead += bytesRead
-                            onProgress?.invoke(totalBytesRead, totalLength)
-                        }
-                        output.flush()
-                    }
-                }
-                return
-            } finally {
-                try {
-                    conn.disconnect()
-                } catch (_: Throwable) {}
             }
+            if (responseCode !in 200..299) {
+                conn.disconnect()
+                throw IOException("HTTP $responseCode from $curUrl")
+            }
+            val totalLength = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                conn.contentLengthLong
+            } else {
+                conn.contentLength.toLong()
+            }
+            conn.inputStream.use { input ->
+                destFile.parentFile?.mkdirs()
+                FileOutputStream(destFile).use { output ->
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    var totalBytesRead = 0L
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        output.write(buffer, 0, bytesRead)
+                        totalBytesRead += bytesRead
+                        onProgress?.invoke(totalBytesRead, totalLength)
+                    }
+                    output.flush()
+                }
+            }
+            conn.disconnect()
+            return
         }
-        throw IOException("Too many redirects while downloading from $urlStr")
+        throw IOException("Too many redirects: $curUrl")
     }
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun configureWebView(wv: WebView) {
-        val isDebuggable = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
-        if (isDebuggable) {
-            try {
-                WebView.setWebContentsDebuggingEnabled(true)
-            } catch (e: Throwable) {
-                Log.w(TAG, "Failed to enable WebContentsDebugging: ${e.message}")
-            }
+        // 开启 Chrome DevTools 真机远程审查 (chrome://inspect/#devices)
+        try {
+            WebView.setWebContentsDebuggingEnabled(true)
+        } catch (e: Throwable) {
+            Log.w(TAG, "Failed to enable WebContentsDebugging: ${e.message}")
         }
 
         val settings = wv.settings
@@ -697,46 +561,43 @@ class MainActivity : ComponentActivity() {
         settings.domStorageEnabled = true
         @Suppress("DEPRECATION")
         settings.databaseEnabled = true
-        settings.allowFileAccess = false
-        settings.allowContentAccess = false
+        settings.allowFileAccess = true
+        settings.allowContentAccess = true
         @Suppress("DEPRECATION")
-        settings.allowFileAccessFromFileURLs = false
+        settings.allowFileAccessFromFileURLs = true
         @Suppress("DEPRECATION")
-        settings.allowUniversalAccessFromFileURLs = false
+        settings.allowUniversalAccessFromFileURLs = true
         settings.cacheMode = WebSettings.LOAD_DEFAULT
         settings.mediaPlaybackRequiresUserGesture = false
-        settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+        settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         settings.useWideViewPort = true
         settings.loadWithOverviewMode = true
         settings.setSupportZoom(false)
         settings.builtInZoomControls = false
         settings.displayZoomControls = false
 
+        // 注入 SingWallet 专属 UserAgent
         val defaultUa = settings.userAgentString
-        settings.userAgentString = "$defaultUa SingWalletAndroid/${getAppVersion()} Mobile"
+        settings.userAgentString = "$defaultUa SingWalletAndroid/1.0.8 Mobile"
 
         wv.addJavascriptInterface(AndroidBridge(this), "AndroidBridge")
 
         wv.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                val uri = request?.url ?: return false
-                val url = uri.toString()
-                if (isInternalAssetUrl(uri) ||
+                val url = request?.url?.toString() ?: return false
+                if (url.startsWith("file://") ||
                     url.startsWith("data:") ||
                     url.startsWith("blob:") ||
                     isAllowedLoopbackDevUrl(url)
                 ) {
                     return false
                 }
-                val scheme = uri.scheme?.lowercase(Locale.ROOT)
-                if (scheme == "http" || scheme == "https") {
-                    try {
-                        startActivity(Intent(Intent.ACTION_VIEW, uri))
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Cannot launch external url: $url", e)
-                    }
-                } else {
-                    Log.w(TAG, "Blocked untrusted URI scheme: $scheme")
+                // 外部网页链接使用系统浏览器打开
+                try {
+                    val extIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    startActivity(extIntent)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Cannot launch external url: $url", e)
                 }
                 return true
             }
@@ -745,10 +606,28 @@ class MainActivity : ComponentActivity() {
                 view: WebView?,
                 request: WebResourceRequest?
             ): WebResourceResponse? {
-                val uri = request?.url ?: return super.shouldInterceptRequest(view, request)
-                val intercepted = assetLoader?.shouldInterceptRequest(uri)
-                if (intercepted != null) {
-                    return intercepted
+                val url = request?.url?.toString() ?: return super.shouldInterceptRequest(view, request)
+                if (url.startsWith("file:///android_asset/")) {
+                    val cleanUrl = url.substringBefore('?').substringBefore('#')
+                    val relPath = cleanUrl.removePrefix("file:///android_asset/")
+                    val hotFile = File(filesDir, "web_hot_bundle/$relPath")
+                    if (hotFile.exists() && hotFile.isFile && hotFile.canRead()) {
+                        val mimeType = when {
+                            relPath.endsWith(".html", ignoreCase = true) -> "text/html"
+                            relPath.endsWith(".css", ignoreCase = true) -> "text/css"
+                            relPath.endsWith(".js", ignoreCase = true) -> "application/javascript"
+                            relPath.endsWith(".json", ignoreCase = true) -> "application/json"
+                            relPath.endsWith(".png", ignoreCase = true) -> "image/png"
+                            relPath.endsWith(".jpg", ignoreCase = true) || relPath.endsWith(".jpeg", ignoreCase = true) -> "image/jpeg"
+                            relPath.endsWith(".svg", ignoreCase = true) -> "image/svg+xml"
+                            else -> "application/octet-stream"
+                        }
+                        try {
+                            return WebResourceResponse(mimeType, "UTF-8", FileInputStream(hotFile))
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed reading hot file $relPath: ${e.message}")
+                        }
+                    }
                 }
                 return super.shouldInterceptRequest(view, request)
             }
@@ -763,13 +642,11 @@ class MainActivity : ComponentActivity() {
                 val isMainFrame = request?.isForMainFrame == true
                 Log.w(TAG, "onReceivedError: url=$failedUrl, isMainFrame=$isMainFrame, errorCode=${error?.errorCode}, desc=${error?.description}")
 
+                // 拔掉数据线或本地热重载开发服务未启动时的「零白屏自动离线兜底」
                 if (isMainFrame && isAllowedLoopbackDevUrl(failedUrl)) {
                     Log.w(TAG, "Dev server unreachable, auto-falling back to built-in offline assets")
                     activeDevUrl = null
-                    view?.settings?.apply {
-                        cacheMode = WebSettings.LOAD_DEFAULT
-                        mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                    }
+                    view?.settings?.cacheMode = WebSettings.LOAD_DEFAULT
                     view?.loadUrl(resolveEntryUrl(null))
                     Toast.makeText(this@MainActivity, "开发服务未连接，已自动切回内置离线版", Toast.LENGTH_SHORT).show()
                 }
@@ -780,9 +657,11 @@ class MainActivity : ComponentActivity() {
                 Log.i(TAG, "SingWallet WebView loaded: $url")
                 isPageLoaded = true
 
+                // 注入 Native 模式标记 class
                 wv.evaluateJavascript("document.body.classList.add('native-app');", null)
-                injectSafeAreaCssVars()
 
+                // 自动从 WebView localStorage 提取并下沉 VLM 配置与分类至原生 SharedPreferences，
+                // 确保老用户无需重新点击保存即可在后台享受原生 AI 异步解析，随后立即扫描待处理抓屏队列
                 val syncAiConfigScript = """
                     (function() {
                         try {
@@ -816,6 +695,7 @@ class MainActivity : ComponentActivity() {
                     scanPendingLightningCaptures()
                 }
 
+                // 刷新暂存的待处理闪电记账抓屏任务
                 synchronized(pendingScreenshots) {
                     for ((base64Image, fileName, isQuickTile) in pendingScreenshots) {
                         dispatchScreenshotToWebView(base64Image, fileName, isQuickTile)
@@ -885,11 +765,13 @@ class MainActivity : ComponentActivity() {
                             return true
                         } catch (tiramisuEx: Throwable) {
                             Log.w(TAG, "MediaStore.ACTION_PICK_IMAGES launch failed, fallback to ACTION_GET_CONTENT: ${tiramisuEx.message}")
-                            fileChooserLauncher.launch(createGetContentIntent())
+                            val fallbackIntent = createGetContentIntent()
+                            fileChooserLauncher.launch(fallbackIntent)
                             return true
                         }
                     } else {
-                        fileChooserLauncher.launch(createGetContentIntent())
+                        val intent = createGetContentIntent()
+                        fileChooserLauncher.launch(intent)
                         return true
                     }
                 } catch (e: Exception) {
@@ -911,6 +793,7 @@ class MainActivity : ComponentActivity() {
                         if (wv.canGoBack()) {
                             wv.goBack()
                         } else {
+                            // 退至后台而不强制销毁，保持后台秒开与闪电记账能力
                             moveTaskToBack(true)
                         }
                     }
@@ -918,6 +801,8 @@ class MainActivity : ComponentActivity() {
             }
         })
     }
+
+    private val scanLock = Any()
 
     internal fun notifyNativeParsingStartedInternal(jpgFile: File, taskId: String) {
         if (ingestionExecutor.isShutdown) return
@@ -928,13 +813,16 @@ class MainActivity : ComponentActivity() {
                 val bytes = jpgFile.readBytes()
                 val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
                 val dataUrl = "data:image/jpeg;base64,$base64"
-                val script = """
-                    if (typeof window.onNativeLightningParsingStarted === 'function') {
-                        window.onNativeLightningParsingStarted(${jsQuote(taskId)}, ${jsQuote(dataUrl)}, ${jsQuote(jpgFile.name)});
-                    }
-                """.trimIndent()
+                val escapedTaskId = taskId.replace("\\", "\\\\").replace("'", "\\'")
+                val escapedDataUrl = dataUrl.replace("\\", "\\\\").replace("'", "\\'")
+                val escapedFileName = jpgFile.name.replace("\\", "\\\\").replace("'", "\\'")
                 mainHandler.post {
                     if (isPageLoaded) {
+                        val script = """
+                            if (typeof window.onNativeLightningParsingStarted === 'function') {
+                                window.onNativeLightningParsingStarted('$escapedTaskId', '$escapedDataUrl', '$escapedFileName');
+                            }
+                        """.trimIndent()
                         webView?.evaluateJavascript(script, null)
                     }
                 }
@@ -945,130 +833,110 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * 恢复异常中断残留的 .processing (>30s) 与未 ACK 的 .ack_pending (>120s) 文件
+     * 扫描私有目录下尚未处理的闪电记账抓屏文件与原生后台已解析完成的 .parsed.json 结果
      */
-    private fun recoverOrphanPendingFilesLocked(dir: File, nowMs: Long) {
-        dir.listFiles { f -> f.name.endsWith(".processing", ignoreCase = true) }?.forEach { procFile ->
-            if (nowMs - procFile.lastModified() > PROCESSING_RECOVERY_MS) {
-                if (procFile.name.endsWith(".img.processing")) {
-                    val originalImgName = procFile.name.substringBeforeLast("__claim_")
-                    if (originalImgName.isNotEmpty() && originalImgName != procFile.name) {
-                        val restoredImg = File(dir, originalImgName)
-                        if (!restoredImg.exists()) procFile.renameTo(restoredImg)
-                    } else {
-                        val basePrefix = procFile.name.removeSuffix(".img.processing").substringBeforeLast("_")
-                        val restoredImg = File(dir, "$basePrefix.jpg")
-                        if (!restoredImg.exists()) procFile.renameTo(restoredImg)
-                    }
-                } else if (procFile.name.endsWith(".parsed.processing")) {
-                    val baseName = procFile.name.substringBeforeLast("__claim_")
-                        .takeIf { it != procFile.name }
-                        ?: procFile.name.removeSuffix(".parsed.processing").substringBeforeLast("_")
-                    val restoredParsed = File(dir, "$baseName.parsed.json")
-                    if (!restoredParsed.exists()) procFile.renameTo(restoredParsed)
-                }
-            }
-        }
-
-        dir.listFiles { f -> f.name.endsWith(".ack_pending", ignoreCase = true) }?.forEach { ackFile ->
-            if (nowMs - ackFile.lastModified() > ACK_PENDING_RECOVERY_MS) {
-                if (ackFile.name.endsWith(".img.ack_pending")) {
-                    val origImgName = ackFile.name.removeSuffix(".img.ack_pending")
-                    val restoredImg = File(dir, origImgName)
-                    if (!restoredImg.exists()) ackFile.renameTo(restoredImg)
-                } else if (ackFile.name.endsWith(".parsed.json.ack_pending")) {
-                    val origParsedName = ackFile.name.removeSuffix(".ack_pending")
-                    val restoredParsed = File(dir, origParsedName)
-                    if (!restoredParsed.exists()) ackFile.renameTo(restoredParsed)
-                }
-            }
-        }
-    }
-
     private fun scanPendingLightningCaptures() {
         if (ingestionExecutor.isShutdown) return
         ingestionExecutor.execute {
             if (!isPageLoaded) return@execute
             synchronized(scanLock) {
-                val dir = File(filesDir, "pending_lightning_captures")
-                try {
-                    if (!dir.exists() || !dir.isDirectory) return@execute
-                    val nowMs = System.currentTimeMillis()
-                    recoverOrphanPendingFilesLocked(dir, nowMs)
-
-                    val files = dir.listFiles { f ->
-                        f.extension.equals("jpg", ignoreCase = true) ||
-                            f.extension.equals("jpeg", ignoreCase = true) ||
-                            f.extension.equals("png", ignoreCase = true)
-                    }
-                    files?.sortBy { it.lastModified() }
-                    files?.forEach { file ->
-                        val originalName = file.name
-                        val parsedFile = LightningAiBackgroundProcessor.getParsedResultFile(file)
-                        val taskId = LightningAiBackgroundProcessor.getTaskIdForFile(originalName)
-
-                        if (parsedFile.exists()) {
-                            if (!isInForeground()) {
-                                return@forEach
+                val candidateDirs = listOf(
+                    File(filesDir, "pending_lightning_captures")
+                )
+                for (dir in candidateDirs) {
+                    try {
+                        if (dir.exists() && dir.isDirectory) {
+                            // 0. 恢复极端断电/进程强杀残留超过 30 秒的孤儿 .processing 文件
+                            val nowMs = System.currentTimeMillis()
+                            dir.listFiles { f -> f.name.endsWith(".processing", ignoreCase = true) }?.forEach { procFile ->
+                                if (nowMs - procFile.lastModified() > 30_000L) {
+                                    val basePrefix = procFile.name
+                                        .removeSuffix(".img.processing")
+                                        .removeSuffix(".parsed.processing")
+                                        .substringBeforeLast("_")
+                                    if (procFile.name.endsWith(".img.processing")) {
+                                        val restoredImg = File(dir, "$basePrefix.jpg")
+                                        if (!restoredImg.exists()) procFile.renameTo(restoredImg)
+                                    } else if (procFile.name.endsWith(".parsed.processing")) {
+                                        val restoredParsed = File(dir, "$basePrefix.parsed.json")
+                                        if (!restoredParsed.exists()) procFile.renameTo(restoredParsed)
+                                    }
+                                }
                             }
-                            val ts = System.currentTimeMillis()
-                            val processingImg = File(dir, "${originalName}__claim_${ts}.img.processing")
-                            val processingParsed = File(dir, "${file.nameWithoutExtension}__claim_${ts}.parsed.processing")
-                            val imgRenamed = file.renameTo(processingImg)
-                            val parsedRenamed = parsedFile.renameTo(processingParsed)
 
-                            if (imgRenamed && parsedRenamed) {
-                                // 修复：重命名后立即刷新 mtime，防止 30s 过期误判重投
-                                val claimNow = System.currentTimeMillis()
-                                processingImg.setLastModified(claimNow)
-                                processingParsed.setLastModified(claimNow)
+                            val files = dir.listFiles { f ->
+                                f.extension.equals("jpg", ignoreCase = true) ||
+                                f.extension.equals("jpeg", ignoreCase = true) ||
+                                f.extension.equals("png", ignoreCase = true)
+                            }
+                            files?.sortBy { it.lastModified() }
+                            files?.forEach { file ->
+                                val originalName = file.name
+                                val parsedFile = LightningAiBackgroundProcessor.getParsedResultFile(file)
+                                val taskId = LightningAiBackgroundProcessor.getTaskIdForFile(originalName)
 
-                                try {
-                                    val bytes = processingImg.readBytes()
-                                    val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-                                    val mime = if (originalName.endsWith(".png", ignoreCase = true)) "image/png" else "image/jpeg"
-                                    val dataUrl = "data:$mime;base64,$base64"
-                                    val parsedJsonStr = processingParsed.readText(Charsets.UTF_8)
+                                if (parsedFile.exists()) {
+                                    // 仅当 Activity 处于前台时才认领并向 WebView 注入已解析结果；若在后台则保留文件待用户打开 App 时秒级消费
+                                    if (!isInForeground()) {
+                                        return@forEach
+                                    }
+                                    // 场景 1：原生后台已完成 AI 解析 (.parsed.json 已就绪)，原子认领并直接将结构化结果注入前端
+                                    val ts = System.currentTimeMillis()
+                                    val processingImg = File(dir, "${file.nameWithoutExtension}_${ts}.img.processing")
+                                    val processingParsed = File(dir, "${file.nameWithoutExtension}_${ts}.parsed.processing")
+                                    val imgRenamed = file.renameTo(processingImg)
+                                    val parsedRenamed = parsedFile.renameTo(processingParsed)
 
-                                    mainHandler.post {
-                                        dispatchParsedLightningToWebView(
-                                            parsedJsonStr = parsedJsonStr,
-                                            dataUrl = dataUrl,
-                                            fileName = originalName
-                                        ) { delivered ->
-                                            if (!ingestionExecutor.isShutdown) {
-                                                ingestionExecutor.execute {
-                                                    if (delivered) {
-                                                        notifiedInFlightTasks.remove(taskId)
-                                                        try { processingImg.delete() } catch (_: Throwable) {}
-                                                        try { processingParsed.delete() } catch (_: Throwable) {}
-                                                    } else {
-                                                        try { processingImg.renameTo(file) } catch (_: Throwable) {}
-                                                        try { processingParsed.renameTo(parsedFile) } catch (_: Throwable) {}
+                                    if (imgRenamed && parsedRenamed) {
+                                        try {
+                                            val bytes = processingImg.readBytes()
+                                            val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                                            val dataUrl = "data:image/jpeg;base64,$base64"
+                                            val parsedJsonStr = processingParsed.readText(Charsets.UTF_8)
+
+                                            mainHandler.post {
+                                                dispatchParsedLightningToWebView(
+                                                    parsedJsonStr = parsedJsonStr,
+                                                    dataUrl = dataUrl,
+                                                    fileName = originalName
+                                                ) { delivered ->
+                                                    ingestionExecutor.execute {
+                                                        if (delivered) {
+                                                            notifiedInFlightTasks.remove(taskId)
+                                                            try { processingImg.delete() } catch (_: Throwable) {}
+                                                            try { processingParsed.delete() } catch (_: Throwable) {}
+                                                        } else {
+                                                            // 若 WebView 尚未消费成功，安全还原文件名，杜绝丢单
+                                                            try { processingImg.renameTo(file) } catch (_: Throwable) {}
+                                                            try { processingParsed.renameTo(parsedFile) } catch (_: Throwable) {}
+                                                        }
                                                     }
                                                 }
                                             }
+                                        } catch (e: Exception) {
+                                            Log.w(TAG, "Failed to ingest parsed lightning capture $originalName: ${e.message}")
+                                            try { processingImg.renameTo(file) } catch (_: Throwable) {}
+                                            try { processingParsed.renameTo(parsedFile) } catch (_: Throwable) {}
                                         }
+                                    } else {
+                                        if (imgRenamed) try { processingImg.renameTo(file) } catch (_: Throwable) {}
+                                        if (parsedRenamed) try { processingParsed.renameTo(parsedFile) } catch (_: Throwable) {}
                                     }
-                                } catch (e: Exception) {
-                                    Log.w(TAG, "Failed to ingest parsed lightning capture $originalName: ${e.message}")
-                                    try { processingImg.renameTo(file) } catch (_: Throwable) {}
-                                    try { processingParsed.renameTo(parsedFile) } catch (_: Throwable) {}
+                                } else if (LightningAiBackgroundProcessor.isProcessing(originalName)) {
+                                    // 场景 2：用户在点击闪电记账后 1~2 秒内立即切回了 App，原生后台正在请求大模型中
+                                    // 仅在前台时通知前端先展示进度胶囊，等后台线程返回后会自动触发 onBackgroundParseCompleted 完成更新
+                                    if (isInForeground()) {
+                                        notifyNativeParsingStartedInternal(file, taskId)
+                                    }
+                                } else {
+                                    // 场景 3：历史遗留尚未启动解析的原始抓屏文件，立即交由原生后台解析器异步处理
+                                    LightningAiBackgroundProcessor.enqueueCapture(applicationContext, file)
                                 }
-                            } else {
-                                if (imgRenamed) try { processingImg.renameTo(file) } catch (_: Throwable) {}
-                                if (parsedRenamed) try { processingParsed.renameTo(parsedFile) } catch (_: Throwable) {}
                             }
-                        } else if (LightningAiBackgroundProcessor.isProcessing(originalName)) {
-                            if (isInForeground()) {
-                                notifyNativeParsingStartedInternal(file, taskId)
-                            }
-                        } else {
-                            LightningAiBackgroundProcessor.enqueueCapture(applicationContext, file)
                         }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "scanPendingLightningCaptures error in ${dir.name}: ${e.message}")
                     }
-                } catch (e: Exception) {
-                    Log.w(TAG, "scanPendingLightningCaptures error: ${e.message}")
                 }
             }
         }
@@ -1085,12 +953,21 @@ class MainActivity : ComponentActivity() {
             onComplete(false)
             return
         }
+        val escapedJson = parsedJsonStr
+            .replace("\\", "\\\\")
+            .replace("'", "\\'")
+            .replace("\n", "\\n")
+            .replace("\r", "")
+            .replace("\u2028", "\\u2028")
+            .replace("\u2029", "\\u2029")
+        val escapedDataUrl = dataUrl.replace("\\", "\\\\").replace("'", "\\'")
+        val escapedFileName = fileName.replace("\\", "\\\\").replace("'", "\\'")
         val script = """
             (function() {
                 if (typeof window.onNativeLightningParsed === 'function') {
-                    return window.onNativeLightningParsed(${jsQuote(parsedJsonStr)}, ${jsQuote(dataUrl)}, ${jsQuote(fileName)}) ? 'true' : 'false';
+                    return window.onNativeLightningParsed('$escapedJson', '$escapedDataUrl', '$escapedFileName') ? 'true' : 'false';
                 } else if (typeof window.onNativeScreenshotCaptured === 'function') {
-                    window.onNativeScreenshotCaptured(${jsQuote(dataUrl)}, ${jsQuote(fileName)}, true);
+                    window.onNativeScreenshotCaptured('$escapedDataUrl', '$escapedFileName', true);
                     return 'true';
                 }
                 return 'false';
@@ -1115,9 +992,12 @@ class MainActivity : ComponentActivity() {
         } else {
             "data:image/jpeg;base64,$base64Image"
         }
+        val source = if (isQuickTile) "lightning-tile" else "manual-upload"
+        val escapedDataUrl = dataUrl.replace("\\", "\\\\").replace("'", "\\'")
+        val escapedFileName = fileName.replace("\\", "\\\\").replace("'", "\\'")
         val script = """
             if (typeof window.onNativeScreenshotCaptured === 'function') {
-                window.onNativeScreenshotCaptured(${jsQuote(dataUrl)}, ${jsQuote(fileName)}, $isQuickTile);
+                window.onNativeScreenshotCaptured('$escapedDataUrl', '$escapedFileName', $isQuickTile);
             }
         """.trimIndent()
         Log.i(TAG, "Dispatching lightning capture to WebView: fileName=$fileName, isQuickTile=$isQuickTile, len=${dataUrl.length}")
@@ -1140,121 +1020,26 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        // 处理系统「分享」图片至 SingWallet 闪电记账队列
-        if (intent.action == Intent.ACTION_SEND && intent.type?.startsWith("image/", ignoreCase = true) == true) {
-            val sharedUri = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
-            if (sharedUri != null) {
-                handleSharedImageUri(sharedUri)
-            }
-            intent.action = null
-            if (isFromCreate && webView != null) {
-                webView?.loadUrl(resolveEntryUrl(intent))
-            }
-            return
-        }
-
+        // 1. USB 实时热重载 dev_url 切换与重置回退
         val devUrlExtra = intent.getStringExtra("dev_url")
         val resetDev = intent.getBooleanExtra("reset_dev", false) || devUrlExtra.equals("off", ignoreCase = true)
 
         if (resetDev) {
             activeDevUrl = null
-            webView?.settings?.apply {
-                cacheMode = WebSettings.LOAD_DEFAULT
-                mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-            }
+            webView?.settings?.cacheMode = WebSettings.LOAD_DEFAULT
             webView?.loadUrl(resolveEntryUrl(null))
             Log.i(TAG, "Switched back to built-in offline assets")
             Toast.makeText(this, "已切回内置离线版", Toast.LENGTH_SHORT).show()
         } else if (isAllowedLoopbackDevUrl(devUrlExtra)) {
-            val cleanDevUrl = devUrlExtra!!.trim()
-            activeDevUrl = cleanDevUrl
-            webView?.settings?.apply {
-                cacheMode = WebSettings.LOAD_NO_CACHE
-                mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-            }
+            activeDevUrl = devUrlExtra
+            webView?.settings?.cacheMode = WebSettings.LOAD_NO_CACHE
             webView?.clearCache(true)
-            webView?.loadUrl(cleanDevUrl)
-            Log.i(TAG, "Loading live hot-reload dev_url: $cleanDevUrl")
+            webView?.loadUrl(devUrlExtra!!)
+            Log.i(TAG, "Loading live hot-reload dev_url: $devUrlExtra")
             Toast.makeText(this, "已连接电脑 UI 实时热重载模式", Toast.LENGTH_SHORT).show()
         } else if (isFromCreate) {
+            // 冷启动且未指定 dev_url 时，默认加载热更或内置离线页面
             webView?.loadUrl(resolveEntryUrl(intent))
-        }
-    }
-
-    private fun handleSharedImageUri(sharedUri: Uri) {
-        if (ingestionExecutor.isShutdown) return
-        Toast.makeText(this, "已接收账单截图，正在后台识别...", Toast.LENGTH_SHORT).show()
-
-        LightningAiBackgroundProcessor.beginPreparingCapture()
-        LightningAiForegroundService.startIfNeeded(applicationContext)
-
-        try {
-            ingestionExecutor.execute {
-                var decoded: Bitmap? = null
-                var scaled: Bitmap? = null
-                var tmpFile: File? = null
-                try {
-                    val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    contentResolver.openInputStream(sharedUri)?.use { input ->
-                        BitmapFactory.decodeStream(input, null, boundsOpts)
-                    }
-                    var sampleSize = 1
-                    if (boundsOpts.outWidth > SHARE_TARGET_MAX_WIDTH) {
-                        var halfW = boundsOpts.outWidth / 2
-                        while (halfW / sampleSize >= SHARE_TARGET_MAX_WIDTH) {
-                            sampleSize *= 2
-                        }
-                    }
-
-                    val decodeOpts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
-                    decoded = contentResolver.openInputStream(sharedUri)?.use { input ->
-                        BitmapFactory.decodeStream(input, null, decodeOpts)
-                    } ?: throw IllegalStateException("无法解码分享图片")
-
-                    val targetBitmap = if (decoded.width > SHARE_TARGET_MAX_WIDTH) {
-                        val scale = SHARE_TARGET_MAX_WIDTH.toFloat() / decoded.width.toFloat()
-                        val targetH = (decoded.height * scale).toInt().coerceAtLeast(1)
-                        scaled = Bitmap.createScaledBitmap(decoded, SHARE_TARGET_MAX_WIDTH, targetH, true)
-                        scaled
-                    } else {
-                        decoded
-                    }
-
-                    val dir = File(filesDir, "pending_lightning_captures").apply { mkdirs() }
-                    val ts = System.currentTimeMillis()
-                    val candidateTmp = File(dir, "lightning_share_$ts.tmp")
-                    tmpFile = candidateTmp
-                    val finalFile = File(dir, "lightning_share_$ts.jpg")
-
-                    BufferedOutputStream(FileOutputStream(candidateTmp), 16 * 1024).use { bos ->
-                        if (!targetBitmap.compress(Bitmap.CompressFormat.JPEG, 85, bos)) {
-                            throw IllegalStateException("压缩分享图片失败")
-                        }
-                        bos.flush()
-                    }
-                    if (!candidateTmp.renameTo(finalFile)) {
-                        candidateTmp.copyTo(finalFile, overwrite = true)
-                        candidateTmp.delete()
-                    }
-
-                    LightningAiBackgroundProcessor.enqueueCapture(applicationContext, finalFile)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to process shared image URI: ${e.message}", e)
-                    try { tmpFile?.delete() } catch (_: Throwable) {}
-                    mainHandler.post {
-                        Toast.makeText(this@MainActivity, "读取分享图片失败: ${e.message}", Toast.LENGTH_SHORT).show()
-                    }
-                } finally {
-                    LightningAiBackgroundProcessor.endPreparingCapture()
-                    LightningAiForegroundService.stopIfIdle(applicationContext)
-                    try { scaled?.recycle() } catch (_: Throwable) {}
-                    try { decoded?.recycle() } catch (_: Throwable) {}
-                }
-            }
-        } catch (t: Throwable) {
-            LightningAiBackgroundProcessor.endPreparingCapture()
-            LightningAiForegroundService.stopIfIdle(applicationContext)
-            Log.e(TAG, "Failed to submit shared image task: ${t.message}", t)
         }
     }
 
@@ -1270,7 +1055,7 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * 两阶段 ACK 消费第一阶段：将就绪结果重命名为 .ack_pending 并更新 mtime（超过 120s 未 ACK 自动还原），绝不直接删除
+     * 供前端 JS 主动同步拉取所有已在后台解析就绪 (.parsed.json) 的闪电记账结果，实现打开 App 零延迟直接渲染
      */
     internal fun consumeReadyLightningCapturesInternal(): String {
         synchronized(scanLock) {
@@ -1281,7 +1066,21 @@ class MainActivity : ComponentActivity() {
             }
             try {
                 val nowMs = System.currentTimeMillis()
-                recoverOrphanPendingFilesLocked(dir, nowMs)
+                dir.listFiles { f -> f.name.endsWith(".processing", ignoreCase = true) }?.forEach { procFile ->
+                    if (nowMs - procFile.lastModified() > 30_000L) {
+                        val basePrefix = procFile.name
+                            .removeSuffix(".img.processing")
+                            .removeSuffix(".parsed.processing")
+                            .substringBeforeLast("_")
+                        if (procFile.name.endsWith(".img.processing")) {
+                            val restoredImg = File(dir, "$basePrefix.jpg")
+                            if (!restoredImg.exists()) procFile.renameTo(restoredImg)
+                        } else if (procFile.name.endsWith(".parsed.processing")) {
+                            val restoredParsed = File(dir, "$basePrefix.parsed.json")
+                            if (!restoredParsed.exists()) procFile.renameTo(restoredParsed)
+                        }
+                    }
+                }
 
                 val files = dir.listFiles { f ->
                     f.extension.equals("jpg", ignoreCase = true) ||
@@ -1294,35 +1093,22 @@ class MainActivity : ComponentActivity() {
                     val parsedFile = LightningAiBackgroundProcessor.getParsedResultFile(file)
                     val taskId = LightningAiBackgroundProcessor.getTaskIdForFile(originalName)
                     if (parsedFile.exists()) {
-                        val ackImg = File(dir, "${originalName}.img.ack_pending")
-                        val ackParsed = File(dir, "${file.nameWithoutExtension}.parsed.json.ack_pending")
-                        val imgRenamed = file.renameTo(ackImg)
-                        val parsedRenamed = parsedFile.renameTo(ackParsed)
-                        if (imgRenamed && parsedRenamed) {
-                            val claimTs = System.currentTimeMillis()
-                            ackImg.setLastModified(claimTs)
-                            ackParsed.setLastModified(claimTs)
-                            try {
-                                val bytes = ackImg.readBytes()
-                                val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-                                val mime = if (originalName.endsWith(".png", ignoreCase = true)) "image/png" else "image/jpeg"
-                                val dataUrl = "data:$mime;base64,$base64"
-                                val parsedJsonStr = ackParsed.readText(Charsets.UTF_8)
-                                val itemObj = JSONObject().apply {
-                                    put("fileName", originalName)
-                                    put("dataUrl", dataUrl)
-                                    put("parsedJson", parsedJsonStr)
-                                }
-                                resultArr.put(itemObj)
-                                notifiedInFlightTasks.remove(taskId)
-                            } catch (e: Exception) {
-                                Log.w(TAG, "consumeReadyLightningCapturesInternal error for $originalName: ${e.message}")
-                                try { ackImg.renameTo(file) } catch (_: Throwable) {}
-                                try { ackParsed.renameTo(parsedFile) } catch (_: Throwable) {}
+                        try {
+                            val bytes = file.readBytes()
+                            val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                            val dataUrl = "data:image/jpeg;base64,$base64"
+                            val parsedJsonStr = parsedFile.readText(Charsets.UTF_8)
+                            val itemObj = JSONObject().apply {
+                                put("fileName", originalName)
+                                put("dataUrl", dataUrl)
+                                put("parsedJson", parsedJsonStr)
                             }
-                        } else {
-                            if (imgRenamed) try { ackImg.renameTo(file) } catch (_: Throwable) {}
-                            if (parsedRenamed) try { ackParsed.renameTo(parsedFile) } catch (_: Throwable) {}
+                            resultArr.put(itemObj)
+                            notifiedInFlightTasks.remove(taskId)
+                            try { file.delete() } catch (_: Throwable) {}
+                            try { parsedFile.delete() } catch (_: Throwable) {}
+                        } catch (e: Exception) {
+                            Log.w(TAG, "consumeReadyLightningCapturesInternal error for $originalName: ${e.message}")
                         }
                     } else if (!LightningAiBackgroundProcessor.isProcessing(originalName)) {
                         LightningAiBackgroundProcessor.enqueueCapture(applicationContext, file)
@@ -1335,62 +1121,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * 两阶段 ACK 第二阶段：前端持久化完成后物理删除磁盘图片与解析结果
-     */
-    internal fun ackConsumedLightningCapturesInternal(fileNamesJson: String): Boolean {
-        val names = mutableListOf<String>()
-        try {
-            val trimmed = fileNamesJson.trim()
-            if (trimmed.startsWith("[")) {
-                val arr = JSONArray(trimmed)
-                for (i in 0 until arr.length()) {
-                    arr.optString(i, "").trim().takeIf { it.isNotEmpty() }?.let { names.add(it) }
-                }
-            } else if (trimmed.isNotEmpty()) {
-                trimmed.split(",").map { it.trim() }.filter { it.isNotEmpty() }.let { names.addAll(it) }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "ackConsumedLightningCaptures invalid payload: ${e.message}")
-            return false
-        }
-
-        if (names.isEmpty()) return true
-
-        synchronized(scanLock) {
-            val dir = File(filesDir, "pending_lightning_captures")
-            if (!dir.exists()) return true
-            for (rawName in names) {
-                val safeName = File(rawName).name
-                if (safeName.isEmpty()) continue
-                val baseName = safeName.substringBeforeLast('.')
-                val candidates = listOf(
-                    File(dir, "${safeName}.img.ack_pending"),
-                    File(dir, "${baseName}.parsed.json.ack_pending"),
-                    File(dir, safeName),
-                    File(dir, "${baseName}.parsed.json")
-                )
-                for (target in candidates) {
-                    try {
-                        if (target.exists()) target.delete()
-                    } catch (_: Throwable) {}
-                }
-            }
-            return true
-        }
-    }
-
     override fun onResume() {
         super.onResume()
         isForeground = true
         webView?.onResume()
+        // 热启动恢复或从前台切回时，主动扫描离线捕获落盘的闪电抓屏任务，确保零丢单与秒级展现
         scanPendingLightningCaptures()
     }
 
     override fun onPause() {
         isForeground = false
-        webView?.onPause()
         super.onPause()
+        // 关键保活设计：绝不调用 webView?.onPause()！
+        // 后台 AI 解析由原生守护线程池 + LightningAiForegroundService 独立完成并写入 .parsed.json，
+        // 待用户下次回到前台 (onResume) 时直接消费已解析结果。
     }
 
     override fun onDestroy() {
@@ -1401,98 +1145,14 @@ class MainActivity : ComponentActivity() {
         mainHandler.removeCallbacksAndMessages(null)
         ingestionExecutor.shutdownNow()
         otaExecutor.shutdownNow()
-        webView?.let { wv ->
-            try {
-                (wv.parent as? ViewGroup)?.removeView(wv)
-                wv.loadUrl("about:blank")
-                wv.clearHistory()
-                wv.removeAllViews()
-                wv.destroy()
-            } catch (e: Throwable) {
-                Log.w(TAG, "Error destroying WebView: ${e.message}")
-            }
+        webView?.apply {
+            loadUrl("about:blank")
+            clearHistory()
+            removeAllViews()
+            destroy()
         }
         webView = null
         super.onDestroy()
-    }
-
-    private fun saveBytesToDownloads(
-        bytes: ByteArray,
-        safeFileName: String,
-        mimeType: String
-    ): Boolean {
-        return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val values = ContentValues().apply {
-                    put(MediaStore.Downloads.DISPLAY_NAME, safeFileName)
-                    put(MediaStore.Downloads.MIME_TYPE, mimeType)
-                    put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-                    put(MediaStore.Downloads.IS_PENDING, 1)
-                }
-                val resolver = contentResolver
-                val itemUri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                    ?: throw IllegalStateException("Failed to create MediaStore.Downloads entry")
-                resolver.openOutputStream(itemUri)?.use { out ->
-                    out.write(bytes)
-                    out.flush()
-                } ?: throw IllegalStateException("Failed to open OutputStream for $itemUri")
-
-                val completeValues = ContentValues().apply {
-                    put(MediaStore.Downloads.IS_PENDING, 0)
-                }
-                resolver.update(itemUri, completeValues, null, null)
-            } else {
-                val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-                    ?: File(filesDir, "downloads")
-                if (!downloadsDir.exists()) downloadsDir.mkdirs()
-                val targetFile = File(downloadsDir, safeFileName)
-                FileOutputStream(targetFile).use { out ->
-                    out.write(bytes)
-                    out.flush()
-                }
-            }
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "saveBytesToDownloads failed for $safeFileName: ${e.message}", e)
-            false
-        }
-    }
-
-    private fun computeFileSha256(file: File): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        file.inputStream().use { input ->
-            val buf = ByteArray(8192)
-            var len: Int
-            while (input.read(buf).also { len = it } != -1) {
-                digest.update(buf, 0, len)
-            }
-        }
-        return digest.digest().joinToString("") { "%02x".format(it) }
-    }
-
-    private fun parseWebManifestFiles(manifestStr: String): LinkedHashMap<String, String?>? {
-        return try {
-            val root = JSONObject(manifestStr)
-            val filesObj = root.optJSONObject("files") ?: root
-            val map = LinkedHashMap<String, String?>()
-            val keys = filesObj.keys()
-            while (keys.hasNext()) {
-                val rawKey = keys.next()
-                if (rawKey in setOf("version", "commitSha", "generatedAt", "updatedAt")) continue
-                val cleanPath = rawKey.trimStart('/')
-                if (cleanPath.isEmpty() || cleanPath.contains("..") || cleanPath.contains("\\")) continue
-                val entry = filesObj.opt(rawKey)
-                val sha = when (entry) {
-                    is JSONObject -> entry.optString("sha256", "").trim().takeIf { SHA256_HEX_REGEX.matches(it) }
-                    is String -> entry.trim().takeIf { SHA256_HEX_REGEX.matches(it) }
-                    else -> null
-                }
-                map[cleanPath] = sha
-            }
-            if (map.isNotEmpty()) map else null
-        } catch (_: Exception) {
-            null
-        }
     }
 
     inner class AndroidBridge(private val activity: MainActivity) {
@@ -1507,13 +1167,8 @@ class MainActivity : ComponentActivity() {
         fun vibrate(durationMs: Long) {
             activity.runOnUiThread {
                 try {
-                    val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        val vm = activity.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                        vm?.defaultVibrator
-                    } else {
-                        @Suppress("DEPRECATION")
-                        activity.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-                    }
+                    @Suppress("DEPRECATION")
+                    val vibrator = activity.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         vibrator?.vibrate(VibrationEffect.createOneShot(durationMs.coerceAtLeast(10L), VibrationEffect.DEFAULT_AMPLITUDE))
                     } else {
@@ -1535,110 +1190,50 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // ==========================================
-        //  SQLite 12 核心表持久化 & 桥接 KV 接口
-        // ==========================================
-
-        @JavascriptInterface
-        fun dbSaveTransactionsJson(jsonStr: String): Boolean {
-            return SingWalletDatabaseHelper.getInstance(activity).saveTransactionsJson(jsonStr)
-        }
-
-        @JavascriptInterface
-        fun dbLoadTransactionsJson(): String {
-            return SingWalletDatabaseHelper.getInstance(activity).loadTransactionsJson()
-        }
-
-        @JavascriptInterface
-        fun dbSaveKeyValue(key: String, value: String): Boolean {
-            return SingWalletDatabaseHelper.getInstance(activity).saveKeyValue(key, value)
-        }
-
-        @JavascriptInterface
-        fun dbLoadKeyValue(key: String): String {
-            return SingWalletDatabaseHelper.getInstance(activity).loadKeyValue(key)
-        }
-
-        // ==========================================
-        //  SWBK v1 加密备份 / CSV BOM 导出 / 明文 JSON 兼容导出
-        // ==========================================
-
         @JavascriptInterface
         fun saveBackupFile(jsonContent: String, fileName: String): Boolean {
-            val safeFileName = File(fileName.ifBlank { "singwallet_backup_${System.currentTimeMillis()}.json" }).name
-            val ok = activity.saveBytesToDownloads(
-                jsonContent.toByteArray(Charsets.UTF_8),
-                safeFileName,
-                "application/json"
-            )
-            activity.runOnUiThread {
-                Toast.makeText(
-                    activity,
-                    if (ok) "备份已保存至系统下载目录: $safeFileName" else "保存备份文件失败",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
-            return ok
-        }
-
-        @JavascriptInterface
-        fun saveSwbkBackupFile(jsonPayload: String, password: String, fileName: String): Boolean {
+            val safeFileName = fileName.ifBlank { "singwallet_backup_${System.currentTimeMillis()}.json" }
             return try {
-                val swbkBytes = SwbkCryptoCodec.encrypt(jsonPayload, password)
-                val baseName = File(fileName.ifBlank { "singwallet_backup_${System.currentTimeMillis()}.swbk" }).name
-                val safeFileName = if (baseName.endsWith(".swbk", ignoreCase = true)) baseName else "$baseName.swbk"
-                val ok = activity.saveBytesToDownloads(swbkBytes, safeFileName, "application/octet-stream")
-                activity.runOnUiThread {
-                    Toast.makeText(
-                        activity,
-                        if (ok) "加密备份已保存至系统下载目录: $safeFileName" else "保存加密备份失败",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-                ok
-            } catch (e: Exception) {
-                Log.e(TAG, "saveSwbkBackupFile failed: ${e.message}", e)
-                activity.runOnUiThread {
-                    Toast.makeText(activity, "生成加密备份失败: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-                false
-            }
-        }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val values = ContentValues().apply {
+                        put(MediaStore.Downloads.DISPLAY_NAME, safeFileName)
+                        put(MediaStore.Downloads.MIME_TYPE, "application/json")
+                        put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                        put(MediaStore.Downloads.IS_PENDING, 1)
+                    }
+                    val resolver = activity.contentResolver
+                    val itemUri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                        ?: throw IllegalStateException("Failed to create MediaStore.Downloads entry")
+                    resolver.openOutputStream(itemUri)?.use { out ->
+                        out.write(jsonContent.toByteArray(Charsets.UTF_8))
+                        out.flush()
+                    } ?: throw IllegalStateException("Failed to open OutputStream for $itemUri")
 
-        @JavascriptInterface
-        fun decryptSwbkBase64(base64Data: String, password: String): String {
-            return try {
-                val bytes = Base64.decode(base64Data, Base64.DEFAULT)
-                SwbkCryptoCodec.decrypt(bytes, password)
-            } catch (e: Exception) {
-                Log.w(TAG, "decryptSwbkBase64 failed: ${e.message}")
-                ""
-            }
-        }
-
-        @JavascriptInterface
-        fun saveCsvExportFile(csvContent: String, fileName: String): Boolean {
-            return try {
-                val baseName = File(fileName.ifBlank { "singwallet_export_${System.currentTimeMillis()}.csv" }).name
-                val safeFileName = if (baseName.endsWith(".csv", ignoreCase = true)) baseName else "$baseName.csv"
-                val bodyWithoutBom = csvContent.removePrefix("\uFEFF")
-                val bom = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
-                val bodyBytes = bodyWithoutBom.toByteArray(Charsets.UTF_8)
-                val outputStream = ByteArrayOutputStream(bom.size + bodyBytes.size).apply {
-                    write(bom)
-                    write(bodyBytes)
+                    val completeValues = ContentValues().apply {
+                        put(MediaStore.Downloads.IS_PENDING, 0)
+                    }
+                    resolver.update(itemUri, completeValues, null, null)
+                } else {
+                    val downloadsDir = activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                        ?: File(activity.filesDir, "downloads")
+                    if (!downloadsDir.exists()) {
+                        downloadsDir.mkdirs()
+                    }
+                    val targetFile = File(downloadsDir, safeFileName)
+                    FileOutputStream(targetFile).use { out ->
+                        out.write(jsonContent.toByteArray(Charsets.UTF_8))
+                        out.flush()
+                    }
                 }
-                val ok = activity.saveBytesToDownloads(outputStream.toByteArray(), safeFileName, "text/csv")
                 activity.runOnUiThread {
-                    Toast.makeText(
-                        activity,
-                        if (ok) "CSV 账单已导出至下载目录: $safeFileName" else "导出 CSV 失败",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    Toast.makeText(activity, "备份已保存至系统下载目录: $safeFileName", Toast.LENGTH_SHORT).show()
                 }
-                ok
+                true
             } catch (e: Exception) {
-                Log.e(TAG, "saveCsvExportFile failed: ${e.message}", e)
+                Log.e(TAG, "saveBackupFile failed: ${e.message}", e)
+                activity.runOnUiThread {
+                    Toast.makeText(activity, "保存备份文件失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
                 false
             }
         }
@@ -1651,15 +1246,19 @@ class MainActivity : ComponentActivity() {
         }
 
         @JavascriptInterface
-        fun getAppVersion(): String = activity.getAppVersion()
+        fun getAppVersion(): String {
+            return activity.getAppVersion()
+        }
 
         @JavascriptInterface
-        fun isNativeApp(): Boolean = true
+        fun isNativeApp(): Boolean {
+            return true
+        }
 
         @JavascriptInterface
         fun isAccessibilityServiceEnabled(): Boolean {
             return SingWalletAccessibilityService.isServiceRunning() ||
-                SingWalletAccessibilityService.checkAccessibilityEnabled(activity)
+                   SingWalletAccessibilityService.checkAccessibilityEnabled(activity)
         }
 
         @JavascriptInterface
@@ -1670,11 +1269,6 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun consumeReadyLightningCaptures(): String {
             return activity.consumeReadyLightningCapturesInternal()
-        }
-
-        @JavascriptInterface
-        fun ackConsumedLightningCaptures(fileNamesJson: String): Boolean {
-            return activity.ackConsumedLightningCapturesInternal(fileNamesJson)
         }
 
         @JavascriptInterface
@@ -1697,6 +1291,9 @@ class MainActivity : ComponentActivity() {
         //  双擎 OTA 更新系统 JavaScriptInterface 接口
         // ==========================================
 
+        /**
+         * 获取当前原生宿主与 Web 热更元数据信息
+         */
         @JavascriptInterface
         fun getHotUpdateInfo(): String {
             val prefs = activity.getSharedPreferences(PREFS_OTA, MODE_PRIVATE)
@@ -1710,35 +1307,28 @@ class MainActivity : ComponentActivity() {
             }.toString()
         }
 
+        /**
+         * 执行免重装 Web 资源秒级热更新：
+         * 从 GitHub / CDN 镜像拉取最新核心前端文件至 web_hot_bundle，校验后秒级原地刷新
+         */
         @JavascriptInterface
         fun performWebHotUpdate(configJson: String) {
-            if (activity.otaExecutor.isShutdown) return
             activity.otaExecutor.execute {
                 val config = try {
                     if (configJson.isNotBlank()) JSONObject(configJson) else JSONObject()
                 } catch (_: Exception) {
                     JSONObject()
                 }
-                val repo = config.optString("repo", DEFAULT_REPO).ifBlank { DEFAULT_REPO }.trim()
-                val branch = config.optString("branch", DEFAULT_BRANCH).ifBlank { DEFAULT_BRANCH }.trim()
+                val repo = config.optString("repo", DEFAULT_REPO).ifBlank { DEFAULT_REPO }
+                val branch = config.optString("branch", DEFAULT_BRANCH).ifBlank { DEFAULT_BRANCH }
                 val version = config.optString("version", "")
                 val commitSha = config.optString("commitSha", "").trim()
-
-                if (!REPO_REGEX.matches(repo) || repo != DEFAULT_REPO) {
-                    activity.dispatchOtaProgress(0, "热更新拒绝不受信任的仓库: $repo", true, "Untrusted repo: $repo", version, commitSha)
-                    return@execute
-                }
                 val targetRef = if (commitSha.isNotEmpty()) commitSha else branch
-                if (!REF_REGEX.matches(targetRef) || targetRef.contains("..")) {
-                    activity.dispatchOtaProgress(0, "非法的更新引用: $targetRef", true, "Invalid ref", version, commitSha)
-                    return@execute
+                val tokenFromPrefs = activity.getSharedPreferences(PREFS_OTA, MODE_PRIVATE).getString("github_token", "") ?: ""
+                val token = config.optString("token", "").trim().ifBlank { tokenFromPrefs }
+                if (token.isNotEmpty()) {
+                    activity.getSharedPreferences(PREFS_OTA, MODE_PRIVATE).edit().putString("github_token", token).apply()
                 }
-
-                val incomingToken = config.optString("token", "").trim()
-                if (incomingToken.isNotEmpty()) {
-                    SecureKeyStore.setGithubToken(activity, incomingToken)
-                }
-                val token = SecureKeyStore.getGithubToken(activity)
 
                 val stagingDir = File(activity.filesDir, "web_hot_staging")
                 try {
@@ -1747,8 +1337,13 @@ class MainActivity : ComponentActivity() {
 
                     activity.dispatchOtaProgress(5, "开始检查并下载热更资源...", false, null, version, commitSha)
 
-                    fun buildCandidateUrls(remotePath: String): List<String> {
-                        return if (token.isNotEmpty()) {
+                    val totalFiles = HOT_MUTABLE_FILES.size
+                    for ((index, relPath) in HOT_MUTABLE_FILES.withIndex()) {
+                        val stagingFile = File(stagingDir, relPath)
+                        stagingFile.parentFile?.mkdirs()
+
+                        val remotePath = "web/$relPath"
+                        val candidateUrls = if (token.isNotEmpty()) {
                             listOf(
                                 "https://raw.githubusercontent.com/$repo/$targetRef/$remotePath",
                                 "https://api.github.com/repos/$repo/contents/$remotePath?ref=$targetRef",
@@ -1762,55 +1357,16 @@ class MainActivity : ComponentActivity() {
                                 "https://raw.githubusercontent.com/$repo/$targetRef/$remotePath"
                             )
                         }
-                    }
-
-                    // 尝试拉取 web/web_manifest.json 执行逐文件 SHA-256 校验
-                    val manifestFile = File(stagingDir, "__web_manifest.json")
-                    var manifestMap: LinkedHashMap<String, String?>? = null
-                    for (manifestUrl in buildCandidateUrls("web/web_manifest.json")) {
-                        try {
-                            activity.downloadUrlToFile(manifestUrl, manifestFile, token.ifBlank { null })
-                            if (manifestFile.exists() && manifestFile.length() > 0L) {
-                                manifestMap = activity.parseWebManifestFiles(manifestFile.readText(Charsets.UTF_8))
-                                if (manifestMap != null) break
-                            }
-                        } catch (_: Throwable) {
-                        } finally {
-                            if (manifestFile.exists()) manifestFile.delete()
-                        }
-                    }
-
-                    val targetFiles: Map<String, String?> = manifestMap
-                        ?: HOT_MUTABLE_FILES.associateWith { null }
-
-                    val totalFiles = targetFiles.size.coerceAtLeast(1)
-                    var indexHtmlContent = ""
-                    var idx = 0
-
-                    for ((relPath, expectedFileSha) in targetFiles) {
-                        val stagingFile = File(stagingDir, relPath)
-                        val stagingCanonical = stagingFile.canonicalPath
-                        if (!stagingCanonical.startsWith(stagingDir.canonicalPath + File.separator)) {
-                            throw SecurityException("热更路径非法: $relPath")
-                        }
-                        stagingFile.parentFile?.mkdirs()
 
                         var fileDownloaded = false
                         var lastErr: Throwable? = null
 
-                        for (urlStr in buildCandidateUrls("web/$relPath")) {
+                        for (urlStr in candidateUrls) {
                             try {
                                 activity.downloadUrlToFile(urlStr, stagingFile, token.ifBlank { null })
                                 if (!stagingFile.exists() || stagingFile.length() == 0L) {
                                     stagingFile.delete()
                                     continue
-                                }
-                                if (expectedFileSha != null) {
-                                    val actualSha = activity.computeFileSha256(stagingFile)
-                                    if (!actualSha.equals(expectedFileSha, ignoreCase = true)) {
-                                        stagingFile.delete()
-                                        throw SecurityException("文件 $relPath SHA-256 校验失败")
-                                    }
                                 }
                                 if (relPath == "index.html") {
                                     val content = stagingFile.readText(Charsets.UTF_8)
@@ -1818,31 +1374,26 @@ class MainActivity : ComponentActivity() {
                                         stagingFile.delete()
                                         throw IllegalStateException("index.html 校验失败: 缺少 <html 标签")
                                     }
-                                    indexHtmlContent = content
                                 }
                                 fileDownloaded = true
                                 break
                             } catch (t: Throwable) {
                                 lastErr = t
                                 Log.w(TAG, "Download attempt failed for $relPath ($urlStr): ${t.message}")
-                                if (stagingFile.exists()) stagingFile.delete()
+                                if (stagingFile.exists()) {
+                                    stagingFile.delete()
+                                }
                             }
                         }
 
-                        if (!fileDownloaded) {
-                            val isOptionalCompat = manifestMap == null &&
-                                relPath in OPTIONAL_COMPAT_FILES &&
-                                !indexHtmlContent.contains(relPath)
-                            if (!isOptionalCompat) {
-                                throw IllegalStateException("文件 $relPath 下载或校验失败: ${lastErr?.message}")
-                            }
+                        if (!fileDownloaded || !stagingFile.exists()) {
+                            throw IllegalStateException("文件 $relPath 下载失败 (所有镜像源均不可用): ${lastErr?.message}")
                         }
 
-                        idx++
-                        val percent = 10 + (idx * 80 / totalFiles)
+                        val percent = 10 + ((index + 1) * 80 / totalFiles)
                         activity.dispatchOtaProgress(
                             percent,
-                            "已更新组件 ($idx/$totalFiles): ${relPath.substringAfterLast('/')}",
+                            "已更新组件 (${index + 1}/$totalFiles): ${relPath.substringAfterLast('/')}",
                             false,
                             null,
                             version,
@@ -1850,22 +1401,32 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    // 全部校验通过后原子替换 web_hot_bundle
-                    val hotBundleDir = File(activity.filesDir, "web_hot_bundle")
-                    val backupBundleDir = File(activity.filesDir, "web_hot_bundle_old")
-                    if (backupBundleDir.exists()) backupBundleDir.deleteRecursively()
-                    if (hotBundleDir.exists()) {
-                        if (!hotBundleDir.renameTo(backupBundleDir)) {
-                            hotBundleDir.deleteRecursively()
+                    // 保留不变的三方库 tailwindcss.min.js
+                    val tailwindStaging = File(stagingDir, "js/tailwindcss.min.js")
+                    tailwindStaging.parentFile?.mkdirs()
+                    val tailwindExisting = File(activity.filesDir, "web_hot_bundle/js/tailwindcss.min.js")
+                    if (tailwindExisting.exists() && tailwindExisting.length() > 0L) {
+                        tailwindExisting.copyTo(tailwindStaging, overwrite = true)
+                    } else {
+                        activity.assets.open("js/tailwindcss.min.js").use { input ->
+                            FileOutputStream(tailwindStaging).use { output ->
+                                input.copyTo(output)
+                            }
                         }
                     }
-                    if (!stagingDir.renameTo(hotBundleDir)) {
-                        hotBundleDir.mkdirs()
-                        stagingDir.copyRecursively(hotBundleDir, overwrite = true)
-                        stagingDir.deleteRecursively()
-                    }
-                    if (backupBundleDir.exists()) backupBundleDir.deleteRecursively()
 
+                    // 全部文件校验完毕，覆盖拷贝到 web_hot_bundle
+                    val hotBundleDir = File(activity.filesDir, "web_hot_bundle").apply { mkdirs() }
+                    stagingDir.walkTopDown().forEach { file ->
+                        if (file.isFile) {
+                            val rel = file.relativeTo(stagingDir).path
+                            val target = File(hotBundleDir, rel)
+                            target.parentFile?.mkdirs()
+                            file.copyTo(target, overwrite = true)
+                        }
+                    }
+
+                    // 记录热更版本信息
                     val prefs = activity.getSharedPreferences(PREFS_OTA, MODE_PRIVATE)
                     prefs.edit()
                         .putString(KEY_HOT_VERSION, version)
@@ -1875,6 +1436,7 @@ class MainActivity : ComponentActivity() {
 
                     activity.dispatchOtaProgress(100, "热更完成，正在重新加载页面...", true, null, version, commitSha)
 
+                    // 延迟 400ms 清理缓存并刷新 WebView
                     activity.mainHandler.postDelayed({
                         try {
                             activity.webView?.clearCache(true)
@@ -1895,69 +1457,22 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        /**
+         * 全量 APK 应用内后台多源加速下载并校验 SHA-256，通过 FileProvider 调起系统安装器
+         */
         @JavascriptInterface
         fun downloadAndInstallApk(apkUrl: String, expectedSha256: String?) {
-            if (activity.otaExecutor.isShutdown) return
             activity.otaExecutor.execute {
-                val parsedUri = try {
-                    Uri.parse(apkUrl.trim())
-                } catch (_: Exception) {
-                    null
-                }
-                val host = parsedUri?.host?.lowercase(Locale.ROOT).orEmpty()
-                val isTrustedApkHost = parsedUri?.scheme.equals("https", ignoreCase = true) && (
-                    host == "github.com" ||
-                        host == "ghfast.top" ||
-                        host.endsWith(".githubusercontent.com")
-                    )
-                if (!isTrustedApkHost) {
-                    val msg = "拒绝下载非官方 HTTPS 安装包来源: $apkUrl"
-                    activity.dispatchOtaProgress(0, msg, true, msg)
-                    return@execute
-                }
-
                 val otaDir = File(activity.cacheDir, "ota_apk").apply { mkdirs() }
                 val apkFile = File(otaDir, "singwallet-update.apk")
-                if (apkFile.exists()) apkFile.delete()
-
-                val savedToken = SecureKeyStore.getGithubToken(activity).ifBlank { null }
-
-                // 若未传入 SHA-256，自动尝试从同 Release 路径获取 version.json 解析 sha256
-                var resolvedSha256 = expectedSha256?.trim().orEmpty()
-                if (resolvedSha256.isEmpty()) {
-                    val versionJsonUrl = apkUrl.trim().substringBeforeLast('/') + "/version.json"
-                    val versionCandidates = mutableListOf(versionJsonUrl)
-                    if (versionJsonUrl.contains("github.com") && !versionJsonUrl.startsWith("https://ghfast.top/")) {
-                        versionCandidates.add("https://ghfast.top/$versionJsonUrl")
-                    }
-                    val tmpVersionFile = File(otaDir, "version.json")
-                    for (vUrl in versionCandidates) {
-                        try {
-                            activity.downloadUrlToFile(vUrl, tmpVersionFile, savedToken)
-                            if (tmpVersionFile.exists() && tmpVersionFile.length() > 0L) {
-                                val vJson = JSONObject(tmpVersionFile.readText(Charsets.UTF_8))
-                                val parsed = vJson.optString("sha256", "").trim()
-                                if (SHA256_HEX_REGEX.matches(parsed)) {
-                                    resolvedSha256 = parsed
-                                    break
-                                }
-                            }
-                        } catch (_: Throwable) {
-                        } finally {
-                            if (tmpVersionFile.exists()) tmpVersionFile.delete()
-                        }
-                    }
+                if (apkFile.exists()) {
+                    apkFile.delete()
                 }
 
-                if (!SHA256_HEX_REGEX.matches(resolvedSha256)) {
-                    val msg = "安全校验拦截：缺少有效的 64 位安装包 SHA-256 摘要，已取消安装"
-                    activity.dispatchOtaProgress(0, msg, true, msg)
-                    return@execute
-                }
-
-                val candidateUrls = mutableListOf(apkUrl.trim())
+                val candidateUrls = mutableListOf<String>()
+                candidateUrls.add(apkUrl)
                 if (apkUrl.contains("github.com") && !apkUrl.startsWith("https://ghfast.top/")) {
-                    candidateUrls.add("https://ghfast.top/${apkUrl.trim()}")
+                    candidateUrls.add("https://ghfast.top/$apkUrl")
                 }
 
                 var downloaded = false
@@ -1970,6 +1485,7 @@ class MainActivity : ComponentActivity() {
                         var lastPercent = -1
                         var lastTime = 0L
 
+                        val savedToken = activity.getSharedPreferences(PREFS_OTA, MODE_PRIVATE).getString("github_token", null)
                         activity.downloadUrlToFile(targetUrl, apkFile, savedToken) { curBytes, totalBytes ->
                             if (totalBytes > 0) {
                                 val pct = ((curBytes * 100) / totalBytes).toInt().coerceIn(0, 99)
@@ -2001,35 +1517,31 @@ class MainActivity : ComponentActivity() {
                     return@execute
                 }
 
-                // 强制 SHA-256 完整性校验
-                activity.dispatchOtaProgress(99, "正在校验安装包 SHA-256 完整性...", false, null)
-                val actualSha256 = activity.computeFileSha256(apkFile)
-                if (!actualSha256.equals(resolvedSha256, ignoreCase = true)) {
-                    apkFile.delete()
-                    val errMsg = "SHA-256 校验不匹配 (预期: $resolvedSha256, 实际: $actualSha256)"
-                    Log.e(TAG, errMsg)
-                    activity.dispatchOtaProgress(0, errMsg, true, errMsg)
-                    return@execute
+                // SHA-256 完整性校验
+                if (!expectedSha256.isNullOrBlank()) {
+                    activity.dispatchOtaProgress(99, "正在校验安装包完整性...", false, null)
+                    val digest = MessageDigest.getInstance("SHA-256")
+                    apkFile.inputStream().use { input ->
+                        val buf = ByteArray(8192)
+                        var len: Int
+                        while (input.read(buf).also { len = it } != -1) {
+                            digest.update(buf, 0, len)
+                        }
+                    }
+                    val actualSha256 = digest.digest().joinToString("") { "%02x".format(it) }
+                    if (!actualSha256.equals(expectedSha256.trim(), ignoreCase = true)) {
+                        apkFile.delete()
+                        val errMsg = "SHA-256 校验不匹配 (预期: $expectedSha256, 实际: $actualSha256)"
+                        Log.e(TAG, errMsg)
+                        activity.dispatchOtaProgress(0, errMsg, true, errMsg)
+                        return@execute
+                    }
                 }
 
-                activity.dispatchOtaProgress(100, "安装包校验通过，正在调起系统安装...", true, null)
+                activity.dispatchOtaProgress(100, "安装包下载完成，正在调起系统安装...", true, null)
 
                 activity.mainHandler.post {
                     try {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-                            !activity.packageManager.canRequestPackageInstalls()
-                        ) {
-                            Toast.makeText(activity, "请允许 SingWallet 安装未知来源应用后重试", Toast.LENGTH_LONG).show()
-                            val permIntent = Intent(
-                                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                                Uri.parse("package:${activity.packageName}")
-                            ).apply {
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            activity.startActivity(permIntent)
-                            return@post
-                        }
-
                         val apkUri = FileProvider.getUriForFile(
                             activity,
                             "${activity.packageName}.fileprovider",
@@ -2050,25 +1562,27 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        /**
+         * 热更一键安全回退：从 APK 内置 assets 重新覆盖至 web_hot_bundle 并刷新界面
+         */
         @JavascriptInterface
         fun rollbackWebHotUpdate(): Boolean {
             return try {
-                val hotDir = File(activity.filesDir, "web_hot_bundle")
-                if (hotDir.exists()) {
-                    hotDir.deleteRecursively()
+                val success = activity.copyAssetsToWebHotBundle()
+                if (success) {
+                    val prefs = activity.getSharedPreferences(PREFS_OTA, MODE_PRIVATE)
+                    prefs.edit()
+                        .putString(KEY_HOT_COMMIT_SHA, "")
+                        .putString(KEY_HOT_VERSION, "")
+                        .putLong(KEY_HOT_UPDATED_AT, System.currentTimeMillis())
+                        .apply()
+                    activity.mainHandler.post {
+                        activity.webView?.clearCache(true)
+                        activity.webView?.loadUrl(activity.resolveEntryUrl(activity.intent))
+                        Toast.makeText(activity, "已恢复内置出厂版本", Toast.LENGTH_SHORT).show()
+                    }
                 }
-                val prefs = activity.getSharedPreferences(PREFS_OTA, MODE_PRIVATE)
-                prefs.edit()
-                    .putString(KEY_HOT_COMMIT_SHA, "")
-                    .putString(KEY_HOT_VERSION, "")
-                    .putLong(KEY_HOT_UPDATED_AT, System.currentTimeMillis())
-                    .apply()
-                activity.mainHandler.post {
-                    activity.webView?.clearCache(true)
-                    activity.webView?.loadUrl(activity.resolveEntryUrl(activity.intent))
-                    Toast.makeText(activity, "已恢复内置出厂版本", Toast.LENGTH_SHORT).show()
-                }
-                true
+                success
             } catch (e: Exception) {
                 Log.e(TAG, "rollbackWebHotUpdate failed: ${e.message}", e)
                 false
